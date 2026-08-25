@@ -178,6 +178,26 @@ Dialog {
             }
 
             TabButton {
+                id: feedTab
+                height: tabs.height
+                implicitHeight: tabs.height
+                text: qsTr("Feed")
+
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
+
+                contentItem: Text {
+                    text: feedTab.text
+                    color: feedTab.checked ? root.ink : root.mutedInk
+                    font.pixelSize: 13
+                    font.weight: feedTab.checked ? Font.DemiBold : Font.Normal
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            TabButton {
                 id: apiTab
                 height: tabs.height
                 implicitHeight: tabs.height
@@ -502,6 +522,70 @@ Dialog {
                             visible: parent.count === 0
                         }
                     }
+                }
+            }
+
+            Item {
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 22
+                    spacing: 14
+
+                    Label {
+                        text: qsTr("Short video filter")
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Hide videos at or below a chosen duration. YouTube does not expose a Shorts flag, so duration is used instead.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Label {
+                            text: qsTr("Hide videos up to")
+                            color: root.ink
+                        }
+
+                        SpinBox {
+                            id: shortVideoCutoff
+                            from: 0
+                            to: 60
+                            value: App.shortVideoCutoffMinutes
+                            editable: true
+                            onValueModified: App.setShortVideoCutoffMinutes(value)
+
+                            PointingCursor {}
+                        }
+
+                        Label {
+                            text: qsTr("minutes")
+                            color: root.ink
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: shortVideoCutoff.value === 0
+                            ? qsTr("Duration filtering is off.")
+                            : qsTr("Videos %1 minutes or shorter are hidden from every feed.")
+                                  .arg(shortVideoCutoff.value)
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Item { Layout.fillHeight: true }
                 }
             }
 

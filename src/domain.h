@@ -35,6 +35,7 @@ struct Video
     bool isBroadcast = false;
     QString broadcastState;
     QDateTime fetchedAt;
+    int durationSeconds = -1;
 
     bool operator==(const Video &) const = default;
 };

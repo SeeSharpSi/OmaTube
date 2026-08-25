@@ -35,6 +35,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(QDateTime lastRefreshedAt READ lastRefreshedAt NOTIFY lastRefreshedAtChanged)
     Q_PROPERTY(qint64 selectedCategoryId READ selectedCategoryId NOTIFY selectedCategoryIdChanged)
+    Q_PROPERTY(int shortVideoCutoffMinutes READ shortVideoCutoffMinutes
+                   NOTIFY shortVideoCutoffMinutesChanged)
 
 public:
     ~AppController() override;
@@ -56,6 +58,7 @@ public:
     [[nodiscard]] QString errorMessage() const;
     [[nodiscard]] QDateTime lastRefreshedAt() const;
     [[nodiscard]] qint64 selectedCategoryId() const;
+    [[nodiscard]] int shortVideoCutoffMinutes() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -71,6 +74,7 @@ public:
         bool member);
     Q_INVOKABLE bool setApiKey(const QString &apiKey, bool rememberLocally);
     Q_INVOKABLE void clearApiKey();
+    Q_INVOKABLE void setShortVideoCutoffMinutes(int minutes);
     Q_INVOKABLE void openVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
 
@@ -83,6 +87,7 @@ signals:
     void errorMessageChanged();
     void lastRefreshedAtChanged();
     void selectedCategoryIdChanged();
+    void shortVideoCutoffMinutesChanged();
     void channelAdded(QString title);
 
 private:
@@ -109,6 +114,7 @@ private:
     QString m_errorMessage;
     QDateTime m_lastRefreshedAt;
     qint64 m_selectedCategoryId = -1;
+    int m_shortVideoCutoffMinutes = 3;
 
     static AppController *s_instance;
 };

@@ -45,6 +45,7 @@ public:
                 false,
                 QStringLiteral("none"),
                 QDateTime::currentDateTimeUtc(),
+                600,
             });
         }
         callback(videos, {});
@@ -160,11 +161,13 @@ void YouTubeTest::parsesApiResponses()
     QCOMPARE(YouTubeClient::parseUploadVideoIds(uploadJson, &error),
              QStringList({QStringLiteral("one"), QStringLiteral("two")}));
 
-    const QByteArray videosJson = R"({"items":[{"id":"regular","snippet":{"channelId":"UC1234567890123456789012","channelTitle":"Qt","title":"Regular","publishedAt":"2026-08-24T12:00:00Z","liveBroadcastContent":"none"}},{"id":"stream","snippet":{"channelId":"UC1234567890123456789012","channelTitle":"Qt","title":"Stream","publishedAt":"2026-08-24T13:00:00Z","liveBroadcastContent":"live"},"liveStreamingDetails":{"actualStartTime":"2026-08-24T13:00:00Z"}}]})";
+    const QByteArray videosJson = R"({"items":[{"id":"regular","snippet":{"channelId":"UC1234567890123456789012","channelTitle":"Qt","title":"Regular","publishedAt":"2026-08-24T12:00:00Z","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT3M1S"}},{"id":"stream","snippet":{"channelId":"UC1234567890123456789012","channelTitle":"Qt","title":"Stream","publishedAt":"2026-08-24T13:00:00Z","liveBroadcastContent":"live"},"contentDetails":{"duration":"PT1H2M3S"},"liveStreamingDetails":{"actualStartTime":"2026-08-24T13:00:00Z"}}]})";
     const QList<Video> videos = YouTubeClient::parseVideosResponse(videosJson, &error);
     QCOMPARE(videos.size(), 2);
     QVERIFY(!videos.first().isBroadcast);
+    QCOMPARE(videos.first().durationSeconds, 181);
     QVERIFY(videos.last().isBroadcast);
+    QCOMPARE(videos.last().durationSeconds, 3723);
 
     const QByteArray liveJson = R"({"items":[{"id":{"videoId":"live-video"},"snippet":{"title":"Live now"}}]})";
     const std::optional<LiveChannel> live =

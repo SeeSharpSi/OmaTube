@@ -314,11 +314,11 @@ bool Repository::upsertVideos(const QList<Video> &videos, QString *error)
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
         "INSERT INTO videos(id, channel_id, title, published_at, is_broadcast, "
-        "broadcast_state, fetched_at) VALUES(?, ?, ?, ?, ?, ?, ?) "
+        "broadcast_state, fetched_at, duration_seconds) VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET channel_id = excluded.channel_id, "
         "title = excluded.title, published_at = excluded.published_at, "
         "is_broadcast = excluded.is_broadcast, broadcast_state = excluded.broadcast_state, "
-        "fetched_at = excluded.fetched_at"));
+        "fetched_at = excluded.fetched_at, duration_seconds = excluded.duration_seconds"));
     for (const Video &video : videos) {
         query.bindValue(0, video.id);
         query.bindValue(1, video.channelId);
@@ -327,6 +327,7 @@ bool Repository::upsertVideos(const QList<Video> &videos, QString *error)
         query.bindValue(4, video.isBroadcast);
         query.bindValue(5, video.broadcastState);
         query.bindValue(6, toDatabaseTime(video.fetchedAt));
+        query.bindValue(7, video.durationSeconds);
         if (!query.exec()) {
             m_database.rollback();
             setError(error, queryError(query));
@@ -343,6 +344,7 @@ bool Repository::upsertVideos(const QList<Video> &videos, QString *error)
 
 QList<Video> Repository::feed(
     std::optional<qint64> categoryId,
+    int shortVideoCutoffSeconds,
     int limit,
     QString *error) const
 {
@@ -350,17 +352,18 @@ QList<Video> Repository::feed(
     QSqlQuery query(m_database);
     QString statement = QStringLiteral(
         "SELECT v.id, v.channel_id, c.title, v.title, v.published_at, v.is_broadcast, "
-        "v.broadcast_state, v.fetched_at FROM videos v "
+        "v.broadcast_state, v.fetched_at, v.duration_seconds FROM videos v "
         "JOIN channels c ON c.id = v.channel_id ");
     if (categoryId) {
         statement += QStringLiteral(
             "JOIN category_channels cc ON cc.channel_id = c.id "
-            "WHERE v.is_broadcast = 0 AND cc.category_id = ? ");
+            "WHERE v.is_broadcast = 0 AND v.duration_seconds > ? AND cc.category_id = ? ");
     } else {
-        statement += QStringLiteral("WHERE v.is_broadcast = 0 ");
+        statement += QStringLiteral("WHERE v.is_broadcast = 0 AND v.duration_seconds > ? ");
     }
     statement += QStringLiteral("ORDER BY v.published_at DESC LIMIT ?");
     query.prepare(statement);
+    query.addBindValue(qMax(0, shortVideoCutoffSeconds));
     if (categoryId)
         query.addBindValue(*categoryId);
     query.addBindValue(qMax(1, limit));
@@ -380,6 +383,7 @@ QList<Video> Repository::feed(
             query.value(5).toBool(),
             query.value(6).toString(),
             fromDatabaseTime(query.value(7).toString()),
+            query.value(8).toInt(),
         });
     }
     return result;
@@ -406,9 +410,10 @@ bool Repository::migrate(QString *error)
     }
     const int version = versionQuery.value(0).toInt();
     versionQuery.finish();
-    if (version == 1)
+    constexpr int currentVersion = 2;
+    if (version == currentVersion)
         return true;
-    if (version != 0) {
+    if (version < 0 || version > currentVersion) {
         setError(error, QStringLiteral("Database schema is newer than this application supports."));
         return false;
     }
@@ -418,27 +423,37 @@ bool Repository::migrate(QString *error)
         return false;
     }
 
-    const QStringList statements = {
-        QStringLiteral(
-            "CREATE TABLE categories("
-            "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0)"),
-        QStringLiteral(
-            "CREATE TABLE channels("
-            "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
-            "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)"),
-        QStringLiteral(
-            "CREATE TABLE category_channels("
-            "category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE, "
-            "channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
-            "PRIMARY KEY(category_id, channel_id))"),
-        QStringLiteral(
-            "CREATE TABLE videos("
-            "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
-            "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
-            "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL)"),
-        QStringLiteral("CREATE INDEX videos_published_at ON videos(published_at DESC)"),
-        QStringLiteral("PRAGMA user_version = 1"),
-    };
+    QStringList statements;
+    if (version == 0) {
+        statements = {
+            QStringLiteral(
+                "CREATE TABLE categories("
+                "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0)"),
+            QStringLiteral(
+                "CREATE TABLE channels("
+                "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)"),
+            QStringLiteral(
+                "CREATE TABLE category_channels("
+                "category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE, "
+                "channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                "PRIMARY KEY(category_id, channel_id))"),
+            QStringLiteral(
+                "CREATE TABLE videos("
+                "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
+                "duration_seconds INTEGER NOT NULL DEFAULT -1)"),
+            QStringLiteral("CREATE INDEX videos_published_at ON videos(published_at DESC)"),
+            QStringLiteral("PRAGMA user_version = 2"),
+        };
+    } else {
+        statements = {
+            QStringLiteral(
+                "ALTER TABLE videos ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT -1"),
+            QStringLiteral("PRAGMA user_version = 2"),
+        };
+    }
 
     QSqlQuery query(m_database);
     for (const QString &statement : statements) {

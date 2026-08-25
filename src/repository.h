@@ -45,6 +45,7 @@ public:
     bool upsertVideos(const QList<Video> &videos, QString *error = nullptr);
     [[nodiscard]] QList<Video> feed(
         std::optional<qint64> categoryId = std::nullopt,
+        int shortVideoCutoffSeconds = 180,
         int limit = 500,
         QString *error = nullptr) const;
     bool pruneVideoMetadata(const QDateTime &olderThan, QString *error = nullptr);

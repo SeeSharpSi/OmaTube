@@ -9,6 +9,7 @@
 #include <QRegularExpression>
 #include <QUrlQuery>
 
+#include <limits>
 #include <memory>
 
 namespace {
@@ -35,6 +36,28 @@ QString thumbnailUrl(const QJsonObject &snippet)
             return url;
     }
     return {};
+}
+
+int durationSeconds(const QString &duration)
+{
+    static const QRegularExpression expression(
+        QStringLiteral("^P(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?$"));
+    const QRegularExpressionMatch match = expression.match(duration);
+    if (!match.hasMatch())
+        return -1;
+
+    qint64 seconds = 0;
+    bool hasComponent = false;
+    const qint64 multipliers[] = {86400, 3600, 60, 1};
+    for (int index = 1; index <= 4; ++index) {
+        if (!match.captured(index).isEmpty()) {
+            hasComponent = true;
+            seconds += match.captured(index).toLongLong() * multipliers[index - 1];
+        }
+    }
+    if (!hasComponent || seconds > std::numeric_limits<int>::max())
+        return -1;
+    return static_cast<int>(seconds);
 }
 }
 
@@ -115,10 +138,10 @@ void YouTubeClient::fetchVideos(const QStringList &videoIds, VideosCallback call
     QUrl url = apiUrl(
         QStringLiteral("videos"),
         {
-            {QStringLiteral("part"), QStringLiteral("snippet,liveStreamingDetails")},
+            {QStringLiteral("part"), QStringLiteral("snippet,contentDetails,liveStreamingDetails")},
             {QStringLiteral("id"), videoIds.join(QLatin1Char(','))},
             {QStringLiteral("fields"),
-             QStringLiteral("items(id,snippet(channelId,channelTitle,title,publishedAt,liveBroadcastContent),liveStreamingDetails)")},
+             QStringLiteral("items(id,snippet(channelId,channelTitle,title,publishedAt,liveBroadcastContent),contentDetails/duration,liveStreamingDetails)")},
         });
     getJson(std::move(url), [callback = std::move(callback)](QByteArray json, QString error) {
         if (!error.isEmpty()) {
@@ -274,6 +297,10 @@ QList<Video> YouTubeClient::parseVideosResponse(const QByteArray &json, QString 
             item.contains(QStringLiteral("liveStreamingDetails")),
             snippet.value(QStringLiteral("liveBroadcastContent")).toString(),
             fetchedAt,
+            durationSeconds(item.value(QStringLiteral("contentDetails"))
+                                .toObject()
+                                .value(QStringLiteral("duration"))
+                                .toString()),
         };
         if (!video.id.isEmpty() && !video.channelId.isEmpty() && !video.title.isEmpty()
             && video.publishedAt.isValid()) {

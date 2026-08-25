@@ -8,6 +8,9 @@
 
 namespace {
 constexpr auto apiKeySetting = "credentials/youtubeApiKey";
+constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
+constexpr int defaultShortVideoCutoffMinutes = 3;
+constexpr int maximumShortVideoCutoffMinutes = 60;
 }
 
 AppController *AppController::s_instance = nullptr;
@@ -82,9 +85,17 @@ bool AppController::initialize(QString *error)
     if (!m_repository.open(error))
         return false;
 
+    QSettings settings;
     const QString environmentKey = qEnvironmentVariable("YT_CLIENT_API_KEY").trimmed();
-    const QString storedKey = QSettings().value(QString::fromLatin1(apiKeySetting)).toString().trimmed();
+    const QString storedKey = settings.value(QString::fromLatin1(apiKeySetting)).toString().trimmed();
     m_youTubeClient.setApiKey(environmentKey.isEmpty() ? storedKey : environmentKey);
+    m_shortVideoCutoffMinutes = qBound(
+        0,
+        settings.value(
+                    QString::fromLatin1(shortVideoCutoffSetting),
+                    defaultShortVideoCutoffMinutes)
+            .toInt(),
+        maximumShortVideoCutoffMinutes);
     reloadCategories();
     reloadChannels();
     reloadFeed();
@@ -150,6 +161,11 @@ QDateTime AppController::lastRefreshedAt() const
 qint64 AppController::selectedCategoryId() const
 {
     return m_selectedCategoryId;
+}
+
+int AppController::shortVideoCutoffMinutes() const
+{
+    return m_shortVideoCutoffMinutes;
 }
 
 void AppController::startupRefresh()
@@ -317,6 +333,21 @@ void AppController::clearApiKey()
     setStatusMessage(QStringLiteral("Stored API key removed."));
 }
 
+void AppController::setShortVideoCutoffMinutes(int minutes)
+{
+    const int boundedMinutes = qBound(0, minutes, maximumShortVideoCutoffMinutes);
+    if (m_shortVideoCutoffMinutes == boundedMinutes)
+        return;
+
+    m_shortVideoCutoffMinutes = boundedMinutes;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(shortVideoCutoffSetting), boundedMinutes);
+    settings.sync();
+    emit shortVideoCutoffMinutesChanged();
+    if (m_initialized)
+        reloadFeed();
+}
+
 void AppController::openVideo(const QString &videoId)
 {
     static const QRegularExpression videoIdExpression(QStringLiteral("^[A-Za-z0-9_-]{11}$"));
@@ -370,7 +401,11 @@ void AppController::reloadFeed()
     const std::optional<qint64> categoryId = m_selectedCategoryId < 0
         ? std::nullopt
         : std::optional<qint64>(m_selectedCategoryId);
-    m_feed.setVideos(m_repository.feed(categoryId, 500, &error));
+    m_feed.setVideos(m_repository.feed(
+        categoryId,
+        m_shortVideoCutoffMinutes * 60,
+        500,
+        &error));
     if (!error.isEmpty())
         setErrorMessage(error);
 }

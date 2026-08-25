@@ -3,6 +3,8 @@
 #include "repository.h"
 
 #include <QSignalSpy>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -12,9 +14,10 @@ class RepositoryTest final : public QObject
 
 private slots:
     void persistentDatabaseOpens();
+    void migratesVersionOneDatabase();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
-    void feedExcludesBroadcastsAndFiltersCategories();
+    void feedExcludesBroadcastsShortVideosAndFiltersCategories();
     void modelsExposeExpectedRoles();
 };
 
@@ -36,7 +39,8 @@ Video makeVideo(
     const QString &id,
     const QString &channelId,
     const QDateTime &publishedAt,
-    bool isBroadcast = false)
+    bool isBroadcast = false,
+    int durationSeconds = 600)
 {
     return {
         id,
@@ -47,6 +51,7 @@ Video makeVideo(
         isBroadcast,
         isBroadcast ? QStringLiteral("live") : QStringLiteral("none"),
         QDateTime::currentDateTimeUtc(),
+        durationSeconds,
     };
 }
 }
@@ -69,6 +74,53 @@ void RepositoryTest::persistentDatabaseOpens()
     QVERIFY2(repository.open(&error), qPrintable(error));
     QCOMPARE(repository.categories(&error), QList<Category>({{1, QStringLiteral("News")}}));
     QVERIFY2(error.isEmpty(), qPrintable(error));
+}
+
+void RepositoryTest::migratesVersionOneDatabase()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    const QString connectionName = QStringLiteral("version-one-fixture");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY2(query.exec(QStringLiteral(
+                     "CREATE TABLE channels("
+                     "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                     "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)")),
+                 qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                     "CREATE TABLE videos("
+                     "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                     "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                     "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL)")),
+                 qPrintable(query.lastError().text()));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO channels VALUES("
+            "'UCAlpha', '@input', '@handle', 'Alpha', '', 'UUAlpha', "
+            "'2026-08-25T12:00:00.000Z')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO videos VALUES("
+            "'regular', 'UCAlpha', 'Regular', '2026-08-25T12:00:00.000Z', 0, 'none', "
+            "'2026-08-25T12:00:00.000Z')")));
+        QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 1")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    Repository repository(databasePath);
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QCOMPARE(repository.channels().size(), 1);
+    QCOMPARE(repository.feed().size(), 0);
+    QVERIFY(repository.upsertVideos({makeVideo(
+        QStringLiteral("regular"),
+        QStringLiteral("UCAlpha"),
+        QDateTime::currentDateTimeUtc())}, &error));
+    QCOMPARE(repository.feed().size(), 1);
 }
 
 void RepositoryTest::categoryLifecycle()
@@ -113,7 +165,7 @@ void RepositoryTest::categoryMembershipFiltersChannels()
     QCOMPARE(repository.channels().size(), 2);
 }
 
-void RepositoryTest::feedExcludesBroadcastsAndFiltersCategories()
+void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()
 {
     Repository repository(QStringLiteral(":memory:"));
     QString error;
@@ -127,9 +179,10 @@ void RepositoryTest::feedExcludesBroadcastsAndFiltersCategories()
 
     const QDateTime now = QDateTime::currentDateTimeUtc();
     QVERIFY(repository.upsertVideos({
-        makeVideo(QStringLiteral("old"), alpha.id, now.addSecs(-60)),
+        makeVideo(QStringLiteral("old"), alpha.id, now.addSecs(-60), false, 181),
         makeVideo(QStringLiteral("new"), beta.id, now),
         makeVideo(QStringLiteral("live"), alpha.id, now.addSecs(60), true),
+        makeVideo(QStringLiteral("short"), alpha.id, now.addSecs(120), false, 180),
     }, &error));
 
     const QList<Video> allFeed = repository.feed();
@@ -140,6 +193,10 @@ void RepositoryTest::feedExcludesBroadcastsAndFiltersCategories()
     const QList<Video> selectedFeed = repository.feed(categoryId);
     QCOMPARE(selectedFeed.size(), 1);
     QCOMPARE(selectedFeed.first().id, QStringLiteral("old"));
+
+    const QList<Video> unfilteredFeed = repository.feed(std::nullopt, 0);
+    QCOMPARE(unfilteredFeed.size(), 3);
+    QCOMPARE(unfilteredFeed.first().id, QStringLiteral("short"));
 }
 
 void RepositoryTest::modelsExposeExpectedRoles()

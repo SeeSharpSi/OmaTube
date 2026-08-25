@@ -1,20 +1,15 @@
 /build*/
 /.cache/
 .DS_Store
-CMakeUserPresets.json
-
-# CMake and build-system output
-CMakeCache.txt
-CMakeFiles/
-CTestTestfile.cmake
-cmake_install.cmake
-compile_commands.json
-install_manifest.txt
+# qmake output
+.qmake.stash
+*.qmake.cache
+*.qmake.stash
+*.qmake.super
 Makefile
-*.ninja
-.ninja_deps
-.ninja_log
-Testing/
+moc_*.cpp
+moc_predefs.h
+qrc_*.cpp
 
 # Compiled artifacts
 *.o
@@ -34,8 +29,6 @@ Testing/
 *.code-workspace
 *.pro.user
 *.pro.user.*
-CMakeLists.txt.user
-CMakeLists.txt.user.*
 .qtcreator/
 *.swp
 *.swo

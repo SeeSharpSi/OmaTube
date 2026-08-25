@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/qml">
+        <file alias="AddChannelDialog.qml">AddChannelDialog.qml</file>
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="ManageDialog.qml">ManageDialog.qml</file>
+        <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
+    </qresource>
+</RCC>

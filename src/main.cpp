@@ -5,6 +5,7 @@
 #include <QQuickStyle>
 #include <QTimer>
 #include <QUrl>
+#include <QtQml/qqml.h>
 
 int main(int argc, char *argv[])
 {
@@ -22,6 +23,8 @@ int main(int argc, char *argv[])
         qCritical("Could not initialize application: %s", qPrintable(initializationError));
         return EXIT_FAILURE;
     }
+    qmlRegisterSingletonType<AppController>(
+        "YtClient", 1, 0, "App", &AppController::create);
     QQmlApplicationEngine engine;
     QObject::connect(
         &engine,
@@ -29,7 +32,7 @@ int main(int argc, char *argv[])
         &app,
         [] { QCoreApplication::exit(EXIT_FAILURE); },
         Qt::QueuedConnection);
-    engine.loadFromModule(QStringLiteral("YtClient"), QStringLiteral("Main"));
+    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
 
     if (smokeTest)
         QTimer::singleShot(100, &app, &QCoreApplication::quit);

@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+BUILD_ROOT="$ROOT/build-tests"
+
+if command -v qmake6 >/dev/null 2>&1; then
+    QMAKE=qmake6
+elif command -v qmake >/dev/null 2>&1; then
+    QMAKE=qmake
+else
+    echo "qmake6 or qmake is required to test YT Client." >&2
+    exit 1
+fi
+
+JOBS="$(nproc 2>/dev/null || echo 1)"
+
+build_and_run() (
+    target="$1"
+    project="$2"
+    build_dir="$BUILD_ROOT/$target"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+    "$QMAKE" "$project"
+    make -j"$JOBS"
+    QT_QPA_PLATFORM=offscreen "./$target"
+)
+
+"$ROOT/bin/build"
+build_and_run repository_tests "$ROOT/tests/repository_tests.pro"
+build_and_run youtube_tests "$ROOT/tests/youtube_tests.pro"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    APP="$ROOT/build/yt-client.app/Contents/MacOS/yt-client"
+else
+    APP="$ROOT/build/yt-client"
+fi
+
+QT_QPA_PLATFORM=offscreen "$APP" --quit-after-startup

@@ -69,6 +69,7 @@ bool Repository::open(QString *error)
         setError(error, queryError(query));
         return false;
     }
+    query.finish();
 
     return migrate(error);
 }
@@ -447,6 +448,7 @@ bool Repository::migrate(QString *error)
             return false;
         }
     }
+    query.finish();
 
     if (!m_database.commit()) {
         setError(error, m_database.lastError().text());

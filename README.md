@@ -12,24 +12,27 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - Cached feed available immediately at startup
 - Refresh only at startup or when the user presses `R`
 - SQLite storage under Qt's platform application-data location
-- macOS and Linux builds from one CMake project
+- macOS and Linux builds from one qmake project
 
 ## Requirements
 
-- CMake 3.21 or newer
 - C++20 compiler
+- qmake and Make
 - Qt 6.8 or newer with Core, GUI, Network, Quick, Quick Controls 2, SQL, and SQLite driver
+
+On Omarchy, these are already installed with the default Qt desktop toolchain. No package installation is required.
 
 On macOS with Homebrew:
 
 ```sh
-brew install cmake ninja qt
+xcode-select --install
+brew install qt
 ```
 
 On Ubuntu 24.04 or similar:
 
 ```sh
-sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev libqt6sql6-sqlite
+sudo apt install make g++ qt6-base-dev qt6-declarative-dev libqt6sql6-sqlite
 ```
 
 Package names vary between Linux distributions.
@@ -37,9 +40,8 @@ Package names vary between Linux distributions.
 ## Build
 
 ```sh
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+./bin/build
+./bin/test
 ```
 
 Run on macOS:
@@ -60,7 +62,7 @@ Run on Linux:
 ./build/yt-client
 ```
 
-Build output uses Qt installation selected during CMake configuration. Producing signed, self-contained distribution packages is intentionally separate from source builds because Qt runtime deployment and signing differ between Linux distributions and macOS release channels.
+Build output uses Qt installation selected by `qmake6` or `qmake`. Producing signed, self-contained distribution packages is intentionally separate from source builds because Qt runtime deployment and signing differ between Linux distributions and macOS release channels.
 
 ## API Key
 

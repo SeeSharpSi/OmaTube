@@ -3,6 +3,7 @@
 #include "repository.h"
 
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 class RepositoryTest final : public QObject
@@ -10,6 +11,7 @@ class RepositoryTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void persistentDatabaseOpens();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
     void feedExcludesBroadcastsAndFiltersCategories();
@@ -47,6 +49,26 @@ Video makeVideo(
         QDateTime::currentDateTimeUtc(),
     };
 }
+}
+
+void RepositoryTest::persistentDatabaseOpens()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+
+    {
+        Repository repository(databasePath);
+        QString error;
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY2(repository.addCategory(QStringLiteral("News"), &error) > 0, qPrintable(error));
+    }
+
+    Repository repository(databasePath);
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QCOMPARE(repository.categories(&error), QList<Category>({{1, QStringLiteral("News")}}));
+    QVERIFY2(error.isEmpty(), qPrintable(error));
 }
 
 void RepositoryTest::categoryLifecycle()

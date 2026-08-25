@@ -6,4 +6,9 @@
         <file alias="PointingCursor.qml">PointingCursor.qml</file>
         <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
     </qresource>
+    <qresource prefix="/themes">
+        <file alias="default/colors.toml">../themes/default/colors.toml</file>
+        <file alias="rose-pine/colors.toml">../themes/rose-pine/colors.toml</file>
+        <file alias="nord/colors.toml">../themes/nord/colors.toml</file>
+    </qresource>
 </RCC>

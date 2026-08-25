@@ -10,6 +10,9 @@ import YtClient
 Dialog {
     id: root
 
+    readonly property var themeColors: App.themeColors
+    readonly property color mutedInk: themeColors.dark_foreground
+    readonly property color danger: themeColors.red
     property var selectedCategoryIds: []
 
     title: qsTr("Add channel")
@@ -55,7 +58,7 @@ Dialog {
             Layout.fillWidth: true
             visible: App.errorMessage.length > 0
             text: App.errorMessage
-            color: "#8a2525"
+            color: root.danger
             wrapMode: Text.Wrap
         }
 
@@ -94,7 +97,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: qsTr("No category selected means channel appears only under All.")
-            color: "#6e6960"
+            color: root.mutedInk
             font.pixelSize: 12
             wrapMode: Text.Wrap
         }

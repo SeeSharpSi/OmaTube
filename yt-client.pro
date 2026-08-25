@@ -7,10 +7,13 @@ VERSION = 0.1.0
 PROJECT_ROOT = $$PWD
 include($$PROJECT_ROOT/ytclient_core.pri)
 
-HEADERS += $$PROJECT_ROOT/src/appcontroller.h
+HEADERS += \
+    $$PROJECT_ROOT/src/appcontroller.h \
+    $$PROJECT_ROOT/src/thememanager.h
 SOURCES += \
     $$PROJECT_ROOT/src/appcontroller.cpp \
-    $$PROJECT_ROOT/src/main.cpp
+    $$PROJECT_ROOT/src/main.cpp \
+    $$PROJECT_ROOT/src/thememanager.cpp
 RESOURCES += $$PROJECT_ROOT/qml/resources.qrc
 
 macx {

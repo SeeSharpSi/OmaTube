@@ -6,6 +6,7 @@
 #include "models/livechannelmodel.h"
 #include "refreshservice.h"
 #include "repository.h"
+#include "thememanager.h"
 #include "youtubeclient.h"
 
 #include <QDateTime>
@@ -37,6 +38,10 @@ class AppController final : public QObject
     Q_PROPERTY(qint64 selectedCategoryId READ selectedCategoryId NOTIFY selectedCategoryIdChanged)
     Q_PROPERTY(int shortVideoCutoffMinutes READ shortVideoCutoffMinutes
                    NOTIFY shortVideoCutoffMinutesChanged)
+    Q_PROPERTY(QString themeId READ themeId NOTIFY themeChanged)
+    Q_PROPERTY(QVariantMap themeColors READ themeColors NOTIFY themeChanged)
+    Q_PROPERTY(bool omarchyThemeAvailable READ omarchyThemeAvailable NOTIFY themeChanged)
+    Q_PROPERTY(QString omarchyThemeName READ omarchyThemeName NOTIFY themeChanged)
 
 public:
     ~AppController() override;
@@ -59,6 +64,10 @@ public:
     [[nodiscard]] QDateTime lastRefreshedAt() const;
     [[nodiscard]] qint64 selectedCategoryId() const;
     [[nodiscard]] int shortVideoCutoffMinutes() const;
+    [[nodiscard]] QString themeId() const;
+    [[nodiscard]] QVariantMap themeColors() const;
+    [[nodiscard]] bool omarchyThemeAvailable() const;
+    [[nodiscard]] QString omarchyThemeName() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -75,6 +84,7 @@ public:
     Q_INVOKABLE bool setApiKey(const QString &apiKey, bool rememberLocally);
     Q_INVOKABLE void clearApiKey();
     Q_INVOKABLE void setShortVideoCutoffMinutes(int minutes);
+    Q_INVOKABLE void setThemeId(const QString &themeId);
     Q_INVOKABLE void openVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
 
@@ -88,6 +98,7 @@ signals:
     void lastRefreshedAtChanged();
     void selectedCategoryIdChanged();
     void shortVideoCutoffMinutesChanged();
+    void themeChanged();
     void channelAdded(QString title);
 
 private:
@@ -100,6 +111,7 @@ private:
     void setErrorMessage(QString message);
     static QList<qint64> toCategoryIds(const QVariantList &values);
 
+    ThemeManager m_themeManager;
     Repository m_repository;
     YouTubeClient m_youTubeClient;
     RefreshService m_refreshService;

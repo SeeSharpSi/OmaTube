@@ -10,13 +10,20 @@ import YtClient
 ApplicationWindow {
     id: root
 
-    readonly property color ink: "#24221e"
-    readonly property color mutedInk: "#716d65"
-    readonly property color paper: "#f7f4ed"
-    readonly property color panel: "#fffdf8"
-    readonly property color rule: "#ded8cc"
-    readonly property color softFill: "#eee9df"
-    readonly property color liveRed: "#bd3535"
+    readonly property var themeColors: App.themeColors
+    readonly property color accent: themeColors.accent
+    readonly property color ink: themeColors.foreground
+    readonly property color mutedInk: themeColors.dark_foreground
+    readonly property color paper: themeColors.background
+    readonly property color panel: themeColors.lighter_background
+    readonly property color rule: themeColors.muted
+    readonly property color softFill: themeColors.selection
+    readonly property color danger: themeColors.red
+    readonly property color liveRed: themeColors.bright_red
+    readonly property color errorFill: Qt.tint(
+        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
+    readonly property color errorBorder: Qt.tint(
+        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.48))
     property bool modalOpen: settingsDialog.visible
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -35,7 +42,7 @@ ApplicationWindow {
     palette.text: ink
     palette.button: softFill
     palette.buttonText: ink
-    palette.highlight: ink
+    palette.highlight: accent
     palette.highlightedText: panel
     palette.mid: rule
     palette.placeholderText: mutedInk
@@ -128,7 +135,10 @@ ApplicationWindow {
                             width: 58
                             height: 58
                             radius: 29
-                            color: liveHover.hovered ? "#f0dfda" : root.panel
+                            color: liveHover.hovered
+                                ? Qt.tint(root.panel, Qt.rgba(
+                                    root.liveRed.r, root.liveRed.g, root.liveRed.b, 0.14))
+                                : root.panel
                             border.width: 2
                             border.color: root.liveRed
 
@@ -189,8 +199,8 @@ ApplicationWindow {
                     PointingCursor {}
 
                     background: Rectangle {
-                        color: App.selectedCategoryId < 0 ? root.ink : "transparent"
-                        border.color: App.selectedCategoryId < 0 ? root.ink : root.rule
+                        color: App.selectedCategoryId < 0 ? root.accent : "transparent"
+                        border.color: App.selectedCategoryId < 0 ? root.accent : root.rule
                     }
 
                     contentItem: Text {
@@ -222,9 +232,9 @@ ApplicationWindow {
 
                         background: Rectangle {
                             color: App.selectedCategoryId === categoryButton.categoryId
-                                ? root.ink : "transparent"
+                                ? root.accent : "transparent"
                             border.color: App.selectedCategoryId === categoryButton.categoryId
-                                ? root.ink : root.rule
+                                ? root.accent : root.rule
                         }
 
                         contentItem: Text {
@@ -251,8 +261,8 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: errorText.implicitHeight + 20
-            color: "#f6dddd"
-            border.color: "#d79595"
+            color: root.errorFill
+            border.color: root.errorBorder
             visible: App.errorMessage.length > 0
 
             Text {
@@ -260,7 +270,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 10
                 text: App.errorMessage
-                color: "#712222"
+                color: root.danger
                 wrapMode: Text.Wrap
                 font.pixelSize: 12
             }

@@ -10,6 +10,10 @@ import YtClient
 Dialog {
     id: root
 
+    readonly property var themeColors: App.themeColors
+    readonly property color paper: themeColors.background
+    readonly property color mutedInk: themeColors.dark_foreground
+    readonly property color danger: themeColors.red
     property string pendingAction: ""
     property var pendingId: -1
     property string pendingName: ""
@@ -87,7 +91,7 @@ Dialog {
                             width: ListView.view.width
                             height: 48
                             radius: 4
-                            color: "#f5f1e8"
+                            color: root.paper
 
                             RowLayout {
                                 anchors.fill: parent
@@ -142,7 +146,7 @@ Dialog {
                         width: ListView.view.width
                         height: channelContent.implicitHeight + 20
                         radius: 4
-                        color: "#f5f1e8"
+                        color: root.paper
 
                         ColumnLayout {
                             id: channelContent
@@ -167,7 +171,7 @@ Dialog {
 
                                     Label {
                                         text: channelDelegate.handle
-                                        color: "#6e6960"
+                                        color: root.mutedInk
                                         font.pixelSize: 12
                                     }
                                 }
@@ -213,7 +217,7 @@ Dialog {
             Layout.fillWidth: true
             visible: App.errorMessage.length > 0
             text: App.errorMessage
-            color: "#8a2525"
+            color: root.danger
             wrapMode: Text.Wrap
         }
 

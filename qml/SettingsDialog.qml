@@ -10,12 +10,17 @@ import YtClient
 Dialog {
     id: root
 
-    readonly property color ink: "#24221e"
-    readonly property color mutedInk: "#716d65"
-    readonly property color paper: "#f7f4ed"
-    readonly property color panel: "#fffdf8"
-    readonly property color rule: "#ded8cc"
-    readonly property color softFill: "#eee9df"
+    readonly property var themeColors: App.themeColors
+    readonly property var themeIds: ["default", "rose-pine", "nord", "omarchy"]
+    readonly property color accent: themeColors.accent
+    readonly property color ink: themeColors.foreground
+    readonly property color mutedInk: themeColors.dark_foreground
+    readonly property color paper: themeColors.background
+    readonly property color panel: themeColors.lighter_background
+    readonly property color rule: themeColors.muted
+    readonly property color danger: themeColors.red
+    readonly property color errorFill: Qt.tint(
+        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
     property var selectedCategoryIds: []
     property string pendingAction: ""
     property var pendingId: -1
@@ -133,7 +138,7 @@ Dialog {
                     x: tabs.currentIndex * width
                     width: parent.width / tabs.count
                     height: 2
-                    color: root.ink
+                    color: root.accent
                 }
             }
 
@@ -192,6 +197,26 @@ Dialog {
                     color: feedTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
                     font.weight: feedTab.checked ? Font.DemiBold : Font.Normal
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            TabButton {
+                id: appearanceTab
+                height: tabs.height
+                implicitHeight: tabs.height
+                text: qsTr("Appearance")
+
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
+
+                contentItem: Text {
+                    text: appearanceTab.text
+                    color: appearanceTab.checked ? root.ink : root.mutedInk
+                    font.pixelSize: 13
+                    font.weight: appearanceTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -596,6 +621,60 @@ Dialog {
                     spacing: 14
 
                     Label {
+                        text: qsTr("Theme")
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Choose the colors used throughout OmaTube.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    ComboBox {
+                        id: themeSelector
+                        Layout.preferredWidth: 240
+                        model: [
+                            qsTr("Default"),
+                            qsTr("Rose Pine"),
+                            qsTr("Nord"),
+                            qsTr("Omarchy")
+                        ]
+                        currentIndex: Math.max(0, root.themeIds.indexOf(App.themeId))
+                        onActivated: App.setThemeId(root.themeIds[currentIndex])
+
+                        PointingCursor {}
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        visible: App.themeId === "omarchy"
+                        text: App.omarchyThemeAvailable
+                            ? (App.omarchyThemeName.length > 0
+                                ? qsTr("Following Omarchy system theme: %1")
+                                      .arg(App.omarchyThemeName)
+                                : qsTr("Following the current Omarchy system theme."))
+                            : qsTr("No Omarchy system theme was found. Nord is being used instead.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            Item {
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 22
+                    spacing: 14
+
+                    Label {
                         Layout.fillWidth: true
                         text: App.apiKeyConfigured
                             ? qsTr("An API key is configured. Enter a new key to replace it.")
@@ -680,7 +759,7 @@ Dialog {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: settingsError.implicitHeight + 18
-            color: "#f6dddd"
+            color: root.errorFill
             visible: App.errorMessage.length > 0
 
             Label {
@@ -688,7 +767,7 @@ Dialog {
                 anchors.fill: parent
                 anchors.margins: 9
                 text: App.errorMessage
-                color: "#712222"
+                color: root.danger
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }

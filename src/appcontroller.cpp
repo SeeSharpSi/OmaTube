@@ -17,6 +17,7 @@ AppController *AppController::s_instance = nullptr;
 
 AppController::AppController(QString databasePath, QObject *parent)
     : QObject(parent)
+    , m_themeManager(this)
     , m_repository(std::move(databasePath))
     , m_youTubeClient(this)
     , m_refreshService(&m_repository, &m_youTubeClient, this)
@@ -32,6 +33,7 @@ AppController::AppController(QString databasePath, QObject *parent)
     connect(&m_refreshService, &RefreshService::progressTextChanged,
             this, &AppController::progressTextChanged);
     connect(&m_refreshService, &RefreshService::feedChanged, this, &AppController::reloadFeed);
+    connect(&m_themeManager, &ThemeManager::themeChanged, this, &AppController::themeChanged);
     connect(
         &m_refreshService,
         &RefreshService::refreshFinished,
@@ -166,6 +168,26 @@ qint64 AppController::selectedCategoryId() const
 int AppController::shortVideoCutoffMinutes() const
 {
     return m_shortVideoCutoffMinutes;
+}
+
+QString AppController::themeId() const
+{
+    return m_themeManager.selectedThemeId();
+}
+
+QVariantMap AppController::themeColors() const
+{
+    return m_themeManager.colors();
+}
+
+bool AppController::omarchyThemeAvailable() const
+{
+    return m_themeManager.omarchyThemeAvailable();
+}
+
+QString AppController::omarchyThemeName() const
+{
+    return m_themeManager.omarchyThemeName();
 }
 
 void AppController::startupRefresh()
@@ -346,6 +368,11 @@ void AppController::setShortVideoCutoffMinutes(int minutes)
     emit shortVideoCutoffMinutesChanged();
     if (m_initialized)
         reloadFeed();
+}
+
+void AppController::setThemeId(const QString &themeId)
+{
+    m_themeManager.setSelectedThemeId(themeId);
 }
 
 void AppController::openVideo(const QString &videoId)

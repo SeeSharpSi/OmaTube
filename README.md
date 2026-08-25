@@ -11,6 +11,7 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - Separate live-channel circles
 - Cached feed available immediately at startup
 - Refresh only at startup or when the user presses `R`
+- Built-in Default, Rose Pine, Nord, and system-synced Omarchy themes
 - SQLite storage under Qt's platform application-data location
 - macOS and Linux builds from one qmake project
 

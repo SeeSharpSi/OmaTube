@@ -15,9 +15,11 @@ class RepositoryTest final : public QObject
 private slots:
     void persistentDatabaseOpens();
     void migratesVersionOneDatabase();
+    void migratesVersionTwoDatabase();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
+    void appliesWatchProgressAndSurvivesPruning();
     void modelsExposeExpectedRoles();
 };
 
@@ -121,6 +123,63 @@ void RepositoryTest::migratesVersionOneDatabase()
         QStringLiteral("UCAlpha"),
         QDateTime::currentDateTimeUtc())}, &error));
     QCOMPARE(repository.feed().size(), 1);
+
+    QVERIFY2(repository.applyWatchProgress(
+                 QStringLiteral("regular"), 30, 45, true, &error),
+             qPrintable(error));
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("regular"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 30);
+}
+
+void RepositoryTest::migratesVersionTwoDatabase()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    const QString connectionName = QStringLiteral("version-two-fixture");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY2(query.exec(QStringLiteral(
+                     "CREATE TABLE channels("
+                     "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                     "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)")),
+                 qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                     "CREATE TABLE videos("
+                     "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                     "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                     "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
+                     "duration_seconds INTEGER NOT NULL DEFAULT -1)")),
+                 qPrintable(query.lastError().text()));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO channels VALUES("
+            "'UCAlpha', '@input', '@handle', 'Alpha', '', 'UUAlpha', "
+            "'2026-08-25T12:00:00.000Z')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO videos VALUES("
+            "'regular', 'UCAlpha', 'Regular', '2026-08-25T12:00:00.000Z', 0, 'none', "
+            "'2026-08-25T12:00:00.000Z', 600)")));
+        QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 2")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    Repository repository(databasePath);
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QCOMPARE(repository.feed().size(), 1);
+    QVERIFY(repository.video(QStringLiteral("regular"), &error).has_value());
+
+    QVERIFY2(repository.applyWatchProgress(
+                 QStringLiteral("regular"), 15, 20, true, &error),
+             qPrintable(error));
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("regular"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 15);
 }
 
 void RepositoryTest::categoryLifecycle()
@@ -197,6 +256,63 @@ void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()
     const QList<Video> unfilteredFeed = repository.feed(std::nullopt, 0);
     QCOMPARE(unfilteredFeed.size(), 3);
     QCOMPARE(unfilteredFeed.first().id, QStringLiteral("short"));
+}
+
+void RepositoryTest::appliesWatchProgressAndSurvivesPruning()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos(
+        {makeVideo(QStringLiteral("old"), alpha.id, now, false, 600)}, &error));
+
+    const std::optional<Video> stored = repository.video(QStringLiteral("old"), &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(stored->id, QStringLiteral("old"));
+    QCOMPARE(stored->channelId, alpha.id);
+    QCOMPARE(stored->durationSeconds, 600);
+    QCOMPARE(stored->isBroadcast, false);
+    QVERIFY(!repository.video(QStringLiteral("missing"), &error).has_value());
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(!repository.watchStats(QStringLiteral("missing"), &error).has_value());
+
+    QVERIFY2(repository.applyWatchProgress(
+                 QStringLiteral("old"), 120, 300, true, &error),
+             qPrintable(error));
+    std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("old"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->videoId, QStringLiteral("old"));
+    QCOMPARE(stats->watchedSeconds, 120);
+    QCOMPARE(stats->lastPositionSeconds, 300);
+    QCOMPARE(stats->watchCount, 1);
+    QVERIFY(stats->lastWatchedAt.isValid());
+
+    QVERIFY2(repository.applyWatchProgress(QStringLiteral("old"), 60, 350, false, &error),
+             qPrintable(error));
+    stats = repository.watchStats(QStringLiteral("old"), &error);
+    QCOMPARE(stats->watchedSeconds, 180);
+    QCOMPARE(stats->lastPositionSeconds, 350);
+    QCOMPARE(stats->watchCount, 1);
+
+    // The caller owns position monotonicity; the repository stores what it gets.
+    QVERIFY2(repository.applyWatchProgress(QStringLiteral("old"), 30, 100, false, &error),
+             qPrintable(error));
+    stats = repository.watchStats(QStringLiteral("old"), &error);
+    QCOMPARE(stats->watchedSeconds, 210);
+    QCOMPARE(stats->lastPositionSeconds, 100);
+
+    QVERIFY2(repository.pruneVideoMetadata(now.addSecs(3600), &error), qPrintable(error));
+    QVERIFY(repository.feed().isEmpty());
+    QVERIFY(!repository.video(QStringLiteral("old"), &error).has_value());
+
+    // Watch data is keyed independently of cached video metadata.
+    stats = repository.watchStats(QStringLiteral("old"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 210);
 }
 
 void RepositoryTest::modelsExposeExpectedRoles()

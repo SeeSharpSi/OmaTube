@@ -7,10 +7,12 @@
 #include "refreshservice.h"
 #include "repository.h"
 #include "thememanager.h"
+#include "watchtracker.h"
 #include "youtubeclient.h"
 
 #include <QDateTime>
 #include <QObject>
+#include <QTimer>
 #include <QVariantList>
 #include <QtQmlIntegration>
 
@@ -44,6 +46,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString omarchyThemeName READ omarchyThemeName NOTIFY themeChanged)
     Q_PROPERTY(QString currentVideoId READ currentVideoId NOTIFY currentVideoIdChanged)
     Q_PROPERTY(bool playerOpen READ playerOpen NOTIFY playerOpenChanged)
+    Q_PROPERTY(int currentStartPosition READ currentStartPosition NOTIFY currentStartPositionChanged)
 
 public:
     ~AppController() override;
@@ -72,6 +75,7 @@ public:
     [[nodiscard]] QString omarchyThemeName() const;
     [[nodiscard]] QString currentVideoId() const;
     [[nodiscard]] bool playerOpen() const;
+    [[nodiscard]] int currentStartPosition() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -91,6 +95,8 @@ public:
     Q_INVOKABLE void setThemeId(const QString &themeId);
     Q_INVOKABLE void openVideo(const QString &videoId);
     Q_INVOKABLE void closePlayer();
+    Q_INVOKABLE void reportPlayback(const QString &videoId, double positionSeconds, bool playing);
+    Q_INVOKABLE QVariantMap watchStatsForVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
 
 signals:
@@ -106,6 +112,7 @@ signals:
     void themeChanged();
     void currentVideoIdChanged();
     void playerOpenChanged();
+    void currentStartPositionChanged();
     void channelAdded(QString title);
 
 private:
@@ -114,6 +121,8 @@ private:
     void reloadCategories();
     void reloadChannels();
     void reloadFeed();
+    void resolveStartPosition(const QString &videoId);
+    void flushWatchProgress();
     void setStatusMessage(QString message);
     void setErrorMessage(QString message);
     static QList<qint64> toCategoryIds(const QVariantList &values);
@@ -136,6 +145,9 @@ private:
     int m_shortVideoCutoffMinutes = 3;
     QString m_currentVideoId;
     bool m_playerOpen = false;
+    int m_currentStartPosition = 0;
+    WatchTracker m_watchTracker;
+    QTimer m_watchFlushTimer;
 
     static AppController *s_instance;
 };

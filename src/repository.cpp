@@ -401,6 +401,88 @@ bool Repository::pruneVideoMetadata(const QDateTime &olderThan, QString *error)
     return true;
 }
 
+std::optional<Video> Repository::video(const QString &videoId, QString *error) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT v.id, v.channel_id, c.title, v.title, v.published_at, v.is_broadcast, "
+        "v.broadcast_state, v.fetched_at, v.duration_seconds FROM videos v "
+        "JOIN channels c ON c.id = v.channel_id WHERE v.id = ?"));
+    query.addBindValue(videoId);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return Video{
+        query.value(0).toString(),
+        query.value(1).toString(),
+        query.value(2).toString(),
+        query.value(3).toString(),
+        fromDatabaseTime(query.value(4).toString()),
+        query.value(5).toBool(),
+        query.value(6).toString(),
+        fromDatabaseTime(query.value(7).toString()),
+        query.value(8).toInt(),
+    };
+}
+
+std::optional<WatchStats> Repository::watchStats(const QString &videoId, QString *error) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT video_id, watched_seconds, last_position_seconds, last_watched_at, watch_count "
+        "FROM video_watch_time WHERE video_id = ?"));
+    query.addBindValue(videoId);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return std::nullopt;
+    }
+    if (!query.next())
+        return std::nullopt;
+    return WatchStats{
+        query.value(0).toString(),
+        query.value(1).toLongLong(),
+        query.value(2).toInt(),
+        fromDatabaseTime(query.value(3).toString()),
+        query.value(4).toInt(),
+    };
+}
+
+bool Repository::applyWatchProgress(
+    const QString &videoId,
+    qint64 watchedSecondsDelta,
+    int lastPositionSeconds,
+    bool countSession,
+    QString *error)
+{
+    if (videoId.isEmpty()) {
+        setError(error, QStringLiteral("Video id is required to record watch progress."));
+        return false;
+    }
+
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "INSERT INTO video_watch_time(video_id, watched_seconds, last_position_seconds, "
+        "last_watched_at, watch_count) VALUES(?, ?, ?, ?, ?) "
+        "ON CONFLICT(video_id) DO UPDATE SET "
+        "watched_seconds = watched_seconds + excluded.watched_seconds, "
+        "last_position_seconds = excluded.last_position_seconds, "
+        "last_watched_at = excluded.last_watched_at, "
+        "watch_count = watch_count + excluded.watch_count"));
+    query.addBindValue(videoId);
+    query.addBindValue(qMax<qint64>(0, watchedSecondsDelta));
+    query.addBindValue(qMax(0, lastPositionSeconds));
+    query.addBindValue(toDatabaseTime(QDateTime::currentDateTimeUtc()));
+    query.addBindValue(countSession ? 1 : 0);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return false;
+    }
+    return true;
+}
+
 bool Repository::migrate(QString *error)
 {
     QSqlQuery versionQuery(m_database);
@@ -410,7 +492,7 @@ bool Repository::migrate(QString *error)
     }
     const int version = versionQuery.value(0).toInt();
     versionQuery.finish();
-    constexpr int currentVersion = 2;
+    constexpr int currentVersion = 3;
     if (version == currentVersion)
         return true;
     if (version < 0 || version > currentVersion) {
@@ -445,14 +527,26 @@ bool Repository::migrate(QString *error)
                 "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
                 "duration_seconds INTEGER NOT NULL DEFAULT -1)"),
             QStringLiteral("CREATE INDEX videos_published_at ON videos(published_at DESC)"),
-            QStringLiteral("PRAGMA user_version = 2"),
+            QStringLiteral(
+                "CREATE TABLE video_watch_time("
+                "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+                "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+                "last_watched_at TEXT NOT NULL DEFAULT '', "
+                "watch_count INTEGER NOT NULL DEFAULT 0)"),
+            QStringLiteral("PRAGMA user_version = 3"),
         };
     } else {
-        statements = {
-            QStringLiteral(
-                "ALTER TABLE videos ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT -1"),
-            QStringLiteral("PRAGMA user_version = 2"),
-        };
+        if (version == 1) {
+            statements.append(QStringLiteral(
+                "ALTER TABLE videos ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT -1"));
+        }
+        statements.append(QStringLiteral(
+            "CREATE TABLE video_watch_time("
+            "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+            "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+            "last_watched_at TEXT NOT NULL DEFAULT '', "
+            "watch_count INTEGER NOT NULL DEFAULT 0)"));
+        statements.append(QStringLiteral("PRAGMA user_version = 3"));
     }
 
     QSqlQuery query(m_database);

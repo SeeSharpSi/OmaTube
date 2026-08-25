@@ -40,6 +40,17 @@ struct Video
     bool operator==(const Video &) const = default;
 };
 
+struct WatchStats
+{
+    QString videoId;
+    qint64 watchedSeconds = 0;
+    int lastPositionSeconds = 0;
+    QDateTime lastWatchedAt;
+    int watchCount = 0;
+
+    bool operator==(const WatchStats &) const = default;
+};
+
 struct LiveChannel
 {
     QString channelId;

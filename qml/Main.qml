@@ -491,6 +491,10 @@ ApplicationWindow {
 
         onLoaded: {
             item.hostWindow = root
+            // Bind start position before videoId: the videoId binding is
+            // evaluated immediately and generates the embed URL.
+            if (item.hasOwnProperty("startSeconds"))
+                item.startSeconds = Qt.binding(function() { return App.currentStartPosition })
             item.videoId = Qt.binding(function() { return App.currentVideoId })
         }
     }

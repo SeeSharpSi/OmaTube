@@ -21,6 +21,7 @@ HEADERS += \
     $$PROJECT_ROOT/src/models/livechannelmodel.h \
     $$PROJECT_ROOT/src/refreshservice.h \
     $$PROJECT_ROOT/src/repository.h \
+    $$PROJECT_ROOT/src/watchtracker.h \
     $$PROJECT_ROOT/src/youtubeclient.h
 
 SOURCES += \
@@ -30,4 +31,5 @@ SOURCES += \
     $$PROJECT_ROOT/src/models/livechannelmodel.cpp \
     $$PROJECT_ROOT/src/refreshservice.cpp \
     $$PROJECT_ROOT/src/repository.cpp \
+    $$PROJECT_ROOT/src/watchtracker.cpp \
     $$PROJECT_ROOT/src/youtubeclient.cpp

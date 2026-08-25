@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 
+#include <QCoreApplication>
 #include <QQmlEngine>
 #include <QRegularExpression>
 #include <QSettings>
@@ -9,6 +10,11 @@ constexpr auto apiKeySetting = "credentials/youtubeApiKey";
 constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
 constexpr int defaultShortVideoCutoffMinutes = 3;
 constexpr int maximumShortVideoCutoffMinutes = 60;
+// Resume only when the stored position is past this many seconds.
+constexpr int minimumResumePositionSeconds = 30;
+// Positions within this distance of the end count as finished; do not resume.
+constexpr int resumeEndThresholdSeconds = 90;
+constexpr int watchFlushIntervalMs = 30'000;
 }
 
 AppController *AppController::s_instance = nullptr;
@@ -26,6 +32,13 @@ AppController::AppController(QString databasePath, QObject *parent)
 {
     Q_ASSERT(!s_instance);
     s_instance = this;
+    m_watchFlushTimer.setInterval(watchFlushIntervalMs);
+    connect(&m_watchFlushTimer, &QTimer::timeout, this, &AppController::flushWatchProgress);
+    connect(
+        qApp,
+        &QCoreApplication::aboutToQuit,
+        this,
+        &AppController::flushWatchProgress);
     connect(&m_refreshService, &RefreshService::refreshingChanged,
             this, &AppController::refreshingChanged);
     connect(&m_refreshService, &RefreshService::progressTextChanged,
@@ -63,6 +76,7 @@ AppController::AppController(QString databasePath, QObject *parent)
 
 AppController::~AppController()
 {
+    flushWatchProgress();
     s_instance = nullptr;
 }
 
@@ -196,6 +210,11 @@ QString AppController::currentVideoId() const
 bool AppController::playerOpen() const
 {
     return m_playerOpen;
+}
+
+int AppController::currentStartPosition() const
+{
+    return m_currentStartPosition;
 }
 
 void AppController::startupRefresh()
@@ -390,10 +409,16 @@ void AppController::openVideo(const QString &videoId)
         setErrorMessage(QStringLiteral("Video URL is invalid."));
         return;
     }
+    m_watchTracker.setActiveVideo(videoId, watchStatsForVideo(videoId)
+                                               .value(QStringLiteral("lastPositionSeconds"))
+                                               .toInt());
+    flushWatchProgress();
     if (m_currentVideoId != videoId) {
         m_currentVideoId = videoId;
         emit currentVideoIdChanged();
     }
+    resolveStartPosition(videoId);
+    m_watchFlushTimer.start();
     if (!m_playerOpen) {
         m_playerOpen = true;
         emit playerOpenChanged();
@@ -404,8 +429,37 @@ void AppController::closePlayer()
 {
     if (!m_playerOpen)
         return;
+    m_watchTracker.clearActiveVideo();
+    flushWatchProgress();
+    m_watchFlushTimer.stop();
     m_playerOpen = false;
     emit playerOpenChanged();
+}
+
+void AppController::reportPlayback(const QString &videoId, double positionSeconds, bool playing)
+{
+    if (!m_playerOpen)
+        return;
+    m_watchTracker.reportPlayback(videoId, positionSeconds, playing);
+}
+
+QVariantMap AppController::watchStatsForVideo(const QString &videoId)
+{
+    QString error;
+    const std::optional<WatchStats> stats = m_repository.watchStats(videoId, &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return {};
+    }
+    if (!stats)
+        return {};
+    return {
+        {QStringLiteral("videoId"), stats->videoId},
+        {QStringLiteral("watchedSeconds"), stats->watchedSeconds},
+        {QStringLiteral("lastPositionSeconds"), stats->lastPositionSeconds},
+        {QStringLiteral("lastWatchedAt"), stats->lastWatchedAt},
+        {QStringLiteral("watchCount"), stats->watchCount},
+    };
 }
 
 void AppController::clearError()
@@ -455,6 +509,51 @@ void AppController::reloadFeed()
         &error));
     if (!error.isEmpty())
         setErrorMessage(error);
+}
+
+void AppController::resolveStartPosition(const QString &videoId)
+{
+    int startPosition = 0;
+    QString error;
+    const std::optional<WatchStats> stats = m_repository.watchStats(videoId, &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    }
+    if (stats && stats->lastPositionSeconds >= minimumResumePositionSeconds) {
+        const std::optional<Video> video = m_repository.video(videoId, &error);
+        if (!error.isEmpty()) {
+            setErrorMessage(error);
+            return;
+        }
+        // Unknown metadata resumes normally; broadcasts and near-finished
+        // videos restart from the beginning.
+        const bool finished = video && video->durationSeconds > 0
+            && stats->lastPositionSeconds >= video->durationSeconds - resumeEndThresholdSeconds;
+        if (!video || (!video->isBroadcast && !finished))
+            startPosition = stats->lastPositionSeconds;
+    }
+
+    if (m_currentStartPosition == startPosition)
+        return;
+    m_currentStartPosition = startPosition;
+    emit currentStartPositionChanged();
+}
+
+void AppController::flushWatchProgress()
+{
+    const QList<WatchProgressUpdate> updates = m_watchTracker.takePendingUpdates();
+    for (const WatchProgressUpdate &update : updates) {
+        QString error;
+        if (!m_repository.applyWatchProgress(
+                update.videoId,
+                update.watchedSecondsDelta,
+                update.lastPositionSeconds,
+                update.countSession,
+                &error)) {
+            setErrorMessage(error);
+        }
+    }
 }
 
 void AppController::setStatusMessage(QString message)

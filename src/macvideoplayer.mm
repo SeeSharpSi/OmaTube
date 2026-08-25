@@ -1,5 +1,7 @@
 #include "macvideoplayer.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QUrl>
@@ -26,6 +28,41 @@
 
 @end
 
+@interface OmaPlaybackMessageHandler : NSObject<WKScriptMessageHandler>
+@end
+
+@implementation OmaPlaybackMessageHandler {
+    MacVideoPlayerNative *_owner;
+}
+
+- (instancetype)initWithOwner:(MacVideoPlayerNative *)owner
+{
+    self = [super init];
+    if (self)
+        _owner = owner;
+    return self;
+}
+
+- (void)userContentController:(WKUserContentController *)userContentController
+      didReceiveScriptMessage:(WKScriptMessage *)message
+{
+    Q_UNUSED(userContentController);
+    if (!_owner)
+        return;
+    if (![message.body isKindOfClass:[NSString class]])
+        return;
+    const QString body = QString::fromNSString(static_cast<NSString *>(message.body));
+    const QJsonDocument document = QJsonDocument::fromJson(body.toUtf8());
+    if (!document.isObject())
+        return;
+    const QJsonObject payload = document.object();
+    emit _owner->playbackUpdated(
+        payload.value(QStringLiteral("time")).toDouble(),
+        payload.value(QStringLiteral("state")).toInt() == 1);
+}
+
+@end
+
 namespace {
 
 WKWebView *webView(void *value)
@@ -43,19 +80,58 @@ NSURL *playerBaseUrl()
     return [NSURL URLWithString:@"https://dev.ytclient.app/"];
 }
 
-QString playerHtml(const QString &videoId)
+QString playbackReportJavaScript()
+{
+    return QStringLiteral(
+        "var omaPlayer = null;"
+        "window.onYouTubeIframeAPIReady = function() {"
+        "  omaPlayer = new YT.Player('player', {"
+        "    videoId: decodeURIComponent(window.__omaVideoId),"
+        "    playerVars: {autoplay: 1, playsinline: 1, rel: 0, start: window.__omaStartSeconds},"
+        "    events: {onReady: function(e) { omaPlayer = e.target; }}"
+        "  });"
+        "};"
+        "window.__omaPlaybackReport = function() {"
+        "  try {"
+        "    if (!omaPlayer || !omaPlayer.getPlayerState) return null;"
+        "    var s = omaPlayer.getPlayerState();"
+        "    var t = omaPlayer.getCurrentTime();"
+        "    if (typeof t !== 'number' || isNaN(t)) return null;"
+        "    return JSON.stringify({state: s, time: t});"
+        "  } catch (e) { return null; }"
+        "};");
+}
+
+QString playbackPollerJavaScript()
+{
+    return QStringLiteral(
+        "(function() {"
+        "  setInterval(function() {"
+        "    try {"
+        "      if (!window.__omaPlaybackReport) return;"
+        "      var r = window.__omaPlaybackReport();"
+        "      if (r && window.webkit && window.webkit.messageHandlers"
+        "          && window.webkit.messageHandlers.omaPlayback)"
+        "        window.webkit.messageHandlers.omaPlayback.postMessage(r);"
+        "    } catch (e) {}"
+        "  }, 5000);"
+        "})();");
+}
+
+QString playerHtml(const QString &videoId, int startSeconds)
 {
     return QStringLiteral("<!doctype html><html><head><meta charset=\"utf-8\">"
-                          "<meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">"
-                          "<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;"
-                          "overflow:hidden;background:#000}</style></head><body>"
-                          "<iframe src=\"https://www.youtube.com/embed/%1?autoplay=1&playsinline=1&rel=0\" "
-                          "title=\"YouTube video player\" "
-                          "allow=\"accelerometer; autoplay; clipboard-write; encrypted-media;"
-                          " gyroscope; picture-in-picture\" "
-                          "referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen>"
-                          "</iframe></body></html>")
-        .arg(QString::fromUtf8(QUrl::toPercentEncoding(videoId)));
+                          "<style>html,body{width:100%;height:100%;margin:0;border:0;"
+                          "overflow:hidden;background:#000}#player{width:100%;height:100%}"
+                          "</style></head><body>"
+                          "<div id=\"player\"></div>"
+                          "<script>window.__omaVideoId = '%1';"
+                          "window.__omaStartSeconds = %2;</script>"
+                          "<script src=\"https://www.youtube.com/iframe_api\"></script>"
+                          "<script>%3</script></body></html>")
+        .arg(QString::fromUtf8(QUrl::toPercentEncoding(videoId)))
+        .arg(qMax(0, startSeconds))
+        .arg(playbackReportJavaScript());
 }
 }
 
@@ -77,11 +153,16 @@ MacVideoPlayerNative::~MacVideoPlayerNative()
     if (view) {
         [view stopLoading];
         [view setNavigationDelegate:nil];
+        if (m_messageHandler)
+            [view.configuration.userContentController
+                removeScriptMessageHandlerForName:@"omaPlayback"];
         [view removeFromSuperview];
         [view release];
     }
     if (m_navigationDelegate)
         [static_cast<VideoNavigationDelegate *>(m_navigationDelegate) release];
+    if (m_messageHandler)
+        [static_cast<OmaPlaybackMessageHandler *>(m_messageHandler) release];
 }
 
 QString MacVideoPlayerNative::videoId() const
@@ -96,6 +177,16 @@ void MacVideoPlayerNative::setVideoId(const QString &videoId)
     m_videoId = videoId;
     emit videoIdChanged();
     loadVideo();
+}
+
+int MacVideoPlayerNative::startSeconds() const
+{
+    return m_startSeconds;
+}
+
+void MacVideoPlayerNative::setStartSeconds(int startSeconds)
+{
+    m_startSeconds = qMax(0, startSeconds);
 }
 
 void MacVideoPlayerNative::stop()
@@ -139,6 +230,20 @@ void MacVideoPlayerNative::syncNativeView()
         configuration.allowsInlineMediaPlayback = YES;
         configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
         configuration.websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+
+        WKUserScript *poller = [[WKUserScript alloc]
+            initWithSource:playbackPollerJavaScript().toNSString()
+             injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
+          forMainFrameOnly:YES];
+        [configuration.userContentController addUserScript:poller];
+        [poller release];
+
+        OmaPlaybackMessageHandler *handler =
+            [[OmaPlaybackMessageHandler alloc] initWithOwner:this];
+        [configuration.userContentController addScriptMessageHandler:handler
+                                                                name:@"omaPlayback"];
+        m_messageHandler = handler;
+
         WKWebView *view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
         [configuration release];
         VideoNavigationDelegate *delegate = [[VideoNavigationDelegate alloc] init];
@@ -173,5 +278,6 @@ void MacVideoPlayerNative::loadVideo()
         stop();
         return;
     }
-    [view loadHTMLString:playerHtml(m_videoId).toNSString() baseURL:playerBaseUrl()];
+    [view loadHTMLString:playerHtml(m_videoId, m_startSeconds).toNSString()
+                 baseURL:playerBaseUrl()];
 }

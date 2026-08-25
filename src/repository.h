@@ -43,12 +43,23 @@ public:
         QString *error = nullptr) const;
 
     bool upsertVideos(const QList<Video> &videos, QString *error = nullptr);
+    [[nodiscard]] std::optional<Video> video(const QString &videoId, QString *error = nullptr) const;
     [[nodiscard]] QList<Video> feed(
         std::optional<qint64> categoryId = std::nullopt,
         int shortVideoCutoffSeconds = 180,
         int limit = 500,
         QString *error = nullptr) const;
     bool pruneVideoMetadata(const QDateTime &olderThan, QString *error = nullptr);
+
+    [[nodiscard]] std::optional<WatchStats> watchStats(
+        const QString &videoId,
+        QString *error = nullptr) const;
+    bool applyWatchProgress(
+        const QString &videoId,
+        qint64 watchedSecondsDelta,
+        int lastPositionSeconds,
+        bool countSession,
+        QString *error = nullptr);
 
 private:
     bool migrate(QString *error);

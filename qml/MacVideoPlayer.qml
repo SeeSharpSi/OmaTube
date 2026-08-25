@@ -8,11 +8,17 @@ Item {
 
     property var hostWindow
     property string videoId: ""
+    property int startSeconds: 0
+    signal playbackUpdated(real positionSeconds, bool playing)
 
     MacVideoPlayerNative {
         id: player
         anchors.fill: parent
         videoId: root.videoId
+        startSeconds: root.startSeconds
+        onPlaybackUpdated: function(positionSeconds, playing) {
+            root.playbackUpdated(positionSeconds, playing)
+        }
     }
 
     Component.onDestruction: player.stop()

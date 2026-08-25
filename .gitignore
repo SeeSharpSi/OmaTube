@@ -1,0 +1,50 @@
+/build*/
+/.cache/
+.DS_Store
+CMakeUserPresets.json
+
+# CMake and build-system output
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+cmake_install.cmake
+compile_commands.json
+install_manifest.txt
+Makefile
+*.ninja
+.ninja_deps
+.ninja_log
+Testing/
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.app/
+*.dSYM/
+
+# IDE and editor state
+.idea/
+.vscode/
+.vs/
+*.code-workspace
+*.pro.user
+*.pro.user.*
+CMakeLists.txt.user
+CMakeLists.txt.user.*
+.qtcreator/
+*.swp
+*.swo
+
+# Qt generated cache
+*.qmlc
+*.jsc
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example

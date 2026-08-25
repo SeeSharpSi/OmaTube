@@ -7,8 +7,19 @@
 #include <QUrl>
 #include <QtQml/qqml.h>
 
+#ifdef Q_OS_LINUX
+#include <QtWebEngineQuick/QtWebEngineQuick>
+#endif
+
+#ifdef Q_OS_MACOS
+#include "macvideoplayer.h"
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_LINUX
+    QtWebEngineQuick::initialize();
+#endif
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("YT Client"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("ytclient.dev"));
@@ -25,6 +36,9 @@ int main(int argc, char *argv[])
     }
     qmlRegisterSingletonType<AppController>(
         "YtClient", 1, 0, "App", &AppController::create);
+#ifdef Q_OS_MACOS
+    qmlRegisterType<MacVideoPlayerNative>("YtClient", 1, 0, "MacVideoPlayerNative");
+#endif
     QQmlApplicationEngine engine;
     QObject::connect(
         &engine,

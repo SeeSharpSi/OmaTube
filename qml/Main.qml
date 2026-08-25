@@ -24,7 +24,7 @@ ApplicationWindow {
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
     readonly property color errorBorder: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.48))
-    property bool modalOpen: settingsDialog.visible
+    property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -86,6 +86,13 @@ ApplicationWindow {
         onActivated: settingsDialog.open()
     }
 
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: App.playerOpen
+        onActivated: App.closePlayer()
+    }
+
     ColumnLayout {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -93,6 +100,7 @@ ApplicationWindow {
         anchors.topMargin: 28
         width: Math.min(parent.width - 56, 820)
         spacing: 18
+        visible: !App.playerOpen
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -392,6 +400,7 @@ ApplicationWindow {
         width: 40
         height: 40
         text: qsTr("Settings")
+        visible: !App.playerOpen
         onClicked: settingsDialog.open()
 
         PointingCursor {}
@@ -443,7 +452,7 @@ ApplicationWindow {
         z: 10
         width: refreshRow.implicitWidth + 16
         height: 32
-        visible: App.refreshing
+        visible: App.refreshing && !App.playerOpen
         color: root.paper
         border.color: root.rule
 
@@ -471,5 +480,18 @@ ApplicationWindow {
     SettingsDialog {
         id: settingsDialog
         parent: root.contentItem
+    }
+
+    Loader {
+        id: playerLoader
+        anchors.fill: parent
+        z: 20
+        active: App.playerOpen
+        source: "qrc:/qml/VideoPlayerPage.qml"
+
+        onLoaded: {
+            item.hostWindow = root
+            item.videoId = Qt.binding(function() { return App.currentVideoId })
+        }
     }
 }

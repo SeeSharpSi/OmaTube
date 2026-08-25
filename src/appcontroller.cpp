@@ -1,10 +1,8 @@
 #include "appcontroller.h"
 
-#include <QDesktopServices>
 #include <QQmlEngine>
 #include <QRegularExpression>
 #include <QSettings>
-#include <QUrl>
 
 namespace {
 constexpr auto apiKeySetting = "credentials/youtubeApiKey";
@@ -188,6 +186,16 @@ bool AppController::omarchyThemeAvailable() const
 QString AppController::omarchyThemeName() const
 {
     return m_themeManager.omarchyThemeName();
+}
+
+QString AppController::currentVideoId() const
+{
+    return m_currentVideoId;
+}
+
+bool AppController::playerOpen() const
+{
+    return m_playerOpen;
 }
 
 void AppController::startupRefresh()
@@ -382,10 +390,22 @@ void AppController::openVideo(const QString &videoId)
         setErrorMessage(QStringLiteral("Video URL is invalid."));
         return;
     }
-    if (!QDesktopServices::openUrl(
-            QUrl(QStringLiteral("https://www.youtube.com/watch?v=%1").arg(videoId)))) {
-        setErrorMessage(QStringLiteral("Could not open the system browser."));
+    if (m_currentVideoId != videoId) {
+        m_currentVideoId = videoId;
+        emit currentVideoIdChanged();
     }
+    if (!m_playerOpen) {
+        m_playerOpen = true;
+        emit playerOpenChanged();
+    }
+}
+
+void AppController::closePlayer()
+{
+    if (!m_playerOpen)
+        return;
+    m_playerOpen = false;
+    emit playerOpenChanged();
 }
 
 void AppController::clearError()

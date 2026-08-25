@@ -42,6 +42,8 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantMap themeColors READ themeColors NOTIFY themeChanged)
     Q_PROPERTY(bool omarchyThemeAvailable READ omarchyThemeAvailable NOTIFY themeChanged)
     Q_PROPERTY(QString omarchyThemeName READ omarchyThemeName NOTIFY themeChanged)
+    Q_PROPERTY(QString currentVideoId READ currentVideoId NOTIFY currentVideoIdChanged)
+    Q_PROPERTY(bool playerOpen READ playerOpen NOTIFY playerOpenChanged)
 
 public:
     ~AppController() override;
@@ -68,6 +70,8 @@ public:
     [[nodiscard]] QVariantMap themeColors() const;
     [[nodiscard]] bool omarchyThemeAvailable() const;
     [[nodiscard]] QString omarchyThemeName() const;
+    [[nodiscard]] QString currentVideoId() const;
+    [[nodiscard]] bool playerOpen() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -86,6 +90,7 @@ public:
     Q_INVOKABLE void setShortVideoCutoffMinutes(int minutes);
     Q_INVOKABLE void setThemeId(const QString &themeId);
     Q_INVOKABLE void openVideo(const QString &videoId);
+    Q_INVOKABLE void closePlayer();
     Q_INVOKABLE void clearError();
 
 signals:
@@ -99,6 +104,8 @@ signals:
     void selectedCategoryIdChanged();
     void shortVideoCutoffMinutesChanged();
     void themeChanged();
+    void currentVideoIdChanged();
+    void playerOpenChanged();
     void channelAdded(QString title);
 
 private:
@@ -127,6 +134,8 @@ private:
     QDateTime m_lastRefreshedAt;
     qint64 m_selectedCategoryId = -1;
     int m_shortVideoCutoffMinutes = 3;
+    QString m_currentVideoId;
+    bool m_playerOpen = false;
 
     static AppController *s_instance;
 };

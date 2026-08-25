@@ -28,6 +28,7 @@ build_and_run() (
 )
 
 "$ROOT/bin/build"
+build_and_run appcontroller_tests "$ROOT/tests/appcontroller_tests.pro"
 build_and_run repository_tests "$ROOT/tests/repository_tests.pro"
 build_and_run youtube_tests "$ROOT/tests/youtube_tests.pro"
 build_and_run theme_tests "$ROOT/tests/theme_tests.pro"

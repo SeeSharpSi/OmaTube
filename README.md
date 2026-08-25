@@ -1,6 +1,6 @@
 # YT Client
 
-YT Client is a small desktop YouTube feed built with C++20, Qt 6, and QML. It keeps subscriptions and categories locally, shows current live channels separately, and opens videos in the system browser.
+YT Client is a small desktop YouTube feed built with C++20, Qt 6, and QML. It keeps subscriptions and categories locally, shows current live channels separately, and plays videos inside the app.
 
 No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 
@@ -20,6 +20,7 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - C++20 compiler
 - qmake and Make
 - Qt 6.8 or newer with Core, GUI, Network, Quick, Quick Controls 2, SQL, and SQLite driver
+- Linux only: Qt WebEngine Quick with its QML module
 
 On Omarchy, these are already installed with the default Qt desktop toolchain. No package installation is required.
 
@@ -33,7 +34,7 @@ brew install qt
 On Ubuntu 24.04 or similar:
 
 ```sh
-sudo apt install make g++ qt6-base-dev qt6-declarative-dev libqt6sql6-sqlite
+sudo apt install make g++ qt6-base-dev qt6-declarative-dev qt6-webengine-dev libqt6sql6-sqlite
 ```
 
 Package names vary between Linux distributions.
@@ -90,7 +91,7 @@ Never commit a key or distribute one shared key with binaries.
 4. Assign channels to categories.
 5. Press `R` whenever a fresh snapshot is wanted.
 
-Category switching only filters local SQLite data. It does not make network requests. Clicking video title or live circle opens YouTube in the system browser.
+Category switching only filters local SQLite data. It does not make network requests. Clicking a video title or live circle replaces the feed with the official YouTube embedded player. Use Back or Escape to return to the feed.
 
 ## Refresh and Quota
 
@@ -111,7 +112,7 @@ API-derived video metadata older than 30 days is deleted. API-derived channel me
 
 ## Policy Notes
 
-This client uses documented YouTube APIs and external browser playback. It does not scrape pages, download media, block ads, or modify YouTube playback.
+This client uses documented YouTube APIs and the official YouTube embedded player. Linux uses Qt WebEngine; macOS uses WKWebView. It does not scrape pages, download media, block ads, or modify YouTube playback. Videos disabled by their owner for embedding remain unavailable inside the app.
 
 - [YouTube API Services Terms](https://developers.google.com/youtube/terms/api-services-terms-of-service)
 - [YouTube Developer Policies](https://developers.google.com/youtube/terms/developer-policies)

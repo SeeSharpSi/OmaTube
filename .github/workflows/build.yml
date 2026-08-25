@@ -9,18 +9,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-14
-          - ubuntu-24.04
+        include:
+          - os: macos-14
+          - os: ubuntu-24.04
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: jurplel/install-qt-action@v4
+      - name: Install Qt
+        if: runner.os == 'macOS'
+        uses: jurplel/install-qt-action@v4
         with:
           version: "6.8.3"
+          cache: true
+
+      - name: Install Qt and WebEngine
+        if: runner.os == 'Linux'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          modules: qtwebengine
           cache: true
 
       - name: Build

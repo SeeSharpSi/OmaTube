@@ -18,6 +18,8 @@ ApplicationWindow {
     readonly property color softFill: "#eee9df"
     readonly property color liveRed: "#bd3535"
     property bool modalOpen: settingsDialog.visible
+    property int spinnerFrame: 0
+    readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     width: 900
     height: 720
@@ -26,6 +28,17 @@ ApplicationWindow {
     visible: true
     title: qsTr("OmaTube")
     color: paper
+    palette.window: paper
+    palette.windowText: ink
+    palette.base: panel
+    palette.alternateBase: softFill
+    palette.text: ink
+    palette.button: softFill
+    palette.buttonText: ink
+    palette.highlight: ink
+    palette.highlightedText: panel
+    palette.mid: rule
+    palette.placeholderText: mutedInk
 
     function relativeTime(value) {
         const seconds = Math.max(0, Math.floor((Date.now() - value.getTime()) / 1000))
@@ -44,6 +57,13 @@ ApplicationWindow {
     }
 
     Component.onCompleted: App.startupRefresh()
+
+    Timer {
+        interval: 80
+        running: App.refreshing
+        repeat: true
+        onTriggered: root.spinnerFrame = (root.spinnerFrame + 1) % root.spinnerFrames.length
+    }
 
     Shortcut {
         sequence: "R"
@@ -64,7 +84,6 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: 28
-        anchors.bottomMargin: 20
         width: Math.min(parent.width - 56, 820)
         spacing: 18
 
@@ -135,7 +154,10 @@ ApplicationWindow {
                     }
 
                     TapHandler { onTapped: App.openVideo(liveDelegate.videoId) }
-                    HoverHandler { id: liveHover }
+                    HoverHandler {
+                        id: liveHover
+                        cursorShape: Qt.PointingHandCursor
+                    }
                     ToolTip.visible: liveHover.hovered
                     ToolTip.text: liveDelegate.videoTitle
                 }
@@ -163,6 +185,8 @@ ApplicationWindow {
                     text: qsTr("All")
                     flat: true
                     onClicked: App.selectCategory(-1)
+
+                    PointingCursor {}
 
                     background: Rectangle {
                         color: App.selectedCategoryId < 0 ? root.ink : "transparent"
@@ -193,6 +217,8 @@ ApplicationWindow {
                         text: categoryButton.name
                         flat: true
                         onClicked: App.selectCategory(categoryButton.categoryId)
+
+                        PointingCursor {}
 
                         background: Rectangle {
                             color: App.selectedCategoryId === categoryButton.categoryId
@@ -239,7 +265,10 @@ ApplicationWindow {
                 font.pixelSize: 12
             }
 
-            TapHandler { onTapped: App.clearError() }
+            TapHandler {
+                cursorShape: Qt.PointingHandCursor
+                onTapped: App.clearError()
+            }
         }
 
         ListView {
@@ -302,7 +331,10 @@ ApplicationWindow {
                     color: feedHover.hovered ? root.softFill : "transparent"
                 }
 
-                HoverHandler { id: feedHover }
+                HoverHandler {
+                    id: feedHover
+                    cursorShape: Qt.PointingHandCursor
+                }
                 TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
             }
 
@@ -351,6 +383,8 @@ ApplicationWindow {
         text: qsTr("Settings")
         onClicked: settingsDialog.open()
 
+        PointingCursor {}
+
         background: Item {}
 
         contentItem: Canvas {
@@ -388,6 +422,39 @@ ApplicationWindow {
         ToolTip.visible: hovered
         ToolTip.delay: 500
         ToolTip.text: qsTr("Settings")
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 18
+        anchors.bottomMargin: 14
+        z: 10
+        width: refreshRow.implicitWidth + 16
+        height: 32
+        visible: App.refreshing
+        color: root.paper
+        border.color: root.rule
+
+        Row {
+            id: refreshRow
+            anchors.centerIn: parent
+            spacing: 7
+
+            Text {
+                text: root.spinnerFrames[root.spinnerFrame]
+                color: root.ink
+                font.family: "monospace"
+                font.pixelSize: 16
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: App.progressText.length > 0 ? App.progressText : qsTr("Refreshing...")
+                color: root.mutedInk
+                font.pixelSize: 12
+            }
+        }
     }
 
     SettingsDialog {

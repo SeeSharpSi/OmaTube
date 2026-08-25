@@ -89,6 +89,8 @@ Dialog {
             flat: true
             onClicked: root.close()
 
+            PointingCursor {}
+
             background: Item {}
 
             contentItem: Canvas {
@@ -121,22 +123,29 @@ Dialog {
             id: tabs
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            background: Rectangle { color: root.paper }
+            spacing: 0
+
+            background: Rectangle {
+                color: root.paper
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    x: tabs.currentIndex * width
+                    width: parent.width / tabs.count
+                    height: 2
+                    color: root.ink
+                }
+            }
 
             TabButton {
                 id: channelsTab
+                height: tabs.height
+                implicitHeight: tabs.height
                 text: qsTr("Channels")
 
-                background: Rectangle {
-                    color: "transparent"
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2
-                        color: channelsTab.checked ? root.ink : "transparent"
-                    }
-                }
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
 
                 contentItem: Text {
                     text: channelsTab.text
@@ -150,18 +159,13 @@ Dialog {
 
             TabButton {
                 id: categoriesTab
+                height: tabs.height
+                implicitHeight: tabs.height
                 text: qsTr("Categories")
 
-                background: Rectangle {
-                    color: "transparent"
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2
-                        color: categoriesTab.checked ? root.ink : "transparent"
-                    }
-                }
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
 
                 contentItem: Text {
                     text: categoriesTab.text
@@ -175,18 +179,13 @@ Dialog {
 
             TabButton {
                 id: apiTab
+                height: tabs.height
+                implicitHeight: tabs.height
                 text: qsTr("API key")
 
-                background: Rectangle {
-                    color: "transparent"
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2
-                        color: apiTab.checked ? root.ink : "transparent"
-                    }
-                }
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
 
                 contentItem: Text {
                     text: apiTab.text
@@ -235,6 +234,8 @@ Dialog {
                             text: App.addingChannel ? qsTr("Adding...") : qsTr("Add")
                             enabled: channelInput.text.trim().length > 0 && !App.addingChannel
                             onClicked: App.addChannel(channelInput.text, root.selectedCategoryIds)
+
+                            PointingCursor {}
                         }
                     }
 
@@ -260,6 +261,9 @@ Dialog {
 
                                 text: addCategoryCheck.name
                                 checked: root.selectedCategoryIds.indexOf(addCategoryCheck.categoryId) !== -1
+
+                                PointingCursor {}
+
                                 onToggled: {
                                     let ids = root.selectedCategoryIds.slice()
                                     const position = ids.indexOf(addCategoryCheck.categoryId)
@@ -353,6 +357,8 @@ Dialog {
                                         flat: true
                                         onClicked: root.confirmDelete(
                                             "channel", channelDelegate.channelId, channelDelegate.title)
+
+                                        PointingCursor {}
                                     }
                                 }
 
@@ -372,6 +378,9 @@ Dialog {
                                             text: membershipCheck.name
                                             checked: channelDelegate.categoryIds.indexOf(
                                                 membershipCheck.categoryId) !== -1
+
+                                            PointingCursor {}
+
                                             onToggled: App.setChannelInCategory(
                                                 channelDelegate.channelId,
                                                 membershipCheck.categoryId,
@@ -424,6 +433,9 @@ Dialog {
                         Button {
                             text: qsTr("Add")
                             enabled: newCategoryInput.text.trim().length > 0
+
+                            PointingCursor {}
+
                             onClicked: {
                                 if (App.addCategory(newCategoryInput.text))
                                     newCategoryInput.clear()
@@ -465,6 +477,9 @@ Dialog {
                                     text: qsTr("Save")
                                     enabled: categoryName.text.trim().length > 0
                                              && categoryName.text.trim() !== categoryDelegate.name
+
+                                    PointingCursor {}
+
                                     onClicked: App.renameCategory(
                                         categoryDelegate.categoryId, categoryName.text)
                                 }
@@ -474,6 +489,8 @@ Dialog {
                                     flat: true
                                     onClicked: root.confirmDelete(
                                         "category", categoryDelegate.categoryId, categoryDelegate.name)
+
+                                    PointingCursor {}
                                 }
                             }
                         }
@@ -516,6 +533,8 @@ Dialog {
                     CheckBox {
                         id: rememberKey
                         text: qsTr("Remember in local settings")
+
+                        PointingCursor {}
                     }
 
                     Label {
@@ -535,6 +554,8 @@ Dialog {
                             visible: App.apiKeyConfigured
                             flat: true
                             onClicked: App.clearApiKey()
+
+                            PointingCursor {}
                         }
 
                         Item { Layout.fillWidth: true }
@@ -543,6 +564,9 @@ Dialog {
                             id: saveKeyButton
                             text: qsTr("Use key")
                             enabled: keyInput.text.trim().length > 0
+
+                            PointingCursor {}
+
                             onClicked: {
                                 if (App.setApiKey(keyInput.text, rememberKey.checked))
                                     keyInput.clear()
@@ -585,7 +609,10 @@ Dialog {
                 wrapMode: Text.Wrap
             }
 
-            TapHandler { onTapped: App.clearError() }
+            TapHandler {
+                cursorShape: Qt.PointingHandCursor
+                onTapped: App.clearError()
+            }
         }
     }
 

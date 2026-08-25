@@ -10,21 +10,38 @@ import YtClient
 ApplicationWindow {
     id: root
 
-    readonly property color ink: "#1d1b17"
-    readonly property color mutedInk: "#6e6960"
-    readonly property color paper: "#f5f1e8"
+    readonly property color ink: "#24221e"
+    readonly property color mutedInk: "#716d65"
+    readonly property color paper: "#f7f4ed"
     readonly property color panel: "#fffdf8"
-    readonly property color rule: "#d9d2c5"
-    readonly property color liveRed: "#b82f2f"
-    property bool modalOpen: addChannelDialog.visible || manageDialog.visible || settingsDialog.visible
+    readonly property color rule: "#ded8cc"
+    readonly property color softFill: "#eee9df"
+    readonly property color liveRed: "#bd3535"
+    property bool modalOpen: settingsDialog.visible
 
-    width: 980
+    width: 900
     height: 720
-    minimumWidth: 680
-    minimumHeight: 520
+    minimumWidth: 620
+    minimumHeight: 540
     visible: true
-    title: qsTr("YT Client")
+    title: qsTr("OmaTube")
     color: paper
+
+    function relativeTime(value) {
+        const seconds = Math.max(0, Math.floor((Date.now() - value.getTime()) / 1000))
+        if (seconds < 60)
+            return qsTr("now")
+        const minutes = Math.floor(seconds / 60)
+        if (minutes < 60)
+            return qsTr("%1 min ago").arg(minutes)
+        const hours = Math.floor(minutes / 60)
+        if (hours < 24)
+            return qsTr("%1 hr ago").arg(hours)
+        const days = Math.floor(hours / 24)
+        if (days < 30)
+            return qsTr("%1 days ago").arg(days)
+        return Qt.formatDate(value, "MMM d, yyyy")
+    }
 
     Component.onCompleted: App.startupRefresh()
 
@@ -35,155 +52,44 @@ ApplicationWindow {
         onActivated: App.refresh()
     }
 
-    header: Rectangle {
-        implicitHeight: 70
-        color: root.panel
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: root.rule
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 28
-            anchors.rightMargin: 28
-            spacing: 12
-
-            Label {
-                text: qsTr("YT CLIENT")
-                color: root.ink
-                font.pixelSize: 18
-                font.weight: Font.Bold
-                font.letterSpacing: 1.4
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-                text: qsTr("Add channel")
-                onClicked: addChannelDialog.openForCategory(App.selectedCategoryId)
-            }
-
-            Button {
-                text: qsTr("Manage")
-                onClicked: manageDialog.open()
-            }
-
-            Button {
-                text: qsTr("API key")
-                onClicked: settingsDialog.open()
-            }
-
-            Button {
-                text: App.refreshing ? qsTr("Refreshing") : qsTr("Refresh  R")
-                enabled: !App.refreshing
-                onClicked: App.refresh()
-            }
-        }
+    Shortcut {
+        sequence: "Ctrl+,"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen
+        onActivated: settingsDialog.open()
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 30
-        anchors.rightMargin: 30
-        anchors.topMargin: 24
-        anchors.bottomMargin: 18
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 28
+        anchors.bottomMargin: 20
+        width: Math.min(parent.width - 56, 820)
         spacing: 18
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Button {
-                id: allCategoryButton
-                text: qsTr("All")
-                flat: true
-                font.bold: App.selectedCategoryId < 0
-                onClicked: App.selectCategory(-1)
-
-                background: Rectangle {
-                    radius: 4
-                    color: App.selectedCategoryId < 0 ? root.ink : "transparent"
-                    border.color: App.selectedCategoryId < 0 ? root.ink : root.rule
-                }
-
-                contentItem: Text {
-                    text: allCategoryButton.text
-                    color: App.selectedCategoryId < 0 ? root.panel : root.ink
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            Flickable {
-                Layout.fillWidth: true
-                implicitHeight: 40
-                contentWidth: categoryRow.width
-                contentHeight: height
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-
-                Row {
-                    id: categoryRow
-                    height: parent.height
-                    spacing: 8
-
-                    Repeater {
-                        model: App.categories
-
-                        delegate: Button {
-                            id: categoryButton
-                            required property var categoryId
-                            required property string name
-
-                            height: 40
-                            text: categoryButton.name
-                            flat: true
-                            font.bold: App.selectedCategoryId === categoryButton.categoryId
-                            onClicked: App.selectCategory(categoryButton.categoryId)
-
-                            background: Rectangle {
-                                radius: 4
-                                color: App.selectedCategoryId === categoryButton.categoryId ? root.ink : "transparent"
-                                border.color: App.selectedCategoryId === categoryButton.categoryId ? root.ink : root.rule
-                            }
-
-                            contentItem: Text {
-                                text: categoryButton.text
-                                color: App.selectedCategoryId === categoryButton.categoryId ? root.panel : root.ink
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         ColumnLayout {
             Layout.fillWidth: true
             visible: liveList.count > 0
-            spacing: 10
+            spacing: 9
 
             Label {
                 text: qsTr("LIVE NOW")
                 color: root.liveRed
-                font.pixelSize: 12
+                font.pixelSize: 11
                 font.weight: Font.Bold
-                font.letterSpacing: 1.2
+                font.letterSpacing: 1.5
             }
 
             ListView {
                 id: liveList
                 Layout.fillWidth: true
-                implicitHeight: 98
+                implicitHeight: 88
                 orientation: ListView.Horizontal
-                spacing: 14
+                spacing: 10
                 clip: true
                 model: App.liveChannels
+                boundsBehavior: Flickable.StopAtBounds
 
                 delegate: Item {
                     id: liveDelegate
@@ -191,20 +97,20 @@ ApplicationWindow {
                     required property string videoId
                     required property string videoTitle
 
-                    width: 76
-                    height: 96
+                    width: 72
+                    height: 86
 
                     Column {
                         width: parent.width
-                        spacing: 6
+                        spacing: 5
 
                         Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 58
                             height: 58
                             radius: 29
-                            color: root.panel
-                            border.width: 3
+                            color: liveHover.hovered ? "#f0dfda" : root.panel
+                            border.width: 2
                             border.color: root.liveRed
 
                             Text {
@@ -213,7 +119,7 @@ ApplicationWindow {
                                     ? liveDelegate.channelTitle.charAt(0).toUpperCase()
                                     : "?"
                                 color: root.ink
-                                font.pixelSize: 22
+                                font.pixelSize: 20
                                 font.weight: Font.DemiBold
                             }
                         }
@@ -236,17 +142,89 @@ ApplicationWindow {
             }
         }
 
+        Flickable {
+            Layout.fillWidth: true
+            implicitHeight: 42
+            contentWidth: categoryRow.implicitWidth
+            contentHeight: height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            Row {
+                id: categoryRow
+                height: parent.height
+                spacing: 8
+
+                Button {
+                    id: allCategoryButton
+                    height: 40
+                    leftPadding: 18
+                    rightPadding: 18
+                    text: qsTr("All")
+                    flat: true
+                    onClicked: App.selectCategory(-1)
+
+                    background: Rectangle {
+                        color: App.selectedCategoryId < 0 ? root.ink : "transparent"
+                        border.color: App.selectedCategoryId < 0 ? root.ink : root.rule
+                    }
+
+                    contentItem: Text {
+                        text: allCategoryButton.text
+                        color: App.selectedCategoryId < 0 ? root.panel : root.ink
+                        font.pixelSize: 14
+                        font.weight: App.selectedCategoryId < 0 ? Font.DemiBold : Font.Normal
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                Repeater {
+                    model: App.categories
+
+                    delegate: Button {
+                        id: categoryButton
+                        required property var categoryId
+                        required property string name
+
+                        height: 40
+                        leftPadding: 18
+                        rightPadding: 18
+                        text: categoryButton.name
+                        flat: true
+                        onClicked: App.selectCategory(categoryButton.categoryId)
+
+                        background: Rectangle {
+                            color: App.selectedCategoryId === categoryButton.categoryId
+                                ? root.ink : "transparent"
+                            border.color: App.selectedCategoryId === categoryButton.categoryId
+                                ? root.ink : root.rule
+                        }
+
+                        contentItem: Text {
+                            text: categoryButton.text
+                            color: App.selectedCategoryId === categoryButton.categoryId
+                                ? root.panel : root.ink
+                            font.pixelSize: 14
+                            font.weight: App.selectedCategoryId === categoryButton.categoryId
+                                ? Font.DemiBold : Font.Normal
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: 1
             color: root.rule
-            visible: liveList.count > 0
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: errorText.implicitHeight + 20
-            radius: 4
             color: "#f6dddd"
             border.color: "#d79595"
             visible: App.errorMessage.length > 0
@@ -271,6 +249,7 @@ ApplicationWindow {
             model: App.feed
             clip: true
             spacing: 0
+            boundsBehavior: Flickable.StopAtBounds
 
             delegate: Item {
                 id: feedDelegate
@@ -280,31 +259,31 @@ ApplicationWindow {
                 required property date publishedAt
 
                 width: ListView.view.width
-                height: feedColumn.implicitHeight + 30
+                height: feedColumn.implicitHeight + 34
 
                 Column {
                     id: feedColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 5
-
-                    Text {
-                        width: parent.width
-                        text: feedDelegate.channelTitle + "  |  "
-                              + Qt.formatDateTime(feedDelegate.publishedAt, "MMM d, h:mm AP")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
+                    spacing: 7
 
                     Text {
                         width: parent.width
                         text: feedDelegate.title
                         color: root.ink
-                        font.pixelSize: 18
+                        font.pixelSize: 21
                         font.weight: Font.Medium
                         wrapMode: Text.Wrap
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: feedDelegate.channelTitle + "  \u00b7  "
+                              + root.relativeTime(feedDelegate.publishedAt)
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
                     }
                 }
 
@@ -315,57 +294,100 @@ ApplicationWindow {
                     color: root.rule
                 }
 
-                HoverHandler { id: feedHover }
-                TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
                 Rectangle {
                     anchors.fill: parent
+                    anchors.leftMargin: -12
+                    anchors.rightMargin: -12
                     z: -1
-                    color: feedHover.hovered ? "#ebe6db" : "transparent"
+                    color: feedHover.hovered ? root.softFill : "transparent"
+                }
+
+                HoverHandler { id: feedHover }
+                TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
+            }
+
+            Column {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 430)
+                spacing: 8
+                visible: feedList.count === 0 && !App.refreshing
+
+                Label {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    color: root.ink
+                    font.pixelSize: 19
+                    font.weight: Font.Medium
+                    text: App.apiKeyConfigured
+                        ? qsTr("No videos yet")
+                        : qsTr("Set up OmaTube")
+                }
+
+                Label {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    color: root.mutedInk
+                    font.pixelSize: 13
+                    text: App.apiKeyConfigured
+                        ? qsTr("Add a channel in Settings, then refresh.")
+                        : qsTr("Open Settings to add your YouTube API key and channels.")
                 }
             }
+        }
 
-            Label {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - 40, 440)
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                color: root.mutedInk
-                text: App.apiKeyConfigured
-                    ? qsTr("No videos yet. Add channels, then press R.")
-                    : qsTr("Add your YouTube Data API key to begin.")
-                visible: feedList.count === 0 && !App.refreshing
+    }
+
+    ToolButton {
+        id: settingsButton
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 14
+        z: 10
+        width: 40
+        height: 40
+        text: qsTr("Settings")
+        onClicked: settingsDialog.open()
+
+        background: Item {}
+
+        contentItem: Canvas {
+            property color lineColor: settingsButton.hovered ? root.ink : root.mutedInk
+
+            onLineColorChanged: requestPaint()
+            onPaint: {
+                const context = getContext("2d")
+                const centerX = width / 2
+                const centerY = height / 2
+                context.reset()
+                context.strokeStyle = lineColor
+                context.lineWidth = 1.4
+                context.lineCap = "round"
+                context.beginPath()
+                context.arc(centerX, centerY, 5.5, 0, Math.PI * 2)
+                context.stroke()
+                context.beginPath()
+                context.arc(centerX, centerY, 2, 0, Math.PI * 2)
+                context.stroke()
+                context.beginPath()
+                for (let index = 0; index < 8; ++index) {
+                    const angle = index * Math.PI / 4
+                    context.moveTo(
+                        centerX + Math.cos(angle) * 6.5,
+                        centerY + Math.sin(angle) * 6.5)
+                    context.lineTo(
+                        centerX + Math.cos(angle) * 8.5,
+                        centerY + Math.sin(angle) * 8.5)
+                }
+                context.stroke()
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-
-            Label {
-                Layout.fillWidth: true
-                text: App.refreshing ? App.progressText : App.statusMessage
-                color: root.mutedInk
-                font.pixelSize: 12
-                elide: Text.ElideRight
-            }
-
-            Label {
-                text: App.lastRefreshedAt.getTime() > 0
-                    ? qsTr("Last refreshed %1").arg(Qt.formatDateTime(App.lastRefreshedAt, "h:mm AP"))
-                    : ""
-                color: root.mutedInk
-                font.pixelSize: 12
-            }
-        }
-    }
-
-    AddChannelDialog {
-        id: addChannelDialog
-        parent: root.contentItem
-    }
-
-    ManageDialog {
-        id: manageDialog
-        parent: root.contentItem
+        ToolTip.visible: hovered
+        ToolTip.delay: 500
+        ToolTip.text: qsTr("Settings")
     }
 
     SettingsDialog {

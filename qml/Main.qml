@@ -303,6 +303,7 @@ ApplicationWindow {
                 Column {
                     id: feedColumn
                     anchors.left: parent.left
+                    anchors.leftMargin: 12
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 7

@@ -20,6 +20,7 @@ ApplicationWindow {
     readonly property color softFill: themeColors.selection
     readonly property color danger: themeColors.red
     readonly property color liveRed: themeColors.bright_red
+    readonly property color neonYellow: themeColors.bright_yellow
     readonly property color errorFill: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
     readonly property color errorBorder: Qt.tint(
@@ -304,6 +305,7 @@ ApplicationWindow {
                 required property string channelTitle
                 required property string title
                 required property date publishedAt
+                required property int watchProgressPercent
 
                 width: ListView.view.width
                 height: feedColumn.implicitHeight + 34
@@ -313,6 +315,7 @@ ApplicationWindow {
                     anchors.left: parent.left
                     anchors.leftMargin: 12
                     anchors.right: parent.right
+                    anchors.rightMargin: feedDelegate.watchProgressPercent >= 0 ? 56 : 0
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 7
 
@@ -333,6 +336,17 @@ ApplicationWindow {
                         font.pixelSize: 12
                         elide: Text.ElideRight
                     }
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: feedDelegate.watchProgressPercent >= 0
+                    text: qsTr("%1%").arg(feedDelegate.watchProgressPercent)
+                    color: root.neonYellow
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
                 }
 
                 Rectangle {

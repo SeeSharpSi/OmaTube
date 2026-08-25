@@ -248,6 +248,7 @@ void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()
     QCOMPARE(allFeed.size(), 2);
     QCOMPARE(allFeed.first().id, QStringLiteral("new"));
     QCOMPARE(allFeed.last().channelTitle, QStringLiteral("Alpha"));
+    QCOMPARE(allFeed.first().watchProgressPercent, -1);
 
     const QList<Video> selectedFeed = repository.feed(categoryId);
     QCOMPARE(selectedFeed.size(), 1);
@@ -291,12 +292,19 @@ void RepositoryTest::appliesWatchProgressAndSurvivesPruning()
     QCOMPARE(stats->watchCount, 1);
     QVERIFY(stats->lastWatchedAt.isValid());
 
+    QList<Video> feedVideos = repository.feed();
+    QCOMPARE(feedVideos.size(), 1);
+    QCOMPARE(feedVideos.first().watchProgressPercent, 50);
+
     QVERIFY2(repository.applyWatchProgress(QStringLiteral("old"), 60, 350, false, &error),
              qPrintable(error));
     stats = repository.watchStats(QStringLiteral("old"), &error);
     QCOMPARE(stats->watchedSeconds, 180);
     QCOMPARE(stats->lastPositionSeconds, 350);
     QCOMPARE(stats->watchCount, 1);
+
+    feedVideos = repository.feed();
+    QCOMPARE(feedVideos.first().watchProgressPercent, 58);
 
     // The caller owns position monotonicity; the repository stores what it gets.
     QVERIFY2(repository.applyWatchProgress(QStringLiteral("old"), 30, 100, false, &error),
@@ -336,6 +344,7 @@ void RepositoryTest::modelsExposeExpectedRoles()
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::TitleRole).toString(), video.title);
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::VideoUrlRole).toUrl().toString(),
              QStringLiteral("https://www.youtube.com/watch?v=abc123"));
+    QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::WatchProgressPercentRole).toInt(), -1);
 }
 
 QTEST_GUILESS_MAIN(RepositoryTest)

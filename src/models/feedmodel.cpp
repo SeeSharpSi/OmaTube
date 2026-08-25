@@ -31,6 +31,8 @@ QVariant FeedModel::data(const QModelIndex &index, int role) const
         return video.publishedAt;
     case VideoUrlRole:
         return QUrl(QStringLiteral("https://www.youtube.com/watch?v=%1").arg(video.id));
+    case WatchProgressPercentRole:
+        return video.watchProgressPercent;
     default:
         return {};
     }
@@ -45,6 +47,7 @@ QHash<int, QByteArray> FeedModel::roleNames() const
         {TitleRole, "title"},
         {PublishedAtRole, "publishedAt"},
         {VideoUrlRole, "videoUrl"},
+        {WatchProgressPercentRole, "watchProgressPercent"},
     };
 }
 

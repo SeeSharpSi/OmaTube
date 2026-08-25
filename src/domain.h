@@ -36,6 +36,10 @@ struct Video
     QString broadcastState;
     QDateTime fetchedAt;
     int durationSeconds = -1;
+    // Percentage (0-100) of the video's duration the viewer reached.
+    // Negative when there is no watch progress or the duration is unknown.
+    // Populated only by feed queries; not persisted.
+    int watchProgressPercent = -1;
 
     bool operator==(const Video &) const = default;
 };

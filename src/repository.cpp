@@ -352,8 +352,12 @@ QList<Video> Repository::feed(
     QSqlQuery query(m_database);
     QString statement = QStringLiteral(
         "SELECT v.id, v.channel_id, c.title, v.title, v.published_at, v.is_broadcast, "
-        "v.broadcast_state, v.fetched_at, v.duration_seconds FROM videos v "
-        "JOIN channels c ON c.id = v.channel_id ");
+        "v.broadcast_state, v.fetched_at, v.duration_seconds, "
+        "CASE WHEN w.video_id IS NULL OR v.duration_seconds <= 0 THEN -1 "
+        "ELSE MIN(100, MAX(0, w.last_position_seconds) * 100 / v.duration_seconds) END "
+        "FROM videos v "
+        "JOIN channels c ON c.id = v.channel_id "
+        "LEFT JOIN video_watch_time w ON w.video_id = v.id ");
     if (categoryId) {
         statement += QStringLiteral(
             "JOIN category_channels cc ON cc.channel_id = c.id "
@@ -384,6 +388,7 @@ QList<Video> Repository::feed(
             query.value(6).toString(),
             fromDatabaseTime(query.value(7).toString()),
             query.value(8).toInt(),
+            query.value(9).toInt(),
         });
     }
     return result;

@@ -432,6 +432,7 @@ void AppController::closePlayer()
     m_watchTracker.clearActiveVideo();
     flushWatchProgress();
     m_watchFlushTimer.stop();
+    reloadFeed();
     m_playerOpen = false;
     emit playerOpenChanged();
 }

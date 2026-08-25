@@ -16,6 +16,7 @@ public:
         TitleRole,
         PublishedAtRole,
         VideoUrlRole,
+        WatchProgressPercentRole,
     };
     Q_ENUM(Role)
 

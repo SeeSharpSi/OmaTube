@@ -26,6 +26,35 @@ Dialog {
     property string pendingAction: ""
     property var pendingId: -1
     property string pendingName: ""
+    readonly property var playbackBackends: App.mpvAvailable
+        ? [ { label: qsTr("Official embedded player"), value: "iframe" },
+            { label: qsTr("Embedded mpv"), value: "mpv" } ]
+        : [ { label: qsTr("Official embedded player"), value: "iframe" } ]
+    readonly property var playbackQualities: [
+        { label: qsTr("Auto"), value: 0 },
+        { label: qsTr("2160p"), value: 2160 },
+        { label: qsTr("1440p"), value: 1440 },
+        { label: qsTr("1080p"), value: 1080 },
+        { label: qsTr("720p"), value: 720 },
+        { label: qsTr("480p"), value: 480 },
+        { label: qsTr("360p"), value: 360 }
+    ]
+
+    function playbackBackendIndex() {
+        for (let i = 0; i < playbackBackends.length; ++i) {
+            if (playbackBackends[i].value === App.videoBackend)
+                return i
+        }
+        return 0
+    }
+
+    function playbackQualityIndex() {
+        for (let i = 0; i < playbackQualities.length; ++i) {
+            if (playbackQualities[i].value === App.maximumVideoHeight)
+                return i
+        }
+        return 0
+    }
 
     modal: true
     width: Math.min(parent ? parent.width - 32 : 760, 760)
@@ -238,6 +267,26 @@ Dialog {
                     color: apiTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
                     font.weight: apiTab.checked ? Font.DemiBold : Font.Normal
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+
+            TabButton {
+                id: playbackTab
+                height: tabs.height
+                implicitHeight: tabs.height
+                text: qsTr("Playback")
+
+                PointingCursor {}
+
+                background: Rectangle { color: "transparent" }
+
+                contentItem: Text {
+                    text: playbackTab.text
+                    color: playbackTab.checked ? root.ink : root.mutedInk
+                    font.pixelSize: 13
+                    font.weight: playbackTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -847,6 +896,293 @@ Dialog {
                     Label {
                         Layout.fillWidth: true
                         text: qsTr("After adding or changing a key, refresh the feed from the main window.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            Item {
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 22
+                    spacing: 14
+
+                    Label {
+                        text: qsTr("Playback")
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Choose how videos are played. The official player uses YouTube's embedded viewer; mpv offers native playback when available.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Label {
+                        text: qsTr("Backend")
+                        color: root.ink
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    ComboBox {
+                        id: backendSelector
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        model: root.playbackBackends
+                        textRole: "label"
+                        valueRole: "value"
+                        currentIndex: root.playbackBackendIndex()
+                        onActivated: App.setVideoBackend(String(currentValue))
+
+                        PointingCursor {}
+
+                        background: Rectangle {
+                            color: backendSelector.hovered || backendSelector.popup.visible
+                                ? root.softFill : root.paper
+                            border.color: backendSelector.hovered || backendSelector.popup.visible
+                                ? root.mutedInk : root.rule
+                        }
+
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 34
+                            text: backendSelector.displayText
+                            color: root.ink
+                            font.pixelSize: 13
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+
+                        indicator: Canvas {
+                            x: backendSelector.width - width - 12
+                            y: backendSelector.height / 2 - height / 2
+                            width: 10
+                            height: 6
+
+                            readonly property color chevronColor:
+                                backendSelector.hovered || backendSelector.popup.visible
+                                    ? root.ink : root.mutedInk
+
+                            onChevronColorChanged: requestPaint()
+
+                            onPaint: {
+                                const context = getContext("2d")
+                                context.reset()
+                                context.strokeStyle = chevronColor
+                                context.lineWidth = 1.4
+                                context.lineCap = "round"
+                                context.lineJoin = "round"
+                                context.beginPath()
+                                context.moveTo(0, 0.5)
+                                context.lineTo(width / 2, height - 0.5)
+                                context.lineTo(width, 0.5)
+                                context.stroke()
+                            }
+                        }
+
+                        delegate: ItemDelegate {
+                            id: backendOption
+                            required property int index
+                            required property var modelData
+
+                            width: backendSelector.width
+                            highlighted: backendSelector.highlightedIndex === backendOption.index
+
+                            PointingCursor {}
+
+                            background: Rectangle {
+                                color: backendOption.highlighted ? root.softFill : "transparent"
+                            }
+
+                            contentItem: RowLayout {
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    width: 8
+                                    height: 8
+                                    visible: backendSelector.currentValue === backendOption.modelData.value
+                                    color: root.accent
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: backendOption.modelData.label
+                                    color: backendSelector.currentValue === backendOption.modelData.value
+                                        ? root.ink : root.mutedInk
+                                    font.pixelSize: 13
+                                    font.weight: backendSelector.currentValue === backendOption.modelData.value
+                                        ? Font.DemiBold : Font.Normal
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        popup: Popup {
+                            y: backendSelector.height + 2
+                            width: backendSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
+                            padding: 1
+
+                            background: Rectangle {
+                                color: root.paper
+                                border.color: root.rule
+                            }
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: backendSelector.popup.visible
+                                    ? backendSelector.delegateModel : null
+                                currentIndex: backendSelector.highlightedIndex
+                                interactive: false
+                                spacing: 0
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Preferred maximum quality")
+                        color: root.ink
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    ComboBox {
+                        id: qualitySelector
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        model: root.playbackQualities
+                        textRole: "label"
+                        valueRole: "value"
+                        currentIndex: root.playbackQualityIndex()
+                        enabled: App.mpvAvailable && backendSelector.currentValue === "mpv"
+                        onActivated: App.setMaximumVideoHeight(Number(currentValue))
+
+                        PointingCursor {}
+
+                        background: Rectangle {
+                            color: (qualitySelector.hovered || qualitySelector.popup.visible)
+                                   && qualitySelector.enabled
+                                ? root.softFill : root.paper
+                            border.color: (qualitySelector.hovered || qualitySelector.popup.visible)
+                                   && qualitySelector.enabled
+                                ? root.mutedInk : root.rule
+                        }
+
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 34
+                            text: qualitySelector.displayText
+                            color: qualitySelector.enabled ? root.ink : root.mutedInk
+                            font.pixelSize: 13
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+
+                        indicator: Canvas {
+                            x: qualitySelector.width - width - 12
+                            y: qualitySelector.height / 2 - height / 2
+                            width: 10
+                            height: 6
+
+                            readonly property color chevronColor:
+                                qualitySelector.enabled
+                                && (qualitySelector.hovered || qualitySelector.popup.visible)
+                                    ? root.ink : root.mutedInk
+
+                            onChevronColorChanged: requestPaint()
+
+                            onPaint: {
+                                const context = getContext("2d")
+                                context.reset()
+                                context.strokeStyle = chevronColor
+                                context.lineWidth = 1.4
+                                context.lineCap = "round"
+                                context.lineJoin = "round"
+                                context.beginPath()
+                                context.moveTo(0, 0.5)
+                                context.lineTo(width / 2, height - 0.5)
+                                context.lineTo(width, 0.5)
+                                context.stroke()
+                            }
+                        }
+
+                        delegate: ItemDelegate {
+                            id: qualityOption
+                            required property int index
+                            required property var modelData
+
+                            width: qualitySelector.width
+                            highlighted: qualitySelector.highlightedIndex === qualityOption.index
+
+                            PointingCursor {}
+
+                            background: Rectangle {
+                                color: qualityOption.highlighted ? root.softFill : "transparent"
+                            }
+
+                            contentItem: RowLayout {
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    width: 8
+                                    height: 8
+                                    visible: qualitySelector.currentValue === qualityOption.modelData.value
+                                    color: root.accent
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: qualityOption.modelData.label
+                                    color: qualitySelector.currentValue === qualityOption.modelData.value
+                                        ? root.ink : root.mutedInk
+                                    font.pixelSize: 13
+                                    font.weight: qualitySelector.currentValue === qualityOption.modelData.value
+                                        ? Font.DemiBold : Font.Normal
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        popup: Popup {
+                            y: qualitySelector.height + 2
+                            width: qualitySelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
+                            padding: 1
+
+                            background: Rectangle {
+                                color: root.paper
+                                border.color: root.rule
+                            }
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: qualitySelector.popup.visible
+                                    ? qualitySelector.delegateModel : null
+                                currentIndex: qualitySelector.highlightedIndex
+                                interactive: false
+                                spacing: 0
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Quality is a preferred maximum; the actual resolution may be lower. The official player controls quality automatically.")
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap

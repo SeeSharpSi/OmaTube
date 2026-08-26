@@ -1,5 +1,7 @@
 #include "appcontroller.h"
 
+#include "playbacksettings.h"
+
 #include <QCoreApplication>
 #include <QQmlEngine>
 #include <QRegularExpression>
@@ -8,6 +10,9 @@
 namespace {
 constexpr auto apiKeySetting = "credentials/youtubeApiKey";
 constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
+constexpr auto playbackBackendSetting = "playback/backend";
+constexpr auto maximumVideoHeightSetting = "playback/maximumVideoHeight";
+constexpr auto defaultPlaybackBackend = "iframe";
 constexpr int defaultShortVideoCutoffMinutes = 3;
 constexpr int maximumShortVideoCutoffMinutes = 60;
 // Resume only when the stored position is past this many seconds.
@@ -120,6 +125,14 @@ bool AppController::initialize(QString *error)
                     defaultShortVideoCutoffMinutes)
             .toInt(),
         maximumShortVideoCutoffMinutes);
+    QString storedBackend = PlaybackSettings::normalizeBackend(
+        settings.value(QString::fromLatin1(playbackBackendSetting), QString::fromLatin1(defaultPlaybackBackend))
+            .toString());
+    if (!mpvAvailable() && storedBackend == QStringLiteral("mpv"))
+        storedBackend = QStringLiteral("iframe");
+    m_videoBackend = storedBackend;
+    m_maximumVideoHeight = PlaybackSettings::normalizeMaximumVideoHeight(
+        settings.value(QString::fromLatin1(maximumVideoHeightSetting)).toInt());
     reloadCategories();
     reloadChannels();
     reloadFeed();
@@ -241,6 +254,25 @@ PointerWatch *AppController::pointerWatcher()
 {
     static PointerWatch watcher;
     return &watcher;
+}
+
+QString AppController::videoBackend() const
+{
+    return m_videoBackend;
+}
+
+int AppController::maximumVideoHeight() const
+{
+    return m_maximumVideoHeight;
+}
+
+bool AppController::mpvAvailable() const
+{
+#if defined(OMA_HAS_MPV)
+    return true;
+#else
+    return false;
+#endif
 }
 
 void AppController::startupRefresh()
@@ -491,6 +523,36 @@ void AppController::closePlayer()
     reloadFeed();
     m_playerOpen = false;
     emit playerOpenChanged();
+}
+
+void AppController::setVideoBackend(const QString &backend)
+{
+    const QString normalized = PlaybackSettings::normalizeBackend(backend);
+    if (normalized == QStringLiteral("mpv") && !mpvAvailable()) {
+        setErrorMessage(QStringLiteral("Embedded mpv is unavailable in this build."));
+        return;
+    }
+    if (m_videoBackend == normalized)
+        return;
+
+    m_videoBackend = normalized;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(playbackBackendSetting), normalized);
+    settings.sync();
+    emit videoBackendChanged();
+}
+
+void AppController::setMaximumVideoHeight(int height)
+{
+    const int normalized = PlaybackSettings::normalizeMaximumVideoHeight(height);
+    if (m_maximumVideoHeight == normalized)
+        return;
+
+    m_maximumVideoHeight = normalized;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(maximumVideoHeightSetting), normalized);
+    settings.sync();
+    emit maximumVideoHeightChanged();
 }
 
 void AppController::reportPlayback(const QString &videoId, double positionSeconds, bool playing)

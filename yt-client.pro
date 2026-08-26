@@ -20,6 +20,15 @@ SOURCES += \
     $$PROJECT_ROOT/src/thememanager.cpp
 RESOURCES += $$PROJECT_ROOT/qml/resources.qrc
 
+packagesExist(mpv) {
+    QT += opengl
+    CONFIG += link_pkgconfig
+    PKGCONFIG += mpv
+    DEFINES += OMA_HAS_MPV
+    HEADERS += $$PROJECT_ROOT/src/mpvplayer.h
+    SOURCES += $$PROJECT_ROOT/src/mpvplayer.cpp
+}
+
 macx {
     QMAKE_INFO_PLIST = $$PROJECT_ROOT/macos/Info.plist
     HEADERS += $$PROJECT_ROOT/src/macvideoplayer.h

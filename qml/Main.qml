@@ -5,6 +5,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import YtClient
 
 ApplicationWindow {
@@ -91,7 +92,12 @@ ApplicationWindow {
         sequence: "Escape"
         context: Qt.WindowShortcut
         enabled: App.playerOpen
-        onActivated: App.closePlayer()
+        onActivated: {
+            if (root.visibility === Window.FullScreen)
+                root.showNormal()
+            else
+                App.closePlayer()
+        }
     }
 
     ColumnLayout {
@@ -510,6 +516,9 @@ ApplicationWindow {
             item.hostWindow = root
             // Bind start position before videoId: the videoId binding is
             // evaluated immediately and generates the embed URL.
+            if (item.hasOwnProperty("maximumVideoHeight"))
+                item.maximumVideoHeight = Qt.binding(
+                    function() { return App.maximumVideoHeight })
             if (item.hasOwnProperty("startSeconds"))
                 item.startSeconds = Qt.binding(function() { return App.currentStartPosition })
             item.videoId = Qt.binding(function() { return App.currentVideoId })

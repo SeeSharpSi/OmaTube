@@ -4,6 +4,8 @@
         <file alias="Main.qml">Main.qml</file>
         <file alias="MacVideoPlayer.qml">MacVideoPlayer.qml</file>
         <file alias="ManageDialog.qml">ManageDialog.qml</file>
+        <file alias="MpvPlayer.qml">MpvPlayer.qml</file>
+        <file alias="PlayerControls.qml">PlayerControls.qml</file>
         <file alias="PointingCursor.qml">PointingCursor.qml</file>
         <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
         <file alias="SquareCheckBox.qml">SquareCheckBox.qml</file>

@@ -1,11 +1,19 @@
 #include "appcontroller.h"
 
+#ifdef OMA_HAS_MPV
+#include "mpvplayer.h"
+#endif
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQuickWindow>
 #include <QQuickStyle>
 #include <QTimer>
 #include <QUrl>
+#include <QSGRendererInterface>
 #include <QtQml/qqml.h>
+
+#include <clocale>
 
 #ifdef Q_OS_LINUX
 #include <QtWebEngineQuick/QtWebEngineQuick>
@@ -21,12 +29,17 @@ int main(int argc, char *argv[])
     QtWebEngineQuick::initialize();
 #endif
     QGuiApplication app(argc, argv);
+    std::setlocale(LC_NUMERIC, "C");
     QCoreApplication::setOrganizationName(QStringLiteral("YT Client"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("ytclient.dev"));
     QCoreApplication::setApplicationName(QStringLiteral("YT Client"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     const bool smokeTest = app.arguments().contains(QStringLiteral("--quit-after-startup"));
+#ifdef OMA_HAS_MPV
+    if (!smokeTest)
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
     std::unique_ptr<AppController> controller = AppController::createApplication(
         smokeTest ? QStringLiteral(":memory:") : QString{});
     QString initializationError;
@@ -38,6 +51,9 @@ int main(int argc, char *argv[])
         "YtClient", 1, 0, "App", &AppController::create);
 #ifdef Q_OS_MACOS
     qmlRegisterType<MacVideoPlayerNative>("YtClient", 1, 0, "MacVideoPlayerNative");
+#endif
+#ifdef OMA_HAS_MPV
+    qmlRegisterType<MpvPlayerNative>("YtClient", 1, 0, "MpvPlayerNative");
 #endif
     QQmlApplicationEngine engine;
     QObject::connect(

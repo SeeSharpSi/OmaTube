@@ -51,6 +51,9 @@ class AppController final : public QObject
     Q_PROPERTY(bool playerOpen READ playerOpen NOTIFY playerOpenChanged)
     Q_PROPERTY(int currentStartPosition READ currentStartPosition NOTIFY currentStartPositionChanged)
     Q_PROPERTY(PointerWatch *pointerWatcher READ pointerWatcher CONSTANT)
+    Q_PROPERTY(QString videoBackend READ videoBackend NOTIFY videoBackendChanged)
+    Q_PROPERTY(int maximumVideoHeight READ maximumVideoHeight NOTIFY maximumVideoHeightChanged)
+    Q_PROPERTY(bool mpvAvailable READ mpvAvailable CONSTANT)
 
 public:
     ~AppController() override;
@@ -83,6 +86,9 @@ public:
     [[nodiscard]] bool playerOpen() const;
     [[nodiscard]] int currentStartPosition() const;
     [[nodiscard]] PointerWatch *pointerWatcher();
+    [[nodiscard]] QString videoBackend() const;
+    [[nodiscard]] int maximumVideoHeight() const;
+    [[nodiscard]] bool mpvAvailable() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -103,6 +109,8 @@ public:
     Q_INVOKABLE void setThemeId(const QString &themeId);
     Q_INVOKABLE void openVideo(const QString &videoId);
     Q_INVOKABLE void closePlayer();
+    Q_INVOKABLE void setVideoBackend(const QString &backend);
+    Q_INVOKABLE void setMaximumVideoHeight(int height);
     Q_INVOKABLE void reportPlayback(const QString &videoId, double positionSeconds, bool playing);
     Q_INVOKABLE QVariantMap watchStatsForVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
@@ -123,6 +131,8 @@ signals:
     void currentVideoIdChanged();
     void playerOpenChanged();
     void currentStartPositionChanged();
+    void videoBackendChanged();
+    void maximumVideoHeightChanged();
     void channelAdded(QString title);
 
 private:
@@ -170,6 +180,8 @@ private:
     QString m_currentVideoId;
     bool m_playerOpen = false;
     int m_currentStartPosition = 0;
+    QString m_videoBackend = QStringLiteral("iframe");
+    int m_maximumVideoHeight = 0;
     WatchTracker m_watchTracker;
     QTimer m_watchFlushTimer;
 

@@ -1,6 +1,8 @@
 #include "appcontroller.h"
+#include "playbacksettings.h"
 #include "repository.h"
 
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -12,6 +14,13 @@ class AppControllerTest final : public QObject
 
 private slots:
     void initTestCase();
+    void init();
+    void normalizesBackendAndHeight();
+    void formatsHeightSelector();
+    void defaultsToIframeAndAutoHeight();
+    void persistsMaximumHeightAcrossInstances();
+    void rejectsInvalidHeightAndBackend();
+    void rejectsUnavailableMpvBackend();
     void opensValidVideo();
     void rejectsInvalidVideo();
     void changesVideoWithoutReopeningPlayer();
@@ -20,6 +29,9 @@ private slots:
     void ignoresSeeksGapsAndStaleReports();
     void resumesFromStoredPosition();
     void loadMoreHistoryAppendsCachedPages();
+
+private:
+    QTemporaryDir m_settingsDirectory;
 };
 
 namespace {
@@ -63,6 +75,134 @@ Video makeVideo(
 void AppControllerTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QVERIFY(m_settingsDirectory.isValid());
+    QCoreApplication::setOrganizationName(QStringLiteral("OmaTubeTests"));
+    QCoreApplication::setApplicationName(QStringLiteral("appcontroller_tests"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(
+        QSettings::IniFormat,
+        QSettings::UserScope,
+        m_settingsDirectory.path());
+}
+
+void AppControllerTest::init()
+{
+    QSettings settings;
+    settings.clear();
+    settings.sync();
+}
+
+void AppControllerTest::normalizesBackendAndHeight()
+{
+    QCOMPARE(PlaybackSettings::normalizeBackend(QStringLiteral("mpv")), QStringLiteral("mpv"));
+    QCOMPARE(PlaybackSettings::normalizeBackend(QStringLiteral("iframe")), QStringLiteral("iframe"));
+    QCOMPARE(PlaybackSettings::normalizeBackend(QStringLiteral("MPV")), QStringLiteral("mpv"));
+    QCOMPARE(PlaybackSettings::normalizeBackend(QStringLiteral("bogus")), QStringLiteral("iframe"));
+    QCOMPARE(PlaybackSettings::normalizeBackend(QString()), QStringLiteral("iframe"));
+
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(0), 0);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(2160), 2160);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(1440), 1440);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(1080), 1080);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(720), 720);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(480), 480);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(360), 360);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(-5), 0);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(500), 0);
+    QCOMPARE(PlaybackSettings::normalizeMaximumVideoHeight(999), 0);
+}
+
+void AppControllerTest::formatsHeightSelector()
+{
+    QCOMPARE(PlaybackSettings::ytDlpFormatForMaximumHeight(0), QString());
+    QCOMPARE(
+        PlaybackSettings::ytDlpFormatForMaximumHeight(720),
+        QStringLiteral("bestvideo*[height<=720]+bestaudio/best[height<=720]"));
+    QCOMPARE(
+        PlaybackSettings::ytDlpFormatForMaximumHeight(1080),
+        QStringLiteral("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
+    QCOMPARE(PlaybackSettings::ytDlpFormatForMaximumHeight(999), QString());
+}
+
+void AppControllerTest::defaultsToIframeAndAutoHeight()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
+    QCOMPARE(controller->maximumVideoHeight(), 0);
+}
+
+void AppControllerTest::persistsMaximumHeightAcrossInstances()
+{
+    QString error;
+    {
+        std::unique_ptr<AppController> first =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(first->initialize(&error), qPrintable(error));
+        QSignalSpy heightChanged(first.get(), &AppController::maximumVideoHeightChanged);
+        first->setMaximumVideoHeight(2160);
+        QCOMPARE(first->maximumVideoHeight(), 2160);
+        QCOMPARE(heightChanged.count(), 1);
+        QCOMPARE(
+            QSettings().value(QString::fromLatin1("playback/maximumVideoHeight")).toInt(),
+            2160);
+    }
+    {
+        std::unique_ptr<AppController> second =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(second->initialize(&error), qPrintable(error));
+        QCOMPARE(second->maximumVideoHeight(), 2160);
+    }
+}
+
+void AppControllerTest::rejectsInvalidHeightAndBackend()
+{
+    QString error;
+    QSettings settings;
+    {
+        std::unique_ptr<AppController> controller =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+        controller->setMaximumVideoHeight(1080);
+        QCOMPARE(controller->maximumVideoHeight(), 1080);
+        QSignalSpy heightChanged(controller.get(), &AppController::maximumVideoHeightChanged);
+        controller->setMaximumVideoHeight(500);
+        QCOMPARE(controller->maximumVideoHeight(), 0);
+        QCOMPARE(heightChanged.count(), 1);
+        QCOMPARE(
+            settings.value(QString::fromLatin1("playback/maximumVideoHeight")).toInt(),
+            0);
+
+        controller->setVideoBackend(QStringLiteral("bogus"));
+        QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
+        QVERIFY(!settings.contains(QString::fromLatin1("playback/backend")));
+    }
+    {
+        settings.setValue(QString::fromLatin1("playback/backend"), QStringLiteral("bogus"));
+        settings.sync();
+        std::unique_ptr<AppController> reloaded =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(reloaded->initialize(&error), qPrintable(error));
+        QCOMPARE(reloaded->videoBackend(), QStringLiteral("iframe"));
+    }
+}
+
+void AppControllerTest::rejectsUnavailableMpvBackend()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    if (controller->mpvAvailable())
+        QSKIP("Embedded mpv is available in this build; rejection does not apply.");
+
+    controller->setVideoBackend(QStringLiteral("mpv"));
+    QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
+    QCOMPARE(controller->errorMessage(), QStringLiteral("Embedded mpv is unavailable in this build."));
+    QVERIFY(!QSettings().contains(QString::fromLatin1("playback/backend")));
 }
 
 void AppControllerTest::opensValidVideo()

@@ -11,6 +11,7 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - Separate live-channel circles
 - Cached feed available immediately at startup
 - Refresh only at startup or when the user presses `R`
+- Optional embedded mpv playback with a preferred maximum video quality
 - Built-in Default, Rose Pine, Nord, and system-synced Omarchy themes
 - SQLite storage under Qt's platform application-data location
 - macOS and Linux builds from one qmake project
@@ -21,20 +22,35 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - qmake and Make
 - Qt 6.8 or newer with Core, GUI, Network, Quick, Quick Controls 2, SQL, and SQLite driver
 - Linux only: Qt WebEngine Quick with its QML module
+- Optional native playback: libmpv development files and a current `yt-dlp` executable
 
-On Omarchy, these are already installed with the default Qt desktop toolchain. No package installation is required.
+The official embedded player remains available when libmpv is absent. qmake detects libmpv through `pkg-config`; the Playback settings expose mpv only in builds where it was found.
+
+On Omarchy, Qt, libmpv, and yt-dlp are already installed with the default desktop toolchain. No package installation is required.
+
+On Arch Linux:
+
+```sh
+sudo pacman -S --needed base-devel qt6-base qt6-declarative qt6-webengine mpv yt-dlp
+```
+
+`mpv` provides the libmpv development files and pkg-config metadata used at build time, while `yt-dlp` is required at runtime by the embedded mpv backend.
 
 On macOS with Homebrew:
 
 ```sh
 xcode-select --install
 brew install qt
+# Optional embedded mpv backend:
+brew install pkg-config mpv yt-dlp
 ```
 
 On Ubuntu 24.04 or similar:
 
 ```sh
 sudo apt install make g++ qt6-base-dev qt6-declarative-dev qt6-webengine-dev libqt6sql6-sqlite
+# Optional embedded mpv backend:
+sudo apt install pkg-config libmpv-dev yt-dlp
 ```
 
 Package names vary between Linux distributions.
@@ -91,7 +107,7 @@ Never commit a key or distribute one shared key with binaries.
 4. Assign channels to categories.
 5. Press `R` whenever a fresh snapshot is wanted.
 
-Category switching only filters local SQLite data. It does not make network requests. Clicking a video title or live circle replaces the feed with the official YouTube embedded player. Use Back or Escape to return to the feed.
+Category switching only filters local SQLite data. It does not make network requests. Clicking a video title or live circle replaces the feed with the selected player. The official YouTube embedded player is the default. Builds with libmpv can select `Embedded mpv` and a preferred maximum quality under `Settings` > `Playback`; the actual resolution can be lower when a rendition is unavailable. Use Back or Escape to return to the feed.
 
 ## Refresh and Quota
 
@@ -109,12 +125,15 @@ The feed loads 50 videos at a time. Scrolling toward the bottom serves further c
 - `RefreshService`: staged uploads, details, and live refresh
 - `YouTubeClient`: asynchronous HTTPS requests and response parsing
 - `Repository`: SQLite schema, migrations, and queries
+- `MpvPlayerNative`: optional libmpv OpenGL renderer and playback controls
 - `QAbstractListModel` implementations: category, channel, feed, and live data
 - QML: presentation and dialogs only
 
 ## Policy Notes
 
-This client uses documented YouTube APIs and the official YouTube embedded player. Linux uses Qt WebEngine; macOS uses WKWebView. It does not scrape pages, download media, block ads, or modify YouTube playback. Videos disabled by their owner for embedding remain unavailable inside the app.
+The default backend uses documented YouTube APIs and the official YouTube embedded player. Linux uses Qt WebEngine; macOS uses WKWebView. It does not scrape pages, download media, block ads, or modify YouTube playback. Videos disabled by their owner for embedding remain unavailable through that backend.
+
+The optional mpv backend has a different behavior and policy surface: libmpv invokes yt-dlp to resolve YouTube media streams, then plays those streams directly. It can apply a preferred maximum resolution and may play public videos disabled for embedding. Users enabling it are responsible for complying with YouTube terms and applicable law.
 
 - [YouTube API Services Terms](https://developers.google.com/youtube/terms/api-services-terms-of-service)
 - [YouTube Developer Policies](https://developers.google.com/youtube/terms/developer-policies)

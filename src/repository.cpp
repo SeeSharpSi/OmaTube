@@ -645,7 +645,7 @@ bool Repository::migrate(QString *error)
     }
     const int version = versionQuery.value(0).toInt();
     versionQuery.finish();
-    constexpr int currentVersion = 4;
+    constexpr int currentVersion = 5;
     if (version == currentVersion)
         return true;
     if (version < 0 || version > currentVersion) {
@@ -663,6 +663,15 @@ bool Repository::migrate(QString *error)
         "channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE, "
         "next_page_token TEXT NOT NULL DEFAULT '', "
         "history_complete INTEGER NOT NULL DEFAULT 0)");
+
+    const QString historyTable = QStringLiteral(
+        "CREATE TABLE history("
+        "id INTEGER PRIMARY KEY, "
+        "datetime TEXT NOT NULL, "
+        "video_id TEXT NOT NULL, "
+        "channel_id TEXT NOT NULL)");
+    const QString historyDatetimeIndex = QStringLiteral(
+        "CREATE INDEX history_datetime ON history(datetime DESC)");
 
     QStringList statements;
     if (version == 0) {
@@ -693,7 +702,9 @@ bool Repository::migrate(QString *error)
                 "last_watched_at TEXT NOT NULL DEFAULT '', "
                 "watch_count INTEGER NOT NULL DEFAULT 0)"),
             channelHistoryTable,
-            QStringLiteral("PRAGMA user_version = 4"),
+            historyTable,
+            historyDatetimeIndex,
+            QStringLiteral("PRAGMA user_version = 5"),
         };
     } else {
         if (version == 1) {
@@ -708,8 +719,11 @@ bool Repository::migrate(QString *error)
                 "last_watched_at TEXT NOT NULL DEFAULT '', "
                 "watch_count INTEGER NOT NULL DEFAULT 0)"));
         }
-        statements.append(channelHistoryTable);
-        statements.append(QStringLiteral("PRAGMA user_version = 4"));
+        if (version <= 3)
+            statements.append(channelHistoryTable);
+        statements.append(historyTable);
+        statements.append(historyDatetimeIndex);
+        statements.append(QStringLiteral("PRAGMA user_version = 5"));
     }
 
     QSqlQuery query(m_database);

@@ -19,6 +19,7 @@ private slots:
     void migratesVersionOneDatabase();
     void migratesVersionTwoDatabase();
     void migratesVersionThreeDatabase();
+    void migratesVersionFourDatabase();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
@@ -254,6 +255,116 @@ void RepositoryTest::migratesVersionThreeDatabase()
         QList<ChannelHistoryState>({
             {QStringLiteral("UCAlpha"), QStringLiteral("token-two"), false},
         }));
+}
+
+void RepositoryTest::migratesVersionFourDatabase()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    const QString connectionName = QStringLiteral("version-four-fixture");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE categories("
+                      "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE channels("
+                      "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                      "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE category_channels("
+                      "category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE, "
+                      "channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "PRIMARY KEY(category_id, channel_id))")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE videos("
+                      "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                      "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
+                      "duration_seconds INTEGER NOT NULL DEFAULT -1)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE video_watch_time("
+                      "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_watched_at TEXT NOT NULL DEFAULT '', "
+                      "watch_count INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE channel_history("
+                      "channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE, "
+                      "next_page_token TEXT NOT NULL DEFAULT '', "
+                      "history_complete INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 4")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    {
+        Repository repository(databasePath);
+        QString error;
+        QVERIFY2(repository.open(&error), qPrintable(error));
+    }
+
+    const QString validationConnectionName = QStringLiteral("version-four-validation");
+    {
+        QSqlDatabase validationDatabase =
+            QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), validationConnectionName);
+        validationDatabase.setDatabaseName(databasePath);
+        QVERIFY(validationDatabase.open());
+        QSqlQuery validation(validationDatabase);
+        QVERIFY2(validation.exec(QStringLiteral("PRAGMA user_version")),
+                 qPrintable(validation.lastError().text()));
+        QVERIFY(validation.next());
+        QCOMPARE(validation.value(0).toInt(), 5);
+
+        QVERIFY2(validation.exec(QStringLiteral("PRAGMA table_info(history)")),
+                 qPrintable(validation.lastError().text()));
+        QStringList columns;
+        bool idPrimaryKey = false;
+        bool datetimeNotNull = false;
+        bool videoIdNotNull = false;
+        bool channelIdNotNull = false;
+        while (validation.next()) {
+            const QString name = validation.value(1).toString();
+            columns.append(name);
+            const bool notNull = validation.value(3).toBool();
+            const bool primaryKey = validation.value(5).toBool();
+            if (name == QLatin1String("id")) {
+                idPrimaryKey = primaryKey;
+            } else if (name == QLatin1String("datetime")) {
+                datetimeNotNull = notNull;
+            } else if (name == QLatin1String("video_id")) {
+                videoIdNotNull = notNull;
+            } else if (name == QLatin1String("channel_id")) {
+                channelIdNotNull = notNull;
+            }
+        }
+        QCOMPARE(columns, QStringList({QStringLiteral("id"), QStringLiteral("datetime"),
+                                       QStringLiteral("video_id"), QStringLiteral("channel_id")}));
+        QVERIFY(idPrimaryKey);
+        QVERIFY(datetimeNotNull);
+        QVERIFY(videoIdNotNull);
+        QVERIFY(channelIdNotNull);
+
+        QVERIFY2(validation.exec(QStringLiteral("PRAGMA index_list(history)")),
+                 qPrintable(validation.lastError().text()));
+        QStringList indexNames;
+        while (validation.next())
+            indexNames.append(validation.value(1).toString());
+        QVERIFY(indexNames.contains(QStringLiteral("history_datetime")));
+
+        validationDatabase.close();
+    }
+    QSqlDatabase::removeDatabase(validationConnectionName);
 }
 
 void RepositoryTest::categoryLifecycle()
@@ -499,6 +610,7 @@ void RepositoryTest::prunesOldestVideosWhenOverStorageLimit()
     QVERIFY2(repository.open(&error), qPrintable(error));
     const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
     QVERIFY(repository.upsertChannel(alpha, &error));
+    const qint64 baseSize = repository.databaseSizeBytes();
 
     // Enough videos with long titles to push the database past a small limit.
     const QDateTime now = QDateTime::currentDateTimeUtc();
@@ -515,9 +627,10 @@ void RepositoryTest::prunesOldestVideosWhenOverStorageLimit()
     QVERIFY(repository.upsertVideos(videos, &error));
 
     const qint64 fullSize = repository.databaseSizeBytes();
-    QVERIFY(fullSize > 100 * 1024);
-    QVERIFY(repository.pruneVideoMetadataToLimit(64 * 1024, &error));
-    QVERIFY(repository.databaseSizeBytes() <= 64 * 1024);
+    const qint64 maximumSize = baseSize + (fullSize - baseSize) / 2;
+    QVERIFY(fullSize > maximumSize);
+    QVERIFY(repository.pruneVideoMetadataToLimit(maximumSize, &error));
+    QVERIFY(repository.databaseSizeBytes() <= maximumSize);
 
     // FIFO: the oldest published videos are gone, the newest survive.
     QVERIFY(!repository.video(QStringLiteral("video-119"), &error).has_value());
@@ -525,7 +638,7 @@ void RepositoryTest::prunesOldestVideosWhenOverStorageLimit()
 
     // Pruning again below the limit is a no-op.
     const QList<Video> feedBefore = repository.feed(std::nullopt, 180, 500, &error);
-    QVERIFY(repository.pruneVideoMetadataToLimit(64 * 1024, &error));
+    QVERIFY(repository.pruneVideoMetadataToLimit(maximumSize, &error));
     QCOMPARE(repository.feed(std::nullopt, 180, 500, &error).size(), feedBefore.size());
 
     // Watch data is keyed independently of cached video metadata.

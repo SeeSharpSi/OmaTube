@@ -342,6 +342,18 @@ void AppController::reloadWatchHistory()
     m_watchHistory.setEntries(entries);
 }
 
+bool AppController::deleteWatchHistory(const QString &videoId)
+{
+    QString error;
+    if (!m_repository.deleteWatchHistory(videoId, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    reloadWatchHistory();
+    setStatusMessage(QStringLiteral("Removed from watch history."));
+    return true;
+}
+
 void AppController::selectCategory(qint64 categoryId)
 {
     const qint64 unselectedId = m_selectedCategoryId == categoryId ? -1 : categoryId;

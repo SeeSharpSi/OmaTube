@@ -484,7 +484,7 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.leftMargin: 18
-        anchors.bottomMargin: 14
+        anchors.bottomMargin: 36
         z: 10
         width: refreshRow.implicitWidth + 16
         height: 32
@@ -511,6 +511,18 @@ ApplicationWindow {
                 font.pixelSize: 12
             }
         }
+    }
+
+    Label {
+        anchors.left: parent.left
+        anchors.leftMargin: 18
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 14
+        z: 10
+        visible: !App.playerOpen && !root.historyOpen
+        color: root.mutedInk
+        font.pixelSize: 11
+        text: qsTr("h: history")
     }
 
     SettingsDialog {

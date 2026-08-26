@@ -102,6 +102,9 @@ public:
     // that still exists, newest first. Sessions whose video or channel has
     // since been removed are omitted.
     [[nodiscard]] QList<HistoryEntry> watchHistory(QString *error = nullptr) const;
+    // Removes every watch-history row for a video id, even when the video has
+    // repeated history sessions. Watch progress and cached metadata remain.
+    bool deleteWatchHistory(const QString &videoId, QString *error = nullptr);
 
 private:
     bool migrate(QString *error);

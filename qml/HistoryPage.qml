@@ -130,7 +130,14 @@ Item {
                     id: historyHover
                     cursorShape: Qt.PointingHandCursor
                 }
-                TapHandler { onTapped: root.videoSelected(historyDelegate.videoId) }
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: root.videoSelected(historyDelegate.videoId)
+                }
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: App.deleteWatchHistory(historyDelegate.videoId)
+                }
             }
 
             Label {
@@ -153,6 +160,6 @@ Item {
         anchors.bottomMargin: 14
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("Press Escape to return to the feed")
+        text: qsTr("right-click: delete\nesc: feed")
     }
 }

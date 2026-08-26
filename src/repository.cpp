@@ -709,6 +709,23 @@ QList<HistoryEntry> Repository::watchHistory(QString *error) const
     return result;
 }
 
+bool Repository::deleteWatchHistory(const QString &videoId, QString *error)
+{
+    if (videoId.isEmpty()) {
+        setError(error, QStringLiteral("Video id is required to delete watch history."));
+        return false;
+    }
+
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("DELETE FROM history WHERE video_id = ?"));
+    query.addBindValue(videoId);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return false;
+    }
+    return true;
+}
+
 bool Repository::migrate(QString *error)
 {
     QSqlQuery versionQuery(m_database);

@@ -31,6 +31,7 @@ private slots:
     void watchHistoryInsertsAndOrders();
     void watchHistoryIgnoresUncountedSessions();
     void watchHistorySkipsMissingVideoMetadata();
+    void deleteWatchHistoryRemovesOnlyHistory();
     void modelsExposeExpectedRoles();
     void historyModelExposesExpectedRoles();
 };
@@ -731,6 +732,53 @@ void RepositoryTest::watchHistorySkipsMissingVideoMetadata()
     QVERIFY2(stats.has_value(), qPrintable(error));
     QCOMPARE(stats->watchedSeconds, 30);
     QCOMPARE(stats->watchCount, 1);
+}
+
+void RepositoryTest::deleteWatchHistoryRemovesOnlyHistory()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    QVERIFY(repository.upsertChannel(beta, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos({
+        makeVideo(QStringLiteral("vid-a"), alpha.id, now, false, 600),
+        makeVideo(QStringLiteral("vid-b"), beta.id, now, false, 300),
+    }, &error));
+
+    // Two counted sessions for vid-a plus one for vid-b.
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-a"), 5, 120, true, &error));
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-a"), 5, 240, true, &error));
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-b"), 5, 150, true, &error));
+    QCOMPARE(repository.watchHistory(&error).size(), 3);
+
+    // Empty ids are rejected and leave the table untouched.
+    QVERIFY(!repository.deleteWatchHistory(QString(), &error));
+    QCOMPARE(error, QStringLiteral("Video id is required to delete watch history."));
+    error.clear();
+    QCOMPARE(repository.watchHistory(&error).size(), 3);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+
+    // Deleting vid-a removes every one of its history rows, not just the first.
+    QVERIFY(repository.deleteWatchHistory(QStringLiteral("vid-a"), &error));
+    const QList<HistoryEntry> remaining = repository.watchHistory(&error);
+    QCOMPARE(remaining.size(), 1);
+    QCOMPARE(remaining.first().videoId, QStringLiteral("vid-b"));
+
+    // The video stays in the feed and its watch progress is preserved.
+    QVERIFY(repository.video(QStringLiteral("vid-a"), &error).has_value());
+    const QList<Video> feedVideos = repository.feed();
+    QCOMPARE(feedVideos.size(), 2);
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("vid-a"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 10);
+    QCOMPARE(stats->watchCount, 2);
 }
 
 void RepositoryTest::modelsExposeExpectedRoles()

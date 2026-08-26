@@ -97,6 +97,7 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void loadMoreHistory();
     Q_INVOKABLE void reloadWatchHistory();
+    Q_INVOKABLE bool deleteWatchHistory(const QString &videoId);
     Q_INVOKABLE void selectCategory(qint64 categoryId);
     Q_INVOKABLE bool addCategory(const QString &name);
     Q_INVOKABLE bool renameCategory(qint64 categoryId, const QString &name);

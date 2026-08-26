@@ -92,7 +92,8 @@ Item {
                     Text {
                         width: parent.width
                         text: historyDelegate.channelTitle + "  \u00b7  "
-                              + Qt.formatDate(historyDelegate.watchedAt, "MMM d, yyyy")
+                              + qsTr("last viewed")
+                              + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP")
                         color: root.mutedInk
                         font.pixelSize: 12
                         elide: Text.ElideRight

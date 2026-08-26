@@ -26,7 +26,8 @@ ApplicationWindow {
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
     readonly property color errorBorder: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.48))
-    property bool modalOpen: settingsDialog.visible || App.playerOpen
+    property bool historyOpen: false
+    property bool modalOpen: settingsDialog.visible || App.playerOpen || root.historyOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -91,12 +92,24 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: App.playerOpen
+        enabled: App.playerOpen || root.historyOpen
         onActivated: {
-            if (root.visibility === Window.FullScreen)
+            if (root.historyOpen)
+                root.historyOpen = false
+            else if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
                 App.closePlayer()
+        }
+    }
+
+    Shortcut {
+        sequence: "H"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen && !App.refreshing
+        onActivated: {
+            App.reloadWatchHistory()
+            root.historyOpen = true
         }
     }
 
@@ -107,7 +120,7 @@ ApplicationWindow {
         anchors.topMargin: 28
         width: Math.min(parent.width - 56, 820)
         spacing: 18
-        visible: !App.playerOpen
+        visible: !App.playerOpen && !root.historyOpen
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -503,6 +516,19 @@ ApplicationWindow {
     SettingsDialog {
         id: settingsDialog
         parent: root.contentItem
+    }
+
+    Loader {
+        id: historyLoader
+        anchors.fill: parent
+        z: 15
+        active: root.historyOpen
+        source: "qrc:/qml/HistoryPage.qml"
+
+        onLoaded: item.videoSelected.connect(function(videoId) {
+            root.historyOpen = false
+            App.openVideo(videoId)
+        })
     }
 
     Loader {

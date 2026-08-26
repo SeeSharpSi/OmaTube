@@ -98,6 +98,10 @@ public:
         int lastPositionSeconds,
         bool countSession,
         QString *error = nullptr);
+    // Every recorded watch session joined to the video and channel metadata
+    // that still exists, newest first. Sessions whose video or channel has
+    // since been removed are omitted.
+    [[nodiscard]] QList<HistoryEntry> watchHistory(QString *error = nullptr) const;
 
 private:
     bool migrate(QString *error);

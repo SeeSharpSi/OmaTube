@@ -1,5 +1,6 @@
 #include "models/categorymodel.h"
 #include "models/feedmodel.h"
+#include "models/historymodel.h"
 #include "repository.h"
 
 #include <QSignalSpy>
@@ -27,7 +28,11 @@ private slots:
     void channelHistoryStateLifecycle();
     void appliesWatchProgressAndSurvivesPruning();
     void prunesOldestVideosWhenOverStorageLimit();
+    void watchHistoryInsertsAndOrders();
+    void watchHistoryIgnoresUncountedSessions();
+    void watchHistorySkipsMissingVideoMetadata();
     void modelsExposeExpectedRoles();
+    void historyModelExposesExpectedRoles();
 };
 
 namespace {
@@ -651,6 +656,83 @@ void RepositoryTest::prunesOldestVideosWhenOverStorageLimit()
     QCOMPARE(repository.feed().size(), 0);
 }
 
+void RepositoryTest::watchHistoryInsertsAndOrders()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    QVERIFY(repository.upsertChannel(beta, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos({
+        makeVideo(QStringLiteral("vid-a"), alpha.id, now, false, 600),
+        makeVideo(QStringLiteral("vid-b"), beta.id, now, false, 300),
+    }, &error));
+
+    // Repeated counted sessions for one video stay as separate rows. The
+    // newest insertion wins the (id) tiebreak when timestamps collide.
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-a"), 5, 120, true, &error));
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-a"), 5, 240, true, &error));
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-b"), 5, 150, true, &error));
+
+    const QList<HistoryEntry> entries = repository.watchHistory(&error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(entries.size(), 3);
+    QCOMPARE(entries.at(0).videoId, QStringLiteral("vid-b"));
+    QCOMPARE(entries.at(0).channelTitle, QStringLiteral("Beta"));
+    QCOMPARE(entries.at(0).watchProgressPercent, 50);
+    QCOMPARE(entries.at(1).videoId, QStringLiteral("vid-a"));
+    QCOMPARE(entries.at(1).channelTitle, QStringLiteral("Alpha"));
+    QCOMPARE(entries.at(1).watchProgressPercent, 40);
+    QCOMPARE(entries.at(2).videoId, QStringLiteral("vid-a"));
+    QCOMPARE(entries.at(2).channelTitle, QStringLiteral("Alpha"));
+    QVERIFY(entries.at(0).watchedAt.isValid());
+}
+
+void RepositoryTest::watchHistoryIgnoresUncountedSessions()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos(
+        {makeVideo(QStringLiteral("vid-a"), alpha.id, now, false, 600)}, &error));
+
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-a"), 30, 100, false, &error));
+    QVERIFY(repository.watchHistory(&error).isEmpty());
+
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("vid-a"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 30);
+    QCOMPARE(stats->watchCount, 0);
+}
+
+void RepositoryTest::watchHistorySkipsMissingVideoMetadata()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+
+    // A counted session for a video with no cached metadata still records
+    // watch time but cannot produce a stable history row.
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("nocache"), 30, 100, true, &error));
+    QVERIFY(repository.watchHistory(&error).isEmpty());
+
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("nocache"), &error);
+    QVERIFY2(stats.has_value(), qPrintable(error));
+    QCOMPARE(stats->watchedSeconds, 30);
+    QCOMPARE(stats->watchCount, 1);
+}
+
 void RepositoryTest::modelsExposeExpectedRoles()
 {
     CategoryModel categoryModel;
@@ -673,6 +755,37 @@ void RepositoryTest::modelsExposeExpectedRoles()
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::VideoUrlRole).toUrl().toString(),
              QStringLiteral("https://www.youtube.com/watch?v=abc123"));
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::WatchProgressPercentRole).toInt(), -1);
+}
+
+void RepositoryTest::historyModelExposesExpectedRoles()
+{
+    HistoryModel historyModel;
+    QSignalSpy reset(&historyModel, &QAbstractItemModel::modelReset);
+    const QDateTime watchedAt = QDateTime::currentDateTimeUtc();
+    historyModel.setEntries({
+        {
+            QStringLiteral("vid-a"),
+            QStringLiteral("UCAlpha"),
+            QStringLiteral("Alpha"),
+            QStringLiteral("Video A"),
+            watchedAt,
+            40,
+        },
+    });
+    QCOMPARE(reset.count(), 1);
+    QCOMPARE(historyModel.rowCount(), 1);
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::VideoIdRole).toString(),
+             QStringLiteral("vid-a"));
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::ChannelIdRole).toString(),
+             QStringLiteral("UCAlpha"));
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::ChannelTitleRole).toString(),
+             QStringLiteral("Alpha"));
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::TitleRole).toString(),
+             QStringLiteral("Video A"));
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::WatchedAtRole).toDateTime(),
+             watchedAt);
+    QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::WatchProgressPercentRole).toInt(),
+             40);
 }
 
 QTEST_GUILESS_MAIN(RepositoryTest)

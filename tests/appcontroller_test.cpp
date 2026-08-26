@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "models/historymodel.h"
 #include "playbacksettings.h"
 #include "repository.h"
 
@@ -29,6 +30,7 @@ private slots:
     void ignoresSeeksGapsAndStaleReports();
     void resumesFromStoredPosition();
     void loadMoreHistoryAppendsCachedPages();
+    void reloadsWatchHistoryIntoModel();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -447,6 +449,44 @@ void AppControllerTest::loadMoreHistoryAppendsCachedPages()
     controller->loadMoreHistory();
     QCOMPARE(feed->rowCount(), 75);
     QCOMPARE(rowsInserted.count(), 1);
+}
+
+void AppControllerTest::reloadsWatchHistoryIntoModel()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(
+            makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repository.upsertVideos(
+            {makeVideo(QStringLiteral("dQw4w9WgXcQ"), QStringLiteral("UCAlpha"), now)},
+            &error));
+        QVERIFY(repository.applyWatchProgress(
+            QStringLiteral("dQw4w9WgXcQ"), 30, 100, true, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    HistoryModel *history = controller->watchHistory();
+    QVERIFY(history != nullptr);
+    QCOMPARE(history->rowCount(), 0);
+
+    QSignalSpy modelReset(history, &QAbstractItemModel::modelReset);
+    controller->reloadWatchHistory();
+    QCOMPARE(history->rowCount(), 1);
+    QCOMPARE(modelReset.count(), 1);
+    QCOMPARE(history->data(history->index(0), HistoryModel::TitleRole).toString(),
+             QStringLiteral("Video dQw4w9WgXcQ"));
+    QCOMPARE(history->data(history->index(0), HistoryModel::ChannelTitleRole).toString(),
+             QStringLiteral("Alpha"));
+    QCOMPARE(history->data(history->index(0), HistoryModel::WatchProgressPercentRole).toInt(),
+             16);
+    QVERIFY(controller->errorMessage().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(AppControllerTest)

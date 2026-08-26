@@ -33,6 +33,7 @@ AppController::AppController(QString databasePath, QObject *parent)
     , m_categories(this)
     , m_channels(this)
     , m_feed(this)
+    , m_watchHistory(this)
     , m_liveChannels(this)
 {
     Q_ASSERT(!s_instance);
@@ -153,6 +154,11 @@ ChannelModel *AppController::channels()
 FeedModel *AppController::feed()
 {
     return &m_feed;
+}
+
+HistoryModel *AppController::watchHistory()
+{
+    return &m_watchHistory;
 }
 
 LiveChannelModel *AppController::liveChannels()
@@ -323,6 +329,17 @@ void AppController::loadMoreHistory()
     // Local cache exhausted; deepen remote history for the active scope.
     setHistoryLoading(true);
     m_refreshService.loadOlder(feedCategoryScope());
+}
+
+void AppController::reloadWatchHistory()
+{
+    QString error;
+    const QList<HistoryEntry> entries = m_repository.watchHistory(&error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    }
+    m_watchHistory.setEntries(entries);
 }
 
 void AppController::selectCategory(qint64 categoryId)

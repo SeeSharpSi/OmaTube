@@ -18,6 +18,7 @@ HEADERS += \
     $$PROJECT_ROOT/src/models/categorymodel.h \
     $$PROJECT_ROOT/src/models/channelmodel.h \
     $$PROJECT_ROOT/src/models/feedmodel.h \
+    $$PROJECT_ROOT/src/models/historymodel.h \
     $$PROJECT_ROOT/src/models/livechannelmodel.h \
     $$PROJECT_ROOT/src/playbacksettings.h \
     $$PROJECT_ROOT/src/pointerwatch.h \
@@ -30,6 +31,7 @@ SOURCES += \
     $$PROJECT_ROOT/src/models/categorymodel.cpp \
     $$PROJECT_ROOT/src/models/channelmodel.cpp \
     $$PROJECT_ROOT/src/models/feedmodel.cpp \
+    $$PROJECT_ROOT/src/models/historymodel.cpp \
     $$PROJECT_ROOT/src/models/livechannelmodel.cpp \
     $$PROJECT_ROOT/src/playbacksettings.cpp \
     $$PROJECT_ROOT/src/pointerwatch.cpp \

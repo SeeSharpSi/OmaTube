@@ -74,6 +74,22 @@ struct WatchStats
     bool operator==(const WatchStats &) const = default;
 };
 
+// One row of a prior playback session, joined to the video and channel
+// metadata that existed when history was recorded.
+struct HistoryEntry
+{
+    QString videoId;
+    QString channelId;
+    QString channelTitle;
+    QString title;
+    QDateTime watchedAt;
+    // Percentage (0-100) the viewer reached on the most recent session.
+    // Negative when there is no watch progress or the duration is unknown.
+    int watchProgressPercent = -1;
+
+    bool operator==(const HistoryEntry &) const = default;
+};
+
 struct LiveChannel
 {
     QString channelId;

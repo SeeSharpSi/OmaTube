@@ -3,6 +3,7 @@
 #include "models/categorymodel.h"
 #include "models/channelmodel.h"
 #include "models/feedmodel.h"
+#include "models/historymodel.h"
 #include "models/livechannelmodel.h"
 #include "pointerwatch.h"
 #include "refreshservice.h"
@@ -30,6 +31,7 @@ class AppController final : public QObject
     Q_PROPERTY(CategoryModel *categories READ categories CONSTANT)
     Q_PROPERTY(ChannelModel *channels READ channels CONSTANT)
     Q_PROPERTY(FeedModel *feed READ feed CONSTANT)
+    Q_PROPERTY(HistoryModel *watchHistory READ watchHistory CONSTANT)
     Q_PROPERTY(LiveChannelModel *liveChannels READ liveChannels CONSTANT)
     Q_PROPERTY(bool refreshing READ refreshing NOTIFY refreshingChanged)
     Q_PROPERTY(bool historyLoading READ historyLoading NOTIFY historyLoadingChanged)
@@ -66,6 +68,7 @@ public:
     [[nodiscard]] CategoryModel *categories();
     [[nodiscard]] ChannelModel *channels();
     [[nodiscard]] FeedModel *feed();
+    [[nodiscard]] HistoryModel *watchHistory();
     [[nodiscard]] LiveChannelModel *liveChannels();
     [[nodiscard]] bool refreshing() const;
     [[nodiscard]] bool historyLoading() const;
@@ -93,6 +96,7 @@ public:
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void loadMoreHistory();
+    Q_INVOKABLE void reloadWatchHistory();
     Q_INVOKABLE void selectCategory(qint64 categoryId);
     Q_INVOKABLE bool addCategory(const QString &name);
     Q_INVOKABLE bool renameCategory(qint64 categoryId, const QString &name);
@@ -164,6 +168,7 @@ private:
     CategoryModel m_categories;
     ChannelModel m_channels;
     FeedModel m_feed;
+    HistoryModel m_watchHistory;
     LiveChannelModel m_liveChannels;
     bool m_initialized = false;
     bool m_startupRefreshRequested = false;

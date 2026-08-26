@@ -615,8 +615,15 @@ bool Repository::applyWatchProgress(
         return false;
     }
 
-    QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    const QString timestamp = toDatabaseTime(QDateTime::currentDateTimeUtc());
+
+    QSqlQuery watchQuery(m_database);
+    watchQuery.prepare(QStringLiteral(
         "INSERT INTO video_watch_time(video_id, watched_seconds, last_position_seconds, "
         "last_watched_at, watch_count) VALUES(?, ?, ?, ?, ?) "
         "ON CONFLICT(video_id) DO UPDATE SET "
@@ -624,16 +631,82 @@ bool Repository::applyWatchProgress(
         "last_position_seconds = excluded.last_position_seconds, "
         "last_watched_at = excluded.last_watched_at, "
         "watch_count = watch_count + excluded.watch_count"));
-    query.addBindValue(videoId);
-    query.addBindValue(qMax<qint64>(0, watchedSecondsDelta));
-    query.addBindValue(qMax(0, lastPositionSeconds));
-    query.addBindValue(toDatabaseTime(QDateTime::currentDateTimeUtc()));
-    query.addBindValue(countSession ? 1 : 0);
-    if (!query.exec()) {
-        setError(error, queryError(query));
+    watchQuery.addBindValue(videoId);
+    watchQuery.addBindValue(qMax<qint64>(0, watchedSecondsDelta));
+    watchQuery.addBindValue(qMax(0, lastPositionSeconds));
+    watchQuery.addBindValue(timestamp);
+    watchQuery.addBindValue(countSession ? 1 : 0);
+    if (!watchQuery.exec()) {
+        m_database.rollback();
+        setError(error, queryError(watchQuery));
+        return false;
+    }
+
+    if (countSession) {
+        // Resolve the channel from video metadata. When it is absent the
+        // watch-time write stands alone and no incomplete history row is
+        // recorded.
+        QSqlQuery videoQuery(m_database);
+        videoQuery.prepare(QStringLiteral("SELECT channel_id FROM videos WHERE id = ?"));
+        videoQuery.addBindValue(videoId);
+        if (!videoQuery.exec()) {
+            m_database.rollback();
+            setError(error, queryError(videoQuery));
+            return false;
+        }
+        if (videoQuery.next()) {
+            const QString channelId = videoQuery.value(0).toString();
+            if (!channelId.isEmpty()) {
+                QSqlQuery historyQuery(m_database);
+                historyQuery.prepare(QStringLiteral(
+                    "INSERT INTO history(datetime, video_id, channel_id) VALUES(?, ?, ?)"));
+                historyQuery.addBindValue(timestamp);
+                historyQuery.addBindValue(videoId);
+                historyQuery.addBindValue(channelId);
+                if (!historyQuery.exec()) {
+                    m_database.rollback();
+                    setError(error, queryError(historyQuery));
+                    return false;
+                }
+            }
+        }
+    }
+
+    if (!m_database.commit()) {
+        setError(error, m_database.lastError().text());
         return false;
     }
     return true;
+}
+
+QList<HistoryEntry> Repository::watchHistory(QString *error) const
+{
+    QList<HistoryEntry> result;
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT h.video_id, h.channel_id, c.title, v.title, h.datetime, "
+        "CASE WHEN w.video_id IS NULL OR v.duration_seconds <= 0 THEN -1 "
+        "ELSE MIN(100, MAX(0, w.last_position_seconds) * 100 / v.duration_seconds) END "
+        "FROM history h "
+        "JOIN videos v ON v.id = h.video_id "
+        "JOIN channels c ON c.id = h.channel_id "
+        "LEFT JOIN video_watch_time w ON w.video_id = h.video_id "
+        "ORDER BY h.datetime DESC, h.id DESC"));
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return result;
+    }
+    while (query.next()) {
+        result.append({
+            query.value(0).toString(),
+            query.value(1).toString(),
+            query.value(2).toString(),
+            query.value(3).toString(),
+            fromDatabaseTime(query.value(4).toString()),
+            query.value(5).toInt(),
+        });
+    }
+    return result;
 }
 
 bool Repository::migrate(QString *error)

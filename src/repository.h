@@ -11,6 +11,13 @@
 class Repository
 {
 public:
+    // Cached history grows without age limits until the database reaches this
+    // size; then the oldest videos are pruned first in, first out.
+    static constexpr qint64 maximumDatabaseBytes = 10 * 1024 * 1024;
+    // Fetching deeper history is only allowed below this soft limit so a
+    // prune pass is not immediately undone by the next page load.
+    static constexpr qint64 historyFetchDatabaseBytes = 9 * 1024 * 1024;
+
     explicit Repository(QString databasePath = {});
     ~Repository();
 
@@ -49,7 +56,38 @@ public:
         int shortVideoCutoffSeconds = 180,
         int limit = 500,
         QString *error = nullptr) const;
-    bool pruneVideoMetadata(const QDateTime &olderThan, QString *error = nullptr);
+    // Page of the feed strictly older than the (publishedBefore, idBefore)
+    // cursor; an invalid cursor pages from the newest video.
+    [[nodiscard]] QList<Video> feedPage(
+        std::optional<qint64> categoryId,
+        int shortVideoCutoffSeconds,
+        const QDateTime &publishedBefore,
+        const QString &idBefore,
+        int limit,
+        QString *error = nullptr) const;
+
+    [[nodiscard]] QList<ChannelHistoryState> channelHistoryStates(QString *error = nullptr) const;
+    // Records where a channel's history fetching should resume. Existing
+    // rows are left untouched so a regular refresh never rewinds a cursor
+    // that has already been advanced by deeper history loads.
+    bool initializeChannelHistory(
+        const QString &channelId,
+        const QString &nextPageToken,
+        QString *error = nullptr);
+    bool setChannelHistoryState(
+        const QString &channelId,
+        const QString &nextPageToken,
+        bool historyComplete,
+        QString *error = nullptr);
+    // True when at least one channel in scope has uploads history that has
+    // not been fetched to exhaustion yet.
+    [[nodiscard]] bool historyIncomplete(
+        std::optional<qint64> categoryId = std::nullopt,
+        QString *error = nullptr) const;
+
+    [[nodiscard]] qint64 databaseSizeBytes() const;
+    [[nodiscard]] bool canFetchMoreHistory() const;
+    bool pruneVideoMetadataToLimit(qint64 maximumBytes, QString *error = nullptr);
 
     [[nodiscard]] std::optional<WatchStats> watchStats(
         const QString &videoId,

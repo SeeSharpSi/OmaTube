@@ -19,6 +19,7 @@ private slots:
     void countsWatchTimeWhilePlaying();
     void ignoresSeeksGapsAndStaleReports();
     void resumesFromStoredPosition();
+    void loadMoreHistoryAppendsCachedPages();
 };
 
 namespace {
@@ -265,6 +266,47 @@ void AppControllerTest::resumesFromStoredPosition()
     controller->openVideo(broadcastId);
     QCOMPARE(controller->currentStartPosition(), 0);
     controller->closePlayer();
+}
+
+void AppControllerTest::loadMoreHistoryAppendsCachedPages()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+        QVERIFY(repository.upsertChannel(alpha, &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QList<Video> videos;
+        for (int index = 0; index < 75; ++index) {
+            videos.append(makeVideo(
+                QStringLiteral("video-%1").arg(index, 3, 10, QLatin1Char('0')),
+                alpha.id,
+                now.addSecs(-index)));
+        }
+        QVERIFY(repository.upsertVideos(videos, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    FeedModel *feed = controller->feed();
+    QCOMPARE(feed->rowCount(), 50);
+
+    QSignalSpy rowsInserted(feed, &QAbstractItemModel::rowsInserted);
+    QSignalSpy modelReset(feed, &QAbstractItemModel::modelReset);
+    controller->loadMoreHistory();
+    QCOMPARE(feed->rowCount(), 75);
+    QCOMPARE(rowsInserted.count(), 1);
+    QCOMPARE(modelReset.count(), 0);
+    QVERIFY(!controller->historyLoading());
+
+    // Local cache is exhausted; further loads are no-ops without a key.
+    controller->loadMoreHistory();
+    QCOMPARE(feed->rowCount(), 75);
+    QCOMPARE(rowsInserted.count(), 1);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTest)

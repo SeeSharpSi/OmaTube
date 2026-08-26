@@ -31,6 +31,8 @@ class AppController final : public QObject
     Q_PROPERTY(FeedModel *feed READ feed CONSTANT)
     Q_PROPERTY(LiveChannelModel *liveChannels READ liveChannels CONSTANT)
     Q_PROPERTY(bool refreshing READ refreshing NOTIFY refreshingChanged)
+    Q_PROPERTY(bool historyLoading READ historyLoading NOTIFY historyLoadingChanged)
+    Q_PROPERTY(bool historyHasMore READ historyHasMore NOTIFY historyHasMoreChanged)
     Q_PROPERTY(bool addingChannel READ addingChannel NOTIFY addingChannelChanged)
     Q_PROPERTY(bool apiKeyConfigured READ apiKeyConfigured NOTIFY apiKeyConfiguredChanged)
     Q_PROPERTY(QString progressText READ progressText NOTIFY progressTextChanged)
@@ -61,6 +63,8 @@ public:
     [[nodiscard]] FeedModel *feed();
     [[nodiscard]] LiveChannelModel *liveChannels();
     [[nodiscard]] bool refreshing() const;
+    [[nodiscard]] bool historyLoading() const;
+    [[nodiscard]] bool historyHasMore() const;
     [[nodiscard]] bool addingChannel() const;
     [[nodiscard]] bool apiKeyConfigured() const;
     [[nodiscard]] QString progressText() const;
@@ -79,6 +83,7 @@ public:
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void loadMoreHistory();
     Q_INVOKABLE void selectCategory(qint64 categoryId);
     Q_INVOKABLE bool addCategory(const QString &name);
     Q_INVOKABLE bool renameCategory(qint64 categoryId, const QString &name);
@@ -101,6 +106,8 @@ public:
 
 signals:
     void refreshingChanged();
+    void historyLoadingChanged();
+    void historyHasMoreChanged();
     void addingChannelChanged();
     void apiKeyConfiguredChanged();
     void progressTextChanged();
@@ -121,11 +128,21 @@ private:
     void reloadCategories();
     void reloadChannels();
     void reloadFeed();
+    void updateFeedCursor(const QList<Video> &videos);
+    // Loads one further page of the feed starting at the current cursor and
+    // appends it to the model.
+    void appendFeedPage();
+    void refreshHistoryHasMore();
+    void setHistoryLoading(bool loading);
+    void setHistoryHasMore(bool hasMore);
+    [[nodiscard]] std::optional<qint64> feedCategoryScope() const;
     void resolveStartPosition(const QString &videoId);
     void flushWatchProgress();
     void setStatusMessage(QString message);
     void setErrorMessage(QString message);
     static QList<qint64> toCategoryIds(const QVariantList &values);
+
+    static constexpr int feedPageSize = 50;
 
     ThemeManager m_themeManager;
     Repository m_repository;
@@ -138,11 +155,15 @@ private:
     bool m_initialized = false;
     bool m_startupRefreshRequested = false;
     bool m_addingChannel = false;
+    bool m_historyLoading = false;
+    bool m_historyHasMore = false;
     QString m_statusMessage;
     QString m_errorMessage;
     QDateTime m_lastRefreshedAt;
     qint64 m_selectedCategoryId = -1;
     int m_shortVideoCutoffMinutes = 3;
+    QDateTime m_feedCursorPublishedAt;
+    QString m_feedCursorId;
     QString m_currentVideoId;
     bool m_playerOpen = false;
     int m_currentStartPosition = 0;

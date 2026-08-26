@@ -8,6 +8,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+
 class RepositoryTest final : public QObject
 {
     Q_OBJECT
@@ -16,10 +18,14 @@ private slots:
     void persistentDatabaseOpens();
     void migratesVersionOneDatabase();
     void migratesVersionTwoDatabase();
+    void migratesVersionThreeDatabase();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
+    void feedPagePaginatesWithKeysetCursor();
+    void channelHistoryStateLifecycle();
     void appliesWatchProgressAndSurvivesPruning();
+    void prunesOldestVideosWhenOverStorageLimit();
     void modelsExposeExpectedRoles();
 };
 
@@ -182,6 +188,74 @@ void RepositoryTest::migratesVersionTwoDatabase()
     QCOMPARE(stats->watchedSeconds, 15);
 }
 
+void RepositoryTest::migratesVersionThreeDatabase()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    const QString connectionName = QStringLiteral("version-three-fixture");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE categories("
+                      "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE channels("
+                      "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                      "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE category_channels("
+                      "category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE, "
+                      "channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "PRIMARY KEY(category_id, channel_id))")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE videos("
+                      "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                      "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
+                      "duration_seconds INTEGER NOT NULL DEFAULT -1)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE video_watch_time("
+                      "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_watched_at TEXT NOT NULL DEFAULT '', "
+                      "watch_count INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO channels VALUES("
+            "'UCAlpha', '@input', '@handle', 'Alpha', '', 'UUAlpha', "
+            "'2026-08-25T12:00:00.000Z')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO videos VALUES("
+            "'regular', 'UCAlpha', 'Regular', '2026-08-25T12:00:00.000Z', 0, 'none', "
+            "'2026-08-25T12:00:00.000Z', 600)")));
+        QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 3")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    Repository repository(databasePath);
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QCOMPARE(repository.feed().size(), 1);
+    QCOMPARE(repository.channelHistoryStates(&error).size(), 0);
+    QVERIFY(repository.historyIncomplete(std::nullopt, &error));
+    QVERIFY(repository.setChannelHistoryState(
+        QStringLiteral("UCAlpha"), QStringLiteral("token-two"), false, &error));
+    QCOMPARE(
+        repository.channelHistoryStates(&error),
+        QList<ChannelHistoryState>({
+            {QStringLiteral("UCAlpha"), QStringLiteral("token-two"), false},
+        }));
+}
+
 void RepositoryTest::categoryLifecycle()
 {
     Repository repository(QStringLiteral(":memory:"));
@@ -259,6 +333,110 @@ void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()
     QCOMPARE(unfilteredFeed.first().id, QStringLiteral("short"));
 }
 
+void RepositoryTest::feedPagePaginatesWithKeysetCursor()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const qint64 categoryId = repository.addCategory(QStringLiteral("Selected"), &error);
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    QVERIFY(repository.upsertChannel(beta, &error));
+    QVERIFY(repository.setChannelCategories(alpha.id, {categoryId}, &error));
+
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QDateTime tie = now.addSecs(-100);
+    QVERIFY(repository.upsertVideos({
+        // Three videos sharing one timestamp exercise the id tiebreak.
+        makeVideo(QStringLiteral("tie-a"), alpha.id, tie),
+        makeVideo(QStringLiteral("tie-b"), alpha.id, tie),
+        makeVideo(QStringLiteral("tie-c"), alpha.id, tie),
+        makeVideo(QStringLiteral("newest"), beta.id, now),
+        makeVideo(QStringLiteral("oldest"), beta.id, now.addSecs(-200)),
+    }, &error));
+
+    const QList<Video> firstPage = repository.feedPage(std::nullopt, 180, {}, {}, 2, &error);
+    QCOMPARE(firstPage.size(), 2);
+    QCOMPARE(firstPage.at(0).id, QStringLiteral("newest"));
+    QCOMPARE(firstPage.at(1).id, QStringLiteral("tie-c"));
+
+    const QList<Video> secondPage = repository.feedPage(
+        std::nullopt,
+        180,
+        firstPage.last().publishedAt,
+        firstPage.last().id,
+        2,
+        &error);
+    QCOMPARE(secondPage.size(), 2);
+    QCOMPARE(secondPage.at(0).id, QStringLiteral("tie-b"));
+    QCOMPARE(secondPage.at(1).id, QStringLiteral("tie-a"));
+
+    const QList<Video> thirdPage = repository.feedPage(
+        std::nullopt,
+        180,
+        secondPage.last().publishedAt,
+        secondPage.last().id,
+        2,
+        &error);
+    QCOMPARE(thirdPage.size(), 1);
+    QCOMPARE(thirdPage.at(0).id, QStringLiteral("oldest"));
+
+    const QList<Video> exhausted = repository.feedPage(
+        std::nullopt,
+        180,
+        thirdPage.last().publishedAt,
+        thirdPage.last().id,
+        2,
+        &error);
+    QVERIFY(exhausted.isEmpty());
+
+    // Category scoping applies to every page.
+    const QList<Video> categoryPage = repository.feedPage(categoryId, 180, {}, {}, 10, &error);
+    QCOMPARE(categoryPage.size(), 3);
+    QVERIFY(std::all_of(categoryPage.cbegin(), categoryPage.cend(), [&alpha](const Video &video) {
+        return video.channelId == alpha.id;
+    }));
+}
+
+void RepositoryTest::channelHistoryStateLifecycle()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    QVERIFY(repository.upsertChannel(beta, &error));
+    const qint64 categoryId = repository.addCategory(QStringLiteral("Tech"), &error);
+    QVERIFY(repository.setChannelCategories(beta.id, {categoryId}, &error));
+
+    // No state recorded yet: both scopes still have history to fetch.
+    QVERIFY(repository.historyIncomplete(std::nullopt, &error));
+    QVERIFY(repository.historyIncomplete(categoryId, &error));
+
+    // initializeChannelHistory records a resume point but never rewinds one.
+    QVERIFY(repository.initializeChannelHistory(alpha.id, QStringLiteral("token-two"), &error));
+    QVERIFY(repository.initializeChannelHistory(alpha.id, QStringLiteral("token-one"), &error));
+    QCOMPARE(
+        repository.channelHistoryStates(&error),
+        QList<ChannelHistoryState>({
+            {QStringLiteral("UCAlpha"), QStringLiteral("token-two"), false},
+        }));
+
+    QVERIFY(repository.setChannelHistoryState(alpha.id, {}, true, &error));
+    // Beta has no recorded state yet, so every scope still has history.
+    QVERIFY(repository.historyIncomplete(std::nullopt, &error));
+    QVERIFY(repository.historyIncomplete(categoryId, &error));
+
+    QVERIFY(repository.setChannelHistoryState(beta.id, QStringLiteral("token-nine"), false, &error));
+    QVERIFY(repository.historyIncomplete(categoryId, &error));
+    QVERIFY(repository.setChannelHistoryState(beta.id, {}, true, &error));
+    QVERIFY(!repository.historyIncomplete(std::nullopt, &error));
+    QVERIFY(!repository.historyIncomplete(categoryId, &error));
+}
+
+
 void RepositoryTest::appliesWatchProgressAndSurvivesPruning()
 {
     Repository repository(QStringLiteral(":memory:"));
@@ -312,15 +490,52 @@ void RepositoryTest::appliesWatchProgressAndSurvivesPruning()
     stats = repository.watchStats(QStringLiteral("old"), &error);
     QCOMPARE(stats->watchedSeconds, 210);
     QCOMPARE(stats->lastPositionSeconds, 100);
+}
 
-    QVERIFY2(repository.pruneVideoMetadata(now.addSecs(3600), &error), qPrintable(error));
-    QVERIFY(repository.feed().isEmpty());
-    QVERIFY(!repository.video(QStringLiteral("old"), &error).has_value());
+void RepositoryTest::prunesOldestVideosWhenOverStorageLimit()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+
+    // Enough videos with long titles to push the database past a small limit.
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QList<Video> videos;
+    const QString padding(600, QLatin1Char('x'));
+    for (int index = 0; index < 120; ++index) {
+        Video video = makeVideo(
+            QStringLiteral("video-%1").arg(index, 3, 10, QLatin1Char('0')),
+            alpha.id,
+            now.addSecs(-index));
+        video.title = padding;
+        videos.append(video);
+    }
+    QVERIFY(repository.upsertVideos(videos, &error));
+
+    const qint64 fullSize = repository.databaseSizeBytes();
+    QVERIFY(fullSize > 100 * 1024);
+    QVERIFY(repository.pruneVideoMetadataToLimit(64 * 1024, &error));
+    QVERIFY(repository.databaseSizeBytes() <= 64 * 1024);
+
+    // FIFO: the oldest published videos are gone, the newest survive.
+    QVERIFY(!repository.video(QStringLiteral("video-119"), &error).has_value());
+    QVERIFY(repository.video(QStringLiteral("video-000"), &error).has_value());
+
+    // Pruning again below the limit is a no-op.
+    const QList<Video> feedBefore = repository.feed(std::nullopt, 180, 500, &error);
+    QVERIFY(repository.pruneVideoMetadataToLimit(64 * 1024, &error));
+    QCOMPARE(repository.feed(std::nullopt, 180, 500, &error).size(), feedBefore.size());
 
     // Watch data is keyed independently of cached video metadata.
-    stats = repository.watchStats(QStringLiteral("old"), &error);
+    QVERIFY2(repository.applyWatchProgress(QStringLiteral("video-119"), 90, 120, true, &error),
+             qPrintable(error));
+    QVERIFY(repository.pruneVideoMetadataToLimit(1024, &error));
+    const std::optional<WatchStats> stats = repository.watchStats(QStringLiteral("video-119"), &error);
     QVERIFY2(stats.has_value(), qPrintable(error));
-    QCOMPARE(stats->watchedSeconds, 210);
+    QCOMPARE(stats->watchedSeconds, 90);
+    QCOMPARE(repository.feed().size(), 0);
 }
 
 void RepositoryTest::modelsExposeExpectedRoles()

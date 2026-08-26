@@ -107,24 +107,28 @@ void YouTubeClient::resolveChannel(const QString &input, ResolveCallback callbac
     });
 }
 
-void YouTubeClient::fetchUploadVideoIds(const Channel &channel, VideoIdsCallback callback)
+void YouTubeClient::fetchUploadPage(
+    const Channel &channel,
+    const QString &pageToken,
+    UploadPageCallback callback)
 {
-    QUrl url = apiUrl(
-        QStringLiteral("playlistItems"),
-        {
-            {QStringLiteral("part"), QStringLiteral("contentDetails")},
-            {QStringLiteral("playlistId"), channel.uploadsPlaylistId},
-            {QStringLiteral("maxResults"), QStringLiteral("25")},
-            {QStringLiteral("fields"), QStringLiteral("items/contentDetails/videoId")},
-        });
+    QList<QPair<QString, QString>> items = {
+        {QStringLiteral("part"), QStringLiteral("contentDetails")},
+        {QStringLiteral("playlistId"), channel.uploadsPlaylistId},
+        {QStringLiteral("maxResults"), QStringLiteral("50")},
+        {QStringLiteral("fields"), QStringLiteral("nextPageToken,items/contentDetails/videoId")},
+    };
+    if (!pageToken.isEmpty())
+        items.append({QStringLiteral("pageToken"), pageToken});
+    QUrl url = apiUrl(QStringLiteral("playlistItems"), items);
     getJson(std::move(url), [callback = std::move(callback)](QByteArray json, QString error) {
         if (!error.isEmpty()) {
             callback({}, std::move(error));
             return;
         }
         QString parseError;
-        QStringList ids = parseUploadVideoIds(json, &parseError);
-        callback(std::move(ids), std::move(parseError));
+        const UploadPage page = parseUploadPage(json, &parseError);
+        callback(page, std::move(parseError));
     });
 }
 
@@ -255,12 +259,13 @@ std::optional<Channel> YouTubeClient::parseChannelResponse(
     return channel;
 }
 
-QStringList YouTubeClient::parseUploadVideoIds(const QByteArray &json, QString *error)
+UploadPage YouTubeClient::parseUploadPage(const QByteArray &json, QString *error)
 {
-    QStringList result;
+    UploadPage page;
     const std::optional<QJsonObject> root = parseObject(json, error);
     if (!root)
-        return result;
+        return page;
+    page.nextPageToken = root->value(QStringLiteral("nextPageToken")).toString();
     const QJsonArray items = root->value(QStringLiteral("items")).toArray();
     for (const QJsonValue &value : items) {
         const QString id = value.toObject()
@@ -269,9 +274,14 @@ QStringList YouTubeClient::parseUploadVideoIds(const QByteArray &json, QString *
                                .value(QStringLiteral("videoId"))
                                .toString();
         if (!id.isEmpty())
-            result.append(id);
+            page.videoIds.append(id);
     }
-    return result;
+    return page;
+}
+
+QStringList YouTubeClient::parseUploadVideoIds(const QByteArray &json, QString *error)
+{
+    return parseUploadPage(json, error).videoIds;
 }
 
 QList<Video> YouTubeClient::parseVideosResponse(const QByteArray &json, QString *error)

@@ -348,6 +348,17 @@ QList<Video> Repository::feed(
     int limit,
     QString *error) const
 {
+    return feedPage(categoryId, shortVideoCutoffSeconds, {}, {}, limit, error);
+}
+
+QList<Video> Repository::feedPage(
+    std::optional<qint64> categoryId,
+    int shortVideoCutoffSeconds,
+    const QDateTime &publishedBefore,
+    const QString &idBefore,
+    int limit,
+    QString *error) const
+{
     QList<Video> result;
     QSqlQuery query(m_database);
     QString statement = QStringLiteral(
@@ -365,11 +376,22 @@ QList<Video> Repository::feed(
     } else {
         statement += QStringLiteral("WHERE v.is_broadcast = 0 AND v.duration_seconds > ? ");
     }
-    statement += QStringLiteral("ORDER BY v.published_at DESC LIMIT ?");
+    const bool useCursor = publishedBefore.isValid() && !idBefore.isEmpty();
+    if (useCursor) {
+        statement += QStringLiteral(
+            "AND (v.published_at < ? OR (v.published_at = ? AND v.id < ?)) ");
+    }
+    statement += QStringLiteral("ORDER BY v.published_at DESC, v.id DESC LIMIT ?");
     query.prepare(statement);
     query.addBindValue(qMax(0, shortVideoCutoffSeconds));
     if (categoryId)
         query.addBindValue(*categoryId);
+    if (useCursor) {
+        const QString cursorTime = toDatabaseTime(publishedBefore);
+        query.addBindValue(cursorTime);
+        query.addBindValue(cursorTime);
+        query.addBindValue(idBefore);
+    }
     query.addBindValue(qMax(1, limit));
 
     if (!query.exec()) {
@@ -394,14 +416,140 @@ QList<Video> Repository::feed(
     return result;
 }
 
-bool Repository::pruneVideoMetadata(const QDateTime &olderThan, QString *error)
+QList<ChannelHistoryState> Repository::channelHistoryStates(QString *error) const
+{
+    QList<ChannelHistoryState> result;
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT channel_id, next_page_token, history_complete FROM channel_history "
+        "ORDER BY channel_id"));
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return result;
+    }
+    while (query.next()) {
+        result.append({
+            query.value(0).toString(),
+            query.value(1).toString(),
+            query.value(2).toBool(),
+        });
+    }
+    return result;
+}
+
+bool Repository::initializeChannelHistory(
+    const QString &channelId,
+    const QString &nextPageToken,
+    QString *error)
 {
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("DELETE FROM videos WHERE fetched_at < ?"));
-    query.addBindValue(toDatabaseTime(olderThan));
+    query.prepare(QStringLiteral(
+        "INSERT INTO channel_history(channel_id, next_page_token, history_complete) "
+        "VALUES(?, ?, ?) ON CONFLICT(channel_id) DO NOTHING"));
+    query.addBindValue(channelId);
+    // A null QString binds as SQL NULL; store an empty string instead.
+    query.addBindValue(nextPageToken.isNull() ? QString(QStringLiteral("")) : nextPageToken);
+    query.addBindValue(nextPageToken.isEmpty() ? 1 : 0);
     if (!query.exec()) {
         setError(error, queryError(query));
         return false;
+    }
+    return true;
+}
+
+bool Repository::setChannelHistoryState(
+    const QString &channelId,
+    const QString &nextPageToken,
+    bool historyComplete,
+    QString *error)
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "INSERT INTO channel_history(channel_id, next_page_token, history_complete) "
+        "VALUES(?, ?, ?) ON CONFLICT(channel_id) DO UPDATE SET "
+        "next_page_token = excluded.next_page_token, "
+        "history_complete = excluded.history_complete"));
+    query.addBindValue(channelId);
+    // A null QString binds as SQL NULL; store an empty string instead.
+    query.addBindValue(nextPageToken.isNull() ? QString(QStringLiteral("")) : nextPageToken);
+    query.addBindValue(historyComplete ? 1 : 0);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return false;
+    }
+    return true;
+}
+
+bool Repository::historyIncomplete(std::optional<qint64> categoryId, QString *error) const
+{
+    QSqlQuery query(m_database);
+    QString statement = QStringLiteral(
+        "SELECT COUNT(*) FROM channels c ");
+    if (categoryId)
+        statement += QStringLiteral(
+            "JOIN category_channels cc ON cc.channel_id = c.id "
+            "WHERE cc.category_id = ? AND ");
+    else {
+        statement += QStringLiteral("WHERE ");
+    }
+    statement += QStringLiteral(
+        "NOT EXISTS(SELECT 1 FROM channel_history h "
+        "WHERE h.channel_id = c.id AND h.history_complete = 1)");
+    query.prepare(statement);
+    if (categoryId)
+        query.addBindValue(*categoryId);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return false;
+    }
+    if (!query.next()) {
+        setError(error, QStringLiteral("Could not read channel history state."));
+        return false;
+    }
+    return query.value(0).toInt() > 0;
+}
+
+qint64 Repository::databaseSizeBytes() const
+{
+    QSqlQuery query(m_database);
+    if (!query.exec(QStringLiteral("PRAGMA page_count")) || !query.next())
+        return 0;
+    const qint64 pageCount = query.value(0).toLongLong();
+    query.finish();
+    if (!query.exec(QStringLiteral("PRAGMA page_size")) || !query.next())
+        return 0;
+    return pageCount * query.value(0).toLongLong();
+}
+
+bool Repository::canFetchMoreHistory() const
+{
+    return databaseSizeBytes() < historyFetchDatabaseBytes;
+}
+
+bool Repository::pruneVideoMetadataToLimit(qint64 maximumBytes, QString *error)
+{
+    if (databaseSizeBytes() <= maximumBytes)
+        return true;
+
+    int batchSize = 16;
+    while (databaseSizeBytes() > maximumBytes) {
+        QSqlQuery deleteQuery(m_database);
+        deleteQuery.prepare(QStringLiteral(
+            "DELETE FROM videos WHERE id IN ("
+            "SELECT id FROM videos ORDER BY published_at ASC, id ASC LIMIT ?)"));
+        deleteQuery.addBindValue(batchSize);
+        if (!deleteQuery.exec()) {
+            setError(error, queryError(deleteQuery));
+            return false;
+        }
+        if (deleteQuery.numRowsAffected() == 0)
+            break;
+        QSqlQuery vacuumQuery(m_database);
+        if (!vacuumQuery.exec(QStringLiteral("VACUUM"))) {
+            setError(error, queryError(vacuumQuery));
+            return false;
+        }
+        batchSize *= 2;
     }
     return true;
 }
@@ -497,7 +645,7 @@ bool Repository::migrate(QString *error)
     }
     const int version = versionQuery.value(0).toInt();
     versionQuery.finish();
-    constexpr int currentVersion = 3;
+    constexpr int currentVersion = 4;
     if (version == currentVersion)
         return true;
     if (version < 0 || version > currentVersion) {
@@ -509,6 +657,12 @@ bool Repository::migrate(QString *error)
         setError(error, m_database.lastError().text());
         return false;
     }
+
+    const QString channelHistoryTable = QStringLiteral(
+        "CREATE TABLE channel_history("
+        "channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE, "
+        "next_page_token TEXT NOT NULL DEFAULT '', "
+        "history_complete INTEGER NOT NULL DEFAULT 0)");
 
     QStringList statements;
     if (version == 0) {
@@ -538,20 +692,24 @@ bool Repository::migrate(QString *error)
                 "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
                 "last_watched_at TEXT NOT NULL DEFAULT '', "
                 "watch_count INTEGER NOT NULL DEFAULT 0)"),
-            QStringLiteral("PRAGMA user_version = 3"),
+            channelHistoryTable,
+            QStringLiteral("PRAGMA user_version = 4"),
         };
     } else {
         if (version == 1) {
             statements.append(QStringLiteral(
                 "ALTER TABLE videos ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT -1"));
         }
-        statements.append(QStringLiteral(
-            "CREATE TABLE video_watch_time("
-            "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
-            "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
-            "last_watched_at TEXT NOT NULL DEFAULT '', "
-            "watch_count INTEGER NOT NULL DEFAULT 0)"));
-        statements.append(QStringLiteral("PRAGMA user_version = 3"));
+        if (version <= 2) {
+            statements.append(QStringLiteral(
+                "CREATE TABLE video_watch_time("
+                "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+                "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+                "last_watched_at TEXT NOT NULL DEFAULT '', "
+                "watch_count INTEGER NOT NULL DEFAULT 0)"));
+        }
+        statements.append(channelHistoryTable);
+        statements.append(QStringLiteral("PRAGMA user_version = 4"));
     }
 
     QSqlQuery query(m_database);

@@ -30,7 +30,7 @@ QString RefreshService::progressText() const
 
 void RefreshService::refresh()
 {
-    if (m_refreshing)
+    if (m_refreshing || m_historyLoading)
         return;
 
     m_refreshing = true;
@@ -69,6 +69,142 @@ void RefreshService::refresh()
         return;
     }
     beginMetadataRefresh();
+}
+
+bool RefreshService::historyLoading() const
+{
+    return m_historyLoading;
+}
+
+void RefreshService::loadOlder(std::optional<qint64> categoryId)
+{
+    if (m_refreshing || m_historyLoading)
+        return;
+    if (!m_youTubeClient->hasApiKey()) {
+        emit historyFinished(QStringLiteral("YouTube API key is not configured."));
+        return;
+    }
+
+    QString error;
+    const QList<Channel> channels = m_repository->channels(categoryId, &error);
+    if (!error.isEmpty()) {
+        emit historyFinished(error);
+        return;
+    }
+
+    QHash<QString, ChannelHistoryState> states;
+    for (const ChannelHistoryState &state : m_repository->channelHistoryStates(&error)) {
+        if (!error.isEmpty()) {
+            emit historyFinished(error);
+            return;
+        }
+        states.insert(state.channelId, state);
+    }
+
+    m_historyQueue.clear();
+    m_historyVideoQueue.clear();
+    m_historyPageTokens.clear();
+    m_historyVideoIds.clear();
+    m_historyErrors.clear();
+    for (const Channel &channel : channels) {
+        const auto state = states.constFind(channel.id);
+        if (state != states.constEnd()) {
+            if (state->historyComplete)
+                continue;
+            m_historyPageTokens.insert(channel.id, state->nextPageToken);
+        }
+        m_historyQueue.enqueue(channel);
+    }
+
+    if (m_historyQueue.isEmpty()) {
+        emit historyFinished({});
+        return;
+    }
+
+    m_historyLoading = true;
+    emit historyLoadingChanged();
+    dispatchHistoryPages();
+}
+
+void RefreshService::dispatchHistoryPages()
+{
+    while (m_historyInFlight < maximumConcurrentRequests && !m_historyQueue.isEmpty()) {
+        const Channel channel = m_historyQueue.dequeue();
+        ++m_historyInFlight;
+        m_youTubeClient->fetchUploadPage(
+            channel,
+            m_historyPageTokens.value(channel.id),
+            [this, channel](UploadPage page, QString error) {
+                --m_historyInFlight;
+                if (!error.isEmpty()) {
+                    m_historyErrors.append(
+                        QStringLiteral("%1: %2").arg(channel.title, error));
+                } else {
+                    for (const QString &id : page.videoIds)
+                        m_historyVideoIds.insert(id);
+                    QString databaseError;
+                    if (!m_repository->setChannelHistoryState(
+                            channel.id,
+                            page.nextPageToken,
+                            page.nextPageToken.isEmpty(),
+                            &databaseError)) {
+                        m_historyErrors.append(databaseError);
+                    }
+                }
+                if (m_historyQueue.isEmpty() && m_historyInFlight == 0)
+                    beginHistoryVideoDetails();
+                else
+                    dispatchHistoryPages();
+            });
+    }
+}
+
+void RefreshService::beginHistoryVideoDetails()
+{
+    QStringList ids(m_historyVideoIds.cbegin(), m_historyVideoIds.cend());
+    while (!ids.isEmpty()) {
+        QStringList chunk;
+        const int chunkSize = qMin(50, ids.size());
+        chunk.reserve(chunkSize);
+        for (int i = 0; i < chunkSize; ++i)
+            chunk.append(ids.takeLast());
+        m_historyVideoQueue.enqueue(chunk);
+    }
+
+    if (m_historyVideoQueue.isEmpty()) {
+        finishHistoryLoad();
+        return;
+    }
+    dispatchHistoryVideoDetails();
+}
+
+void RefreshService::dispatchHistoryVideoDetails()
+{
+    while (m_historyVideosInFlight < maximumConcurrentRequests && !m_historyVideoQueue.isEmpty()) {
+        const QStringList ids = m_historyVideoQueue.dequeue();
+        ++m_historyVideosInFlight;
+        m_youTubeClient->fetchVideos(ids, [this](QList<Video> videos, QString error) {
+            --m_historyVideosInFlight;
+            if (!error.isEmpty()) {
+                m_historyErrors.append(error);
+            } else {
+                QString databaseError;
+                if (!m_repository->upsertVideos(videos, &databaseError))
+                    m_historyErrors.append(databaseError);
+            }
+            if (m_historyVideoQueue.isEmpty() && m_historyVideosInFlight == 0)
+                finishHistoryLoad();
+            else
+                dispatchHistoryVideoDetails();
+        });
+    }
+}
+
+void RefreshService::finishHistoryLoad()
+{
+    m_historyLoading = false;
+    emit historyLoadingChanged();
+    emit historyFinished(summarizeErrors(m_historyErrors));
 }
 
 void RefreshService::beginMetadataRefresh()
@@ -144,15 +280,25 @@ void RefreshService::dispatchUploads()
     while (m_uploadsInFlight < maximumConcurrentRequests && !m_uploadQueue.isEmpty()) {
         const Channel channel = m_uploadQueue.dequeue();
         ++m_uploadsInFlight;
-        m_youTubeClient->fetchUploadVideoIds(
+        m_youTubeClient->fetchUploadPage(
             channel,
-            [this, channel](QStringList ids, QString error) {
+            {},
+            [this, channel](UploadPage page, QString error) {
                 --m_uploadsInFlight;
                 ++m_stageCompleted;
-                if (!error.isEmpty())
+                if (!error.isEmpty()) {
                     m_feedErrors.append(QStringLiteral("%1: %2").arg(channel.title, error));
-                for (const QString &id : ids)
-                    m_videoIds.insert(id);
+                } else {
+                    for (const QString &id : page.videoIds)
+                        m_videoIds.insert(id);
+                    QString databaseError;
+                    if (!m_repository->initializeChannelHistory(
+                            channel.id,
+                            page.nextPageToken,
+                            &databaseError)) {
+                        m_feedErrors.append(databaseError);
+                    }
+                }
                 setProgressText(
                     QStringLiteral("Loading uploads %1/%2").arg(m_stageCompleted).arg(m_stageTotal));
                 if (m_uploadQueue.isEmpty() && m_uploadsInFlight == 0)
@@ -249,7 +395,7 @@ void RefreshService::dispatchLiveChecks()
 void RefreshService::finish()
 {
     QString pruneError;
-    if (!m_repository->pruneVideoMetadata(QDateTime::currentDateTimeUtc().addDays(-30), &pruneError))
+    if (!m_repository->pruneVideoMetadataToLimit(Repository::maximumDatabaseBytes, &pruneError))
         m_feedErrors.append(pruneError);
 
     m_refreshing = false;

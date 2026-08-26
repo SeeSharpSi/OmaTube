@@ -99,7 +99,9 @@ Each refresh retrieves recent upload IDs, fetches video details in batches, and 
 
 YouTube currently gives `search.list` a separate default limit of 100 calls per day. With 25 channels, one startup plus three manual refreshes consumes 100 live-search calls. Feed refresh can still succeed when live-search quota is exhausted; application reports live status as incomplete rather than claiming nobody is live.
 
-API-derived video metadata older than 30 days is deleted. API-derived channel metadata is refreshed before reaching 30 days. User-created categories and channel assignments remain until user removes them.
+Cached video history is retained until the database reaches 10 MB; past that, the oldest published videos are pruned first in, first out while watch statistics are kept. API-derived channel metadata is refreshed before reaching 30 days. User-created categories and channel assignments remain until user removes them.
+
+The feed loads 50 videos at a time. Scrolling toward the bottom serves further cached videos, and once the local cache is exhausted, each additional scroll fetches one deeper uploads page per channel in the active category filter until the channel's uploads playlist is exhausted or the storage cap is reached.
 
 ## Architecture
 

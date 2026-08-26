@@ -57,3 +57,12 @@ void FeedModel::setVideos(QList<Video> videos)
     m_videos = std::move(videos);
     endResetModel();
 }
+
+void FeedModel::appendVideos(const QList<Video> &videos)
+{
+    if (videos.isEmpty())
+        return;
+    beginInsertRows({}, m_videos.size(), m_videos.size() + videos.size() - 1);
+    m_videos.append(videos);
+    endInsertRows();
+}

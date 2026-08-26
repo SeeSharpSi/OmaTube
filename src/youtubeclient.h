@@ -27,7 +27,7 @@ class YouTubeClient : public QObject
 
 public:
     using ResolveCallback = std::function<void(std::optional<Channel>, QString)>;
-    using VideoIdsCallback = std::function<void(QStringList, QString)>;
+    using UploadPageCallback = std::function<void(UploadPage, QString)>;
     using VideosCallback = std::function<void(QList<Video>, QString)>;
     using LiveCallback = std::function<void(std::optional<LiveChannel>, QString)>;
 
@@ -38,7 +38,10 @@ public:
     [[nodiscard]] virtual bool hasApiKey() const;
 
     virtual void resolveChannel(const QString &input, ResolveCallback callback);
-    virtual void fetchUploadVideoIds(const Channel &channel, VideoIdsCallback callback);
+    virtual void fetchUploadPage(
+        const Channel &channel,
+        const QString &pageToken,
+        UploadPageCallback callback);
     virtual void fetchVideos(const QStringList &videoIds, VideosCallback callback);
     virtual void fetchLiveChannel(const Channel &channel, LiveCallback callback);
 
@@ -49,6 +52,7 @@ public:
         const QByteArray &json,
         const QString &originalInput,
         QString *error = nullptr);
+    static UploadPage parseUploadPage(const QByteArray &json, QString *error = nullptr);
     static QStringList parseUploadVideoIds(const QByteArray &json, QString *error = nullptr);
     static QList<Video> parseVideosResponse(const QByteArray &json, QString *error = nullptr);
     static std::optional<LiveChannel> parseLiveResponse(

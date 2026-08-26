@@ -68,7 +68,7 @@ ApplicationWindow {
 
     Timer {
         interval: 80
-        running: App.refreshing
+        running: App.refreshing || App.historyLoading
         repeat: true
         onTriggered: root.spinnerFrame = (root.spinnerFrame + 1) % root.spinnerFrames.length
     }
@@ -298,6 +298,35 @@ ApplicationWindow {
             clip: true
             spacing: 0
             boundsBehavior: Flickable.StopAtBounds
+            cacheBuffer: 800
+
+            onContentYChanged: {
+                if (App.historyLoading || !App.historyHasMore)
+                    return
+                if (contentY + height >= contentHeight - 600)
+                    App.loadMoreHistory()
+            }
+            onCountChanged: {
+                if (App.historyLoading || !App.historyHasMore)
+                    return
+                if (contentHeight <= height)
+                    App.loadMoreHistory()
+            }
+
+            footer: Item {
+                width: feedList.width
+                height: visible ? 52 : 0
+                visible: App.historyLoading || App.historyHasMore
+
+                Label {
+                    anchors.centerIn: parent
+                    color: root.mutedInk
+                    font.pixelSize: 12
+                    text: App.historyLoading
+                          ? root.spinnerFrames[root.spinnerFrame]
+                          : (feedList.count > 0 ? qsTr("Scroll for more") : "")
+                }
+            }
 
             delegate: Item {
                 id: feedDelegate

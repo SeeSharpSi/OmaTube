@@ -44,6 +44,16 @@ AppController::AppController(QString databasePath, QObject *parent)
     connect(&m_refreshService, &RefreshService::progressTextChanged,
             this, &AppController::progressTextChanged);
     connect(&m_refreshService, &RefreshService::feedChanged, this, &AppController::reloadFeed);
+    connect(
+        &m_refreshService,
+        &RefreshService::historyFinished,
+        this,
+        [this](const QString &error) {
+            setHistoryLoading(false);
+            if (!error.isEmpty())
+                setErrorMessage(error);
+            appendFeedPage();
+        });
     connect(&m_themeManager, &ThemeManager::themeChanged, this, &AppController::themeChanged);
     connect(
         &m_refreshService,
@@ -142,6 +152,16 @@ bool AppController::refreshing() const
     return m_refreshService.refreshing();
 }
 
+bool AppController::historyLoading() const
+{
+    return m_historyLoading;
+}
+
+bool AppController::historyHasMore() const
+{
+    return m_historyHasMore;
+}
+
 bool AppController::addingChannel() const
 {
     return m_addingChannel;
@@ -231,11 +251,40 @@ void AppController::startupRefresh()
 
 void AppController::refresh()
 {
-    if (!m_initialized || refreshing())
+    if (!m_initialized || refreshing() || m_historyLoading)
         return;
     setErrorMessage({});
     setStatusMessage(QStringLiteral("Refreshing..."));
     m_refreshService.refresh();
+}
+
+void AppController::loadMoreHistory()
+{
+    if (!m_initialized || refreshing() || m_historyLoading || !m_historyHasMore)
+        return;
+
+    QString error;
+    const QList<Video> videos = m_repository.feedPage(
+        feedCategoryScope(),
+        m_shortVideoCutoffMinutes * 60,
+        m_feedCursorPublishedAt,
+        m_feedCursorId,
+        feedPageSize,
+        &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    }
+    if (!videos.isEmpty()) {
+        m_feed.appendVideos(videos);
+        updateFeedCursor(videos);
+        refreshHistoryHasMore();
+        return;
+    }
+
+    // Local cache exhausted; deepen remote history for the active scope.
+    setHistoryLoading(true);
+    m_refreshService.loadOlder(feedCategoryScope());
 }
 
 void AppController::selectCategory(qint64 categoryId)
@@ -497,19 +546,103 @@ void AppController::reloadChannels()
     m_channels.setChannels(allChannels, categoryIds);
 }
 
+std::optional<qint64> AppController::feedCategoryScope() const
+{
+    return m_selectedCategoryId < 0
+        ? std::optional<qint64>(std::nullopt)
+        : std::optional<qint64>(m_selectedCategoryId);
+}
+
 void AppController::reloadFeed()
 {
     QString error;
-    const std::optional<qint64> categoryId = m_selectedCategoryId < 0
-        ? std::nullopt
-        : std::optional<qint64>(m_selectedCategoryId);
-    m_feed.setVideos(m_repository.feed(
-        categoryId,
+    const QList<Video> videos = m_repository.feedPage(
+        feedCategoryScope(),
         m_shortVideoCutoffMinutes * 60,
-        500,
-        &error));
+        {},
+        {},
+        feedPageSize,
+        &error);
+    m_feed.setVideos(videos);
+    updateFeedCursor(videos);
     if (!error.isEmpty())
         setErrorMessage(error);
+    refreshHistoryHasMore();
+}
+
+void AppController::updateFeedCursor(const QList<Video> &videos)
+{
+    if (videos.isEmpty()) {
+        m_feedCursorPublishedAt = {};
+        m_feedCursorId.clear();
+        return;
+    }
+    const Video &last = videos.last();
+    m_feedCursorPublishedAt = last.publishedAt;
+    m_feedCursorId = last.id;
+}
+
+void AppController::appendFeedPage()
+{
+    QString error;
+    const QList<Video> videos = m_repository.feedPage(
+        feedCategoryScope(),
+        m_shortVideoCutoffMinutes * 60,
+        m_feedCursorPublishedAt,
+        m_feedCursorId,
+        feedPageSize,
+        &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    }
+    if (!videos.isEmpty()) {
+        m_feed.appendVideos(videos);
+        updateFeedCursor(videos);
+    }
+    refreshHistoryHasMore();
+}
+
+void AppController::refreshHistoryHasMore()
+{
+    QString error;
+    bool hasMore = false;
+    if (!m_repository.feedPage(
+            feedCategoryScope(),
+            m_shortVideoCutoffMinutes * 60,
+            m_feedCursorPublishedAt,
+            m_feedCursorId,
+            1,
+            &error)
+             .isEmpty()) {
+        hasMore = true;
+    } else if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    } else if (apiKeyConfigured() && m_repository.canFetchMoreHistory()) {
+        hasMore = m_repository.historyIncomplete(feedCategoryScope(), &error);
+        if (!error.isEmpty()) {
+            setErrorMessage(error);
+            return;
+        }
+    }
+    setHistoryHasMore(hasMore);
+}
+
+void AppController::setHistoryLoading(bool loading)
+{
+    if (m_historyLoading == loading)
+        return;
+    m_historyLoading = loading;
+    emit historyLoadingChanged();
+}
+
+void AppController::setHistoryHasMore(bool hasMore)
+{
+    if (m_historyHasMore == hasMore)
+        return;
+    m_historyHasMore = hasMore;
+    emit historyHasMoreChanged();
 }
 
 void AppController::resolveStartPosition(const QString &videoId)

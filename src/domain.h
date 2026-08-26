@@ -1,8 +1,9 @@
 #pragma once
 
 #include <QDateTime>
-#include <QString>
 #include <QMetaType>
+#include <QString>
+#include <QStringList>
 
 struct Category
 {
@@ -42,6 +43,24 @@ struct Video
     int watchProgressPercent = -1;
 
     bool operator==(const Video &) const = default;
+};
+
+// One page of a channel's uploads playlist. An empty nextPageToken means
+// the playlist has no further pages.
+struct UploadPage
+{
+    QStringList videoIds;
+    QString nextPageToken;
+};
+
+// How far a channel's uploads history has been fetched and where to resume.
+struct ChannelHistoryState
+{
+    QString channelId;
+    QString nextPageToken;
+    bool historyComplete = false;
+
+    bool operator==(const ChannelHistoryState &) const = default;
 };
 
 struct WatchStats

@@ -30,7 +30,7 @@ ApplicationWindow {
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     width: 900
-    height: 720
+    height: 820
     minimumWidth: 620
     minimumHeight: 540
     visible: true

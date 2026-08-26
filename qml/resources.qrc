@@ -6,6 +6,7 @@
         <file alias="ManageDialog.qml">ManageDialog.qml</file>
         <file alias="PointingCursor.qml">PointingCursor.qml</file>
         <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
+        <file alias="SquareCheckBox.qml">SquareCheckBox.qml</file>
         <file alias="VideoPlayerPage.qml">VideoPlayerPage.qml</file>
         <file alias="WebEnginePlayer.qml">WebEnginePlayer.qml</file>
     </qresource>

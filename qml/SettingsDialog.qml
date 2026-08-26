@@ -18,6 +18,7 @@ Dialog {
     readonly property color paper: themeColors.background
     readonly property color panel: themeColors.lighter_background
     readonly property color rule: themeColors.muted
+    readonly property color softFill: themeColors.selection
     readonly property color danger: themeColors.red
     readonly property color errorFill: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
@@ -28,7 +29,7 @@ Dialog {
 
     modal: true
     width: Math.min(parent ? parent.width - 32 : 760, 760)
-    height: Math.min(parent ? parent.height - 32 : 660, 660)
+    height: Math.min(parent ? parent.height - 24 : 860, 860)
     anchors.centerIn: parent
     padding: 0
     closePolicy: Popup.CloseOnEscape
@@ -299,15 +300,13 @@ Dialog {
                             id: addCategoryRepeater
                             model: App.categories
 
-                            delegate: CheckBox {
+                            delegate: SquareCheckBox {
                                 id: addCategoryCheck
                                 required property var categoryId
                                 required property string name
 
                                 text: addCategoryCheck.name
                                 checked: root.selectedCategoryIds.indexOf(addCategoryCheck.categoryId) !== -1
-
-                                PointingCursor {}
 
                                 onToggled: {
                                     let ids = root.selectedCategoryIds.slice()
@@ -415,7 +414,7 @@ Dialog {
                                     Repeater {
                                         model: App.categories
 
-                                        delegate: CheckBox {
+                                        delegate: SquareCheckBox {
                                             id: membershipCheck
                                             required property var categoryId
                                             required property string name
@@ -423,8 +422,6 @@ Dialog {
                                             text: membershipCheck.name
                                             checked: channelDelegate.categoryIds.indexOf(
                                                 membershipCheck.categoryId) !== -1
-
-                                            PointingCursor {}
 
                                             onToggled: App.setChannelInCategory(
                                                 channelDelegate.channelId,
@@ -637,7 +634,8 @@ Dialog {
 
                     ComboBox {
                         id: themeSelector
-                        Layout.preferredWidth: 240
+                        Layout.preferredWidth: 260
+                        implicitHeight: 40
                         model: [
                             qsTr("Default"),
                             qsTr("Rose Pine"),
@@ -648,6 +646,111 @@ Dialog {
                         onActivated: App.setThemeId(root.themeIds[currentIndex])
 
                         PointingCursor {}
+
+                        background: Rectangle {
+                            color: themeSelector.hovered || themeSelector.popup.visible
+                                ? root.softFill : root.paper
+                            border.color: themeSelector.hovered || themeSelector.popup.visible
+                                ? root.mutedInk : root.rule
+                        }
+
+                        contentItem: Text {
+                            leftPadding: 12
+                            rightPadding: 34
+                            text: themeSelector.displayText
+                            color: root.ink
+                            font.pixelSize: 13
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+
+                        indicator: Canvas {
+                            x: themeSelector.width - width - 12
+                            y: themeSelector.height / 2 - height / 2
+                            width: 10
+                            height: 6
+
+                            readonly property color chevronColor:
+                                themeSelector.hovered || themeSelector.popup.visible
+                                    ? root.ink : root.mutedInk
+
+                            onChevronColorChanged: requestPaint()
+
+                            onPaint: {
+                                const context = getContext("2d")
+                                context.reset()
+                                context.strokeStyle = chevronColor
+                                context.lineWidth = 1.4
+                                context.lineCap = "round"
+                                context.lineJoin = "round"
+                                context.beginPath()
+                                context.moveTo(0, 0.5)
+                                context.lineTo(width / 2, height - 0.5)
+                                context.lineTo(width, 0.5)
+                                context.stroke()
+                            }
+                        }
+
+                        delegate: ItemDelegate {
+                            id: themeOption
+                            required property int index
+                            required property string modelData
+
+                            width: themeSelector.width
+                            highlighted: themeSelector.highlightedIndex === themeOption.index
+
+                            PointingCursor {}
+
+                            background: Rectangle {
+                                color: themeOption.highlighted ? root.softFill : "transparent"
+                            }
+
+                            contentItem: RowLayout {
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    width: 8
+                                    height: 8
+                                    visible: themeSelector.currentIndex === themeOption.index
+                                    color: root.accent
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: themeOption.modelData
+                                    color: themeSelector.currentIndex === themeOption.index
+                                        ? root.ink : root.mutedInk
+                                    font.pixelSize: 13
+                                    font.weight: themeSelector.currentIndex === themeOption.index
+                                        ? Font.DemiBold : Font.Normal
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        popup: Popup {
+                            y: themeSelector.height + 2
+                            width: themeSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
+                            padding: 1
+
+                            background: Rectangle {
+                                color: root.paper
+                                border.color: root.rule
+                            }
+
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: themeSelector.popup.visible
+                                    ? themeSelector.delegateModel : null
+                                currentIndex: themeSelector.highlightedIndex
+                                interactive: false
+                                spacing: 0
+                            }
+                        }
                     }
 
                     Label {
@@ -693,11 +796,9 @@ Dialog {
                         onAccepted: saveKeyButton.clicked()
                     }
 
-                    CheckBox {
+                    SquareCheckBox {
                         id: rememberKey
                         text: qsTr("Remember in local settings")
-
-                        PointingCursor {}
                     }
 
                     Label {

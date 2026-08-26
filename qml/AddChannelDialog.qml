@@ -96,7 +96,7 @@ Dialog {
 
         Label {
             Layout.fillWidth: true
-            text: qsTr("No category selected means channel appears only under All.")
+            text: qsTr("No category selected means the channel appears only in the unfiltered feed.")
             color: root.mutedInk
             font.pixelSize: 12
             wrapMode: Text.Wrap

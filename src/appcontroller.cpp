@@ -289,9 +289,10 @@ void AppController::loadMoreHistory()
 
 void AppController::selectCategory(qint64 categoryId)
 {
-    if (m_selectedCategoryId == categoryId)
+    const qint64 unselectedId = m_selectedCategoryId == categoryId ? -1 : categoryId;
+    if (m_selectedCategoryId == unselectedId)
         return;
-    m_selectedCategoryId = categoryId;
+    m_selectedCategoryId = unselectedId;
     emit selectedCategoryIdChanged();
     reloadFeed();
 }

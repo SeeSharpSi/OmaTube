@@ -196,32 +196,6 @@ ApplicationWindow {
                 height: parent.height
                 spacing: 8
 
-                Button {
-                    id: allCategoryButton
-                    height: 40
-                    leftPadding: 18
-                    rightPadding: 18
-                    text: qsTr("All")
-                    flat: true
-                    onClicked: App.selectCategory(-1)
-
-                    PointingCursor {}
-
-                    background: Rectangle {
-                        color: App.selectedCategoryId < 0 ? root.accent : "transparent"
-                        border.color: App.selectedCategoryId < 0 ? root.accent : root.rule
-                    }
-
-                    contentItem: Text {
-                        text: allCategoryButton.text
-                        color: App.selectedCategoryId < 0 ? root.panel : root.ink
-                        font.pixelSize: 14
-                        font.weight: App.selectedCategoryId < 0 ? Font.DemiBold : Font.Normal
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
                 Repeater {
                     model: App.categories
 

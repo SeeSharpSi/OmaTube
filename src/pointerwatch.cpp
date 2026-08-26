@@ -36,11 +36,14 @@ void PointerWatch::watch(QObject *window)
 
 void PointerWatch::stop()
 {
+    const bool wasHidden = m_hidden;
     m_poll.stop();
     if (m_hidden && m_window)
         m_window->unsetCursor();
     m_hidden = false;
     m_window.clear();
+    if (wasHidden)
+        emit hiddenChanged();
 }
 
 void PointerWatch::poll()
@@ -80,4 +83,10 @@ void PointerWatch::setHidden(bool hidden)
     else
         m_window->unsetCursor();
     m_hidden = hidden;
+    emit hiddenChanged();
+}
+
+bool PointerWatch::hidden() const noexcept
+{
+    return m_hidden;
 }

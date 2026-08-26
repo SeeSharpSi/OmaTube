@@ -22,6 +22,7 @@ Item {
 
     readonly property bool isFullscreen: hostWindow
         ? hostWindow.visibility === Window.FullScreen : false
+    readonly property bool chromeVisible: !App.pointerWatcher.hidden
     readonly property bool playing: player ? !player.paused : false
     readonly property real durationS: player ? player.duration : 0
     readonly property real positionS: player ? player.position : 0
@@ -75,6 +76,7 @@ Item {
         height: 48
         color: Qt.rgba(0, 0, 0, 0.72)
         z: 2
+        visible: root.chromeVisible
 
         ToolButton {
             anchors.left: parent.left
@@ -155,6 +157,7 @@ Item {
         height: 56
         color: Qt.rgba(0, 0, 0, 0.72)
         z: 2
+        visible: root.chromeVisible
 
         RowLayout {
             anchors.fill: parent

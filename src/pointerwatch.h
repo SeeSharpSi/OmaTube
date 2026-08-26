@@ -16,12 +16,18 @@ class QWindow;
 class PointerWatch final : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool hidden READ hidden NOTIFY hiddenChanged)
 
 public:
     explicit PointerWatch(QObject *parent = nullptr);
 
     Q_INVOKABLE void watch(QObject *window);
     Q_INVOKABLE void stop();
+
+    [[nodiscard]] bool hidden() const noexcept;
+
+signals:
+    void hiddenChanged();
 
 private slots:
     void poll();

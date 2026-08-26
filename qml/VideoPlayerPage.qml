@@ -7,6 +7,7 @@ Item {
     property var hostWindow
     property string videoId: ""
     property int startSeconds: 0
+
     Loader {
         id: backendLoader
         anchors.fill: parent
@@ -31,4 +32,8 @@ Item {
                 App.reportPlayback(root.videoId, positionSeconds, playing)
         }
     }
+
+    onHostWindowChanged: App.pointerWatcher.watch(root.hostWindow)
+    Component.onCompleted: App.pointerWatcher.watch(root.hostWindow)
+    Component.onDestruction: App.pointerWatcher.stop()
 }

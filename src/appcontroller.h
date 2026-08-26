@@ -4,6 +4,7 @@
 #include "models/channelmodel.h"
 #include "models/feedmodel.h"
 #include "models/livechannelmodel.h"
+#include "pointerwatch.h"
 #include "refreshservice.h"
 #include "repository.h"
 #include "thememanager.h"
@@ -49,6 +50,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString currentVideoId READ currentVideoId NOTIFY currentVideoIdChanged)
     Q_PROPERTY(bool playerOpen READ playerOpen NOTIFY playerOpenChanged)
     Q_PROPERTY(int currentStartPosition READ currentStartPosition NOTIFY currentStartPositionChanged)
+    Q_PROPERTY(PointerWatch *pointerWatcher READ pointerWatcher CONSTANT)
 
 public:
     ~AppController() override;
@@ -80,6 +82,7 @@ public:
     [[nodiscard]] QString currentVideoId() const;
     [[nodiscard]] bool playerOpen() const;
     [[nodiscard]] int currentStartPosition() const;
+    [[nodiscard]] PointerWatch *pointerWatcher();
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();

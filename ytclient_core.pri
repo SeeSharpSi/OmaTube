@@ -19,6 +19,7 @@ HEADERS += \
     $$PROJECT_ROOT/src/models/channelmodel.h \
     $$PROJECT_ROOT/src/models/feedmodel.h \
     $$PROJECT_ROOT/src/models/livechannelmodel.h \
+    $$PROJECT_ROOT/src/pointerwatch.h \
     $$PROJECT_ROOT/src/refreshservice.h \
     $$PROJECT_ROOT/src/repository.h \
     $$PROJECT_ROOT/src/watchtracker.h \
@@ -29,6 +30,7 @@ SOURCES += \
     $$PROJECT_ROOT/src/models/channelmodel.cpp \
     $$PROJECT_ROOT/src/models/feedmodel.cpp \
     $$PROJECT_ROOT/src/models/livechannelmodel.cpp \
+    $$PROJECT_ROOT/src/pointerwatch.cpp \
     $$PROJECT_ROOT/src/refreshservice.cpp \
     $$PROJECT_ROOT/src/repository.cpp \
     $$PROJECT_ROOT/src/watchtracker.cpp \

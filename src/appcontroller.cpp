@@ -237,6 +237,12 @@ int AppController::currentStartPosition() const
     return m_currentStartPosition;
 }
 
+PointerWatch *AppController::pointerWatcher()
+{
+    static PointerWatch watcher;
+    return &watcher;
+}
+
 void AppController::startupRefresh()
 {
     if (m_startupRefreshRequested)

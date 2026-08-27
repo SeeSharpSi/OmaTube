@@ -147,7 +147,7 @@ Item {
 
             ComboBox {
                 id: qualitySelector
-                Layout.preferredWidth: 120
+                Layout.preferredWidth: 136
                 Layout.preferredHeight: 34
                 model: root.qualityOptions
                 textRole: "label"
@@ -163,16 +163,19 @@ Item {
                 PointingCursor {}
                 background: Rectangle {
                     color: qualitySelector.hovered || qualitySelector.popup.visible
-                        ? Qt.rgba(1,1,1,0.18) : Qt.rgba(1,1,1,0.08)
+                        ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(1, 1, 1, 0.14)
                     radius: 4
-                    border.color: Qt.rgba(1,1,1,0.18)
+                    border.width: 1
+                    border.color: qualitySelector.hovered || qualitySelector.popup.visible
+                        ? Qt.rgba(1, 1, 1, 0.78) : Qt.rgba(1, 1, 1, 0.52)
                 }
                 contentItem: Text {
                     leftPadding: 8
                     rightPadding: 24
-                    text: qualitySelector.displayText
-                    color: root.paper
-                    font.pixelSize: 11
+                    text: qsTr("Quality: %1").arg(qualitySelector.displayText)
+                    color: "#ffffff"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                 }
@@ -181,7 +184,7 @@ Item {
                     y: qualitySelector.height / 2 - height / 2
                     width: 8
                     height: 5
-                    readonly property color chevronColor: root.paper
+                    readonly property color chevronColor: "#ffffff"
                     onChevronColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")

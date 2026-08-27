@@ -90,6 +90,13 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "S"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen
+        onActivated: settingsDialog.open()
+    }
+
+    Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
         enabled: App.playerOpen || root.historyOpen
@@ -426,60 +433,6 @@ ApplicationWindow {
 
     }
 
-    ToolButton {
-        id: settingsButton
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: 18
-        anchors.bottomMargin: 14
-        z: 10
-        width: 40
-        height: 40
-        text: qsTr("Settings")
-        visible: !App.playerOpen
-        onClicked: settingsDialog.open()
-
-        PointingCursor {}
-
-        background: Item {}
-
-        contentItem: Canvas {
-            property color lineColor: settingsButton.hovered ? root.ink : root.mutedInk
-
-            onLineColorChanged: requestPaint()
-            onPaint: {
-                const context = getContext("2d")
-                const centerX = width / 2
-                const centerY = height / 2
-                context.reset()
-                context.strokeStyle = lineColor
-                context.lineWidth = 1.4
-                context.lineCap = "round"
-                context.beginPath()
-                context.arc(centerX, centerY, 5.5, 0, Math.PI * 2)
-                context.stroke()
-                context.beginPath()
-                context.arc(centerX, centerY, 2, 0, Math.PI * 2)
-                context.stroke()
-                context.beginPath()
-                for (let index = 0; index < 8; ++index) {
-                    const angle = index * Math.PI / 4
-                    context.moveTo(
-                        centerX + Math.cos(angle) * 6.5,
-                        centerY + Math.sin(angle) * 6.5)
-                    context.lineTo(
-                        centerX + Math.cos(angle) * 8.5,
-                        centerY + Math.sin(angle) * 8.5)
-                }
-                context.stroke()
-            }
-        }
-
-        ToolTip.visible: hovered
-        ToolTip.delay: 500
-        ToolTip.text: qsTr("Settings")
-    }
-
     Rectangle {
         anchors.left: parent.left
         anchors.bottom: parent.bottom
@@ -522,7 +475,7 @@ ApplicationWindow {
         visible: !App.playerOpen && !root.historyOpen
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("h: history")
+        text: qsTr("h: history\ns: settings")
     }
 
     SettingsDialog {

@@ -90,8 +90,8 @@ private slots:
 private:
     static bool isValidVideoId(const QString &id);
     void requestLoad();
-    void issueLoad(const QString &id);
-    void applyPlaybackOptions();
+    void issueLoad(const QString &id, int startSeconds);
+    void applyPlaybackOptions(int startSeconds);
     void setLoading(bool loading);
     void setEnded(bool ended);
     void setError(const QString &message);
@@ -105,10 +105,11 @@ private:
     int m_maximumVideoHeight = 0;
     bool m_renderReady = false;
     bool m_renderFailed = false;
+    bool m_fileLoaded = false;
     bool m_paused = false;
     double m_position = 0.0;
     double m_duration = 0.0;
-    int m_volume = 0;
+    int m_volume = 100;
     bool m_muted = false;
     bool m_loading = false;
     bool m_buffering = false;

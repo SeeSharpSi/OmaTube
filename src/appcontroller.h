@@ -56,6 +56,12 @@ class AppController final : public QObject
     Q_PROPERTY(QString videoBackend READ videoBackend NOTIFY videoBackendChanged)
     Q_PROPERTY(int maximumVideoHeight READ maximumVideoHeight NOTIFY maximumVideoHeightChanged)
     Q_PROPERTY(bool mpvAvailable READ mpvAvailable CONSTANT)
+    Q_PROPERTY(int playbackVolume READ playbackVolume NOTIFY playbackVolumeChanged)
+    Q_PROPERTY(int currentVideoMaximumHeight READ currentVideoMaximumHeight NOTIFY
+                   currentVideoMaximumHeightChanged)
+    Q_PROPERTY(int currentVideoMaximumHeightOverride READ currentVideoMaximumHeightOverride NOTIFY
+                   currentVideoMaximumHeightOverrideChanged)
+    Q_PROPERTY(QString currentVideoTitle READ currentVideoTitle NOTIFY currentVideoTitleChanged)
 
 public:
     ~AppController() override;
@@ -92,6 +98,10 @@ public:
     [[nodiscard]] QString videoBackend() const;
     [[nodiscard]] int maximumVideoHeight() const;
     [[nodiscard]] bool mpvAvailable() const;
+    [[nodiscard]] int playbackVolume() const;
+    [[nodiscard]] int currentVideoMaximumHeight() const;
+    [[nodiscard]] int currentVideoMaximumHeightOverride() const;
+    [[nodiscard]] QString currentVideoTitle() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -116,6 +126,8 @@ public:
     Q_INVOKABLE void closePlayer();
     Q_INVOKABLE void setVideoBackend(const QString &backend);
     Q_INVOKABLE void setMaximumVideoHeight(int height);
+    Q_INVOKABLE void setPlaybackVolume(int volume);
+    Q_INVOKABLE void setCurrentVideoMaximumHeightOverride(int height);
     Q_INVOKABLE void reportPlayback(const QString &videoId, double positionSeconds, bool playing);
     Q_INVOKABLE QVariantMap watchStatsForVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
@@ -138,6 +150,10 @@ signals:
     void currentStartPositionChanged();
     void videoBackendChanged();
     void maximumVideoHeightChanged();
+    void playbackVolumeChanged();
+    void currentVideoMaximumHeightChanged();
+    void currentVideoMaximumHeightOverrideChanged();
+    void currentVideoTitleChanged();
     void channelAdded(QString title);
 
 private:
@@ -159,6 +175,10 @@ private:
     void setStatusMessage(QString message);
     void setErrorMessage(QString message);
     static QList<qint64> toCategoryIds(const QVariantList &values);
+    static bool isValidVideoId(const QString &videoId);
+    static QString perVideoHeightKey(const QString &videoId);
+    void updateCurrentVideoMaximumHeightForOpen(const QString &videoId);
+    void updateCurrentVideoTitleForOpen(const QString &videoId);
 
     static constexpr int feedPageSize = 50;
 
@@ -188,6 +208,10 @@ private:
     int m_currentStartPosition = 0;
     QString m_videoBackend = QStringLiteral("iframe");
     int m_maximumVideoHeight = 0;
+    int m_playbackVolume = 100;
+    int m_currentVideoMaximumHeight = 0;
+    int m_currentVideoMaximumHeightOverride = -1;
+    QString m_currentVideoTitle;
     WatchTracker m_watchTracker;
     QTimer m_watchFlushTimer;
 

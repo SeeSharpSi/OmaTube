@@ -12,6 +12,8 @@ constexpr auto apiKeySetting = "credentials/youtubeApiKey";
 constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
 constexpr auto playbackBackendSetting = "playback/backend";
 constexpr auto maximumVideoHeightSetting = "playback/maximumVideoHeight";
+constexpr auto playbackVolumeSetting = "playback/volume";
+constexpr auto perVideoHeightPrefix = "playback/videoMaximumHeight/";
 constexpr auto defaultPlaybackBackend = "iframe";
 constexpr int defaultShortVideoCutoffMinutes = 3;
 constexpr int maximumShortVideoCutoffMinutes = 60;
@@ -134,6 +136,10 @@ bool AppController::initialize(QString *error)
     m_videoBackend = storedBackend;
     m_maximumVideoHeight = PlaybackSettings::normalizeMaximumVideoHeight(
         settings.value(QString::fromLatin1(maximumVideoHeightSetting)).toInt());
+    m_playbackVolume = qBound(0, settings.value(QString::fromLatin1(playbackVolumeSetting), 100).toInt(), 100);
+    m_currentVideoMaximumHeight = m_maximumVideoHeight;
+    m_currentVideoMaximumHeightOverride = -1;
+    m_currentVideoTitle.clear();
     reloadCategories();
     reloadChannels();
     reloadFeed();
@@ -279,6 +285,26 @@ bool AppController::mpvAvailable() const
 #else
     return false;
 #endif
+}
+
+int AppController::playbackVolume() const
+{
+    return m_playbackVolume;
+}
+
+int AppController::currentVideoMaximumHeight() const
+{
+    return m_currentVideoMaximumHeight;
+}
+
+int AppController::currentVideoMaximumHeightOverride() const
+{
+    return m_currentVideoMaximumHeightOverride;
+}
+
+QString AppController::currentVideoTitle() const
+{
+    return m_currentVideoTitle;
 }
 
 void AppController::startupRefresh()
@@ -530,11 +556,16 @@ void AppController::openVideo(const QString &videoId)
                                                .value(QStringLiteral("lastPositionSeconds"))
                                                .toInt());
     flushWatchProgress();
+    // Resolve playback inputs before notifying QML that a new video is active.
+    // The player can already exist when switching videos, so it must not load
+    // with the previous video's resume position.
+    resolveStartPosition(videoId);
     if (m_currentVideoId != videoId) {
         m_currentVideoId = videoId;
         emit currentVideoIdChanged();
     }
-    resolveStartPosition(videoId);
+    updateCurrentVideoTitleForOpen(videoId);
+    updateCurrentVideoMaximumHeightForOpen(videoId);
     m_watchFlushTimer.start();
     if (!m_playerOpen) {
         m_playerOpen = true;
@@ -582,6 +613,54 @@ void AppController::setMaximumVideoHeight(int height)
     settings.setValue(QString::fromLatin1(maximumVideoHeightSetting), normalized);
     settings.sync();
     emit maximumVideoHeightChanged();
+    if (m_currentVideoMaximumHeightOverride == -1) {
+        if (m_currentVideoMaximumHeight != normalized) {
+            m_currentVideoMaximumHeight = normalized;
+            emit currentVideoMaximumHeightChanged();
+        }
+    }
+}
+
+void AppController::setPlaybackVolume(int volume)
+{
+    const int clamped = qBound(0, volume, 100);
+    if (m_playbackVolume == clamped)
+        return;
+    m_playbackVolume = clamped;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(playbackVolumeSetting), clamped);
+    settings.sync();
+    emit playbackVolumeChanged();
+}
+
+void AppController::setCurrentVideoMaximumHeightOverride(int height)
+{
+    if (!isValidVideoId(m_currentVideoId))
+        return;
+    int overrideValue = -1;
+    int effective = m_maximumVideoHeight;
+    QSettings settings;
+    const QString key = perVideoHeightKey(m_currentVideoId);
+    if (height == -1) {
+        settings.remove(key);
+        settings.sync();
+        overrideValue = -1;
+        effective = m_maximumVideoHeight;
+    } else {
+        const int normalized = PlaybackSettings::normalizeMaximumVideoHeight(height);
+        settings.setValue(key, normalized);
+        settings.sync();
+        overrideValue = normalized;
+        effective = normalized;
+    }
+    bool overrideChanged = m_currentVideoMaximumHeightOverride != overrideValue;
+    bool effectiveChanged = m_currentVideoMaximumHeight != effective;
+    m_currentVideoMaximumHeightOverride = overrideValue;
+    m_currentVideoMaximumHeight = effective;
+    if (overrideChanged)
+        emit currentVideoMaximumHeightOverrideChanged();
+    if (effectiveChanged)
+        emit currentVideoMaximumHeightChanged();
 }
 
 void AppController::reportPlayback(const QString &videoId, double positionSeconds, bool playing)
@@ -815,4 +894,55 @@ QList<qint64> AppController::toCategoryIds(const QVariantList &values)
             result.append(id);
     }
     return result;
+}
+
+bool AppController::isValidVideoId(const QString &videoId)
+{
+    static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9_-]{11}$"));
+    return re.match(videoId).hasMatch();
+}
+
+QString AppController::perVideoHeightKey(const QString &videoId)
+{
+    return QString::fromLatin1(perVideoHeightPrefix) + videoId;
+}
+
+void AppController::updateCurrentVideoMaximumHeightForOpen(const QString &videoId)
+{
+    QSettings settings;
+    const QString key = perVideoHeightKey(videoId);
+    int overrideValue = -1;
+    int effective = m_maximumVideoHeight;
+    if (settings.contains(key)) {
+        const int stored = PlaybackSettings::normalizeMaximumVideoHeight(settings.value(key).toInt());
+        overrideValue = stored;
+        effective = stored;
+    }
+    bool overrideChanged = m_currentVideoMaximumHeightOverride != overrideValue;
+    bool effectiveChanged = m_currentVideoMaximumHeight != effective;
+    m_currentVideoMaximumHeightOverride = overrideValue;
+    m_currentVideoMaximumHeight = effective;
+    if (overrideChanged)
+        emit currentVideoMaximumHeightOverrideChanged();
+    if (effectiveChanged)
+        emit currentVideoMaximumHeightChanged();
+}
+
+void AppController::updateCurrentVideoTitleForOpen(const QString &videoId)
+{
+    QString title;
+    QString error;
+    const std::optional<Video> video = m_repository.video(videoId, &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        title.clear();
+    } else if (video) {
+        title = video->title;
+    } else {
+        title.clear();
+    }
+    if (m_currentVideoTitle == title)
+        return;
+    m_currentVideoTitle = title;
+    emit currentVideoTitleChanged();
 }

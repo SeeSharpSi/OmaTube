@@ -41,3 +41,6 @@ qrc_*.cpp
 .env
 .env.*
 !.env.example
+
+# Release artifacts
+/dist/

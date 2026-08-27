@@ -18,6 +18,7 @@ Item {
         videoId: root.videoId
         startSeconds: root.startSeconds
         maximumVideoHeight: root.maximumVideoHeight
+        volume: App.playbackVolume
         onPlaybackUpdated: function(positionSeconds, playing) {
             root.playbackUpdated(positionSeconds, playing)
         }

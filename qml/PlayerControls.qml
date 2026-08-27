@@ -31,6 +31,32 @@ Item {
     property real seekPreview: 0
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["|", "/", "-", "\\"]
+    readonly property var qualityOptions: [
+        { label: qsTr("Default"), value: -1 },
+        { label: qsTr("Auto"), value: 0 },
+        { label: qsTr("2160p"), value: 2160 },
+        { label: qsTr("1440p"), value: 1440 },
+        { label: qsTr("1080p"), value: 1080 },
+        { label: qsTr("720p"), value: 720 },
+        { label: qsTr("480p"), value: 480 },
+        { label: qsTr("360p"), value: 360 }
+    ]
+
+    function qualityIndex() {
+        for (let i = 0; i < qualityOptions.length; ++i) {
+            if (qualityOptions[i].value === App.currentVideoMaximumHeightOverride)
+                return i
+        }
+        return 0
+    }
+
+    function qualityLabelForValue(v) {
+        for (let i = 0; i < qualityOptions.length; ++i) {
+            if (qualityOptions[i].value === v)
+                return qualityOptions[i].label
+        }
+        return v === 0 ? qsTr("Auto") : v + "p"
+    }
 
     readonly property string overlayMode: player
         ? (player.errorMessage.length > 0 ? "error"
@@ -78,26 +104,137 @@ Item {
         z: 2
         visible: root.chromeVisible
 
-        ToolButton {
-            anchors.left: parent.left
+        RowLayout {
+            anchors.fill: parent
             anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            implicitHeight: 42
-            text: qsTr("Back")
-            flat: true
-            focusPolicy: Qt.NoFocus
-            onClicked: root.closeRequested()
+            anchors.rightMargin: 8
+            spacing: 8
 
-            PointingCursor {}
-            background: Item {}
+            ToolButton {
+                implicitHeight: 42
+                text: qsTr("Back")
+                flat: true
+                focusPolicy: Qt.NoFocus
+                onClicked: root.closeRequested()
 
-            contentItem: Text {
-                text: parent.text
-                color: parent.hovered ? "#ffffff" : root.ink
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
+                PointingCursor {}
+                background: Item {}
+
+                contentItem: Text {
+                    text: parent.text
+                    color: parent.hovered ? "#ffffff" : root.ink
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
+            Text {
+                id: titleLabel
+                Layout.fillWidth: true
+                Layout.minimumWidth: 80
+                text: App.currentVideoTitle
+                color: root.paper
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignHCenter
+                visible: text.length > 0
+            }
+
+            Item { Layout.fillWidth: true; visible: titleLabel.visible === false }
+
+            ComboBox {
+                id: qualitySelector
+                Layout.preferredWidth: 120
+                Layout.preferredHeight: 34
+                model: root.qualityOptions
+                textRole: "label"
+                valueRole: "value"
+                currentIndex: root.qualityIndex()
+                focusPolicy: Qt.NoFocus
+                onActivated: App.setCurrentVideoMaximumHeightOverride(Number(currentValue))
+                ToolTip.visible: hovered
+                ToolTip.text: App.currentVideoMaximumHeightOverride === -1
+                    ? qsTr("Quality: Default (%1)").arg(root.qualityLabelForValue(App.currentVideoMaximumHeight))
+                    : qsTr("Quality: %1").arg(root.qualityLabelForValue(App.currentVideoMaximumHeightOverride))
+
+                PointingCursor {}
+                background: Rectangle {
+                    color: qualitySelector.hovered || qualitySelector.popup.visible
+                        ? Qt.rgba(1,1,1,0.18) : Qt.rgba(1,1,1,0.08)
+                    radius: 4
+                    border.color: Qt.rgba(1,1,1,0.18)
+                }
+                contentItem: Text {
+                    leftPadding: 8
+                    rightPadding: 24
+                    text: qualitySelector.displayText
+                    color: root.paper
+                    font.pixelSize: 11
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                indicator: Canvas {
+                    x: qualitySelector.width - width - 8
+                    y: qualitySelector.height / 2 - height / 2
+                    width: 8
+                    height: 5
+                    readonly property color chevronColor: root.paper
+                    onChevronColorChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = chevronColor
+                        ctx.lineWidth = 1.2
+                        ctx.lineCap = "round"
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(0, 0.5)
+                        ctx.lineTo(width/2, height-0.5)
+                        ctx.lineTo(width, 0.5)
+                        ctx.stroke()
+                    }
+                }
+                delegate: ItemDelegate {
+                    id: qualityOption
+                    required property int index
+                    required property var modelData
+                    width: qualitySelector.width
+                    highlighted: qualitySelector.highlightedIndex === qualityOption.index
+                    PointingCursor {}
+                    background: Rectangle { color: qualityOption.highlighted ? root.softFill : root.paper }
+                    contentItem: RowLayout {
+                        spacing: 8
+                        Rectangle {
+                            width: 6; height: 6
+                            color: root.accent
+                            visible: qualitySelector.currentIndex === qualityOption.index
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: qualityOption.modelData.label
+                            color: qualitySelector.currentIndex === qualityOption.index ? root.ink : root.mutedInk
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+                popup: Popup {
+                    y: qualitySelector.height + 2
+                    width: qualitySelector.width
+                    implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
+                    padding: 1
+                    background: Rectangle { color: root.paper; border.color: root.rule }
+                    contentItem: ListView {
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: qualitySelector.popup.visible ? qualitySelector.delegateModel : null
+                        currentIndex: qualitySelector.highlightedIndex
+                        interactive: false
+                    }
+                }
             }
         }
     }
@@ -271,7 +408,10 @@ Item {
                 from: 0
                 to: 100
                 value: root.player ? root.player.volume : 0
-                onMoved: if (root.player) root.player.volume = value
+                onMoved: {
+                    if (root.player)
+                        App.setPlaybackVolume(Math.round(value))
+                }
                 onPressedChanged: {
                     if (!pressed) {
                         value = Qt.binding(function() {
@@ -329,14 +469,24 @@ Item {
         sequence: "Up"
         context: Qt.WindowShortcut
         enabled: player
-        onActivated: if (player) player.volume = Math.min(100, (player.volume || 0) + 5)
+        onActivated: {
+            if (player) {
+                const v = Math.min(100, Math.round((player.volume || 0) + 5))
+                App.setPlaybackVolume(v)
+            }
+        }
     }
 
     Shortcut {
         sequence: "Down"
         context: Qt.WindowShortcut
         enabled: player
-        onActivated: if (player) player.volume = Math.max(0, (player.volume || 0) - 5)
+        onActivated: {
+            if (player) {
+                const v = Math.max(0, Math.round((player.volume || 0) - 5))
+                App.setPlaybackVolume(v)
+            }
+        }
     }
 
     Shortcut {

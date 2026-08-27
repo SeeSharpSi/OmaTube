@@ -36,7 +36,9 @@ ApplicationWindow {
     minimumWidth: 620
     minimumHeight: 540
     visible: true
-    title: qsTr("OmaTube")
+    title: App.playerOpen && App.currentVideoTitle.length > 0
+        ? App.currentVideoTitle + " - OmaTube"
+        : qsTr("OmaTube")
     color: paper
     palette.window: paper
     palette.windowText: ink
@@ -537,7 +539,7 @@ ApplicationWindow {
             // evaluated immediately and generates the embed URL.
             if (item.hasOwnProperty("maximumVideoHeight"))
                 item.maximumVideoHeight = Qt.binding(
-                    function() { return App.maximumVideoHeight })
+                    function() { return App.currentVideoMaximumHeight })
             if (item.hasOwnProperty("startSeconds"))
                 item.startSeconds = Qt.binding(function() { return App.currentStartPosition })
             item.videoId = Qt.binding(function() { return App.currentVideoId })

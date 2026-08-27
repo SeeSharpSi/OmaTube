@@ -25,6 +25,7 @@ private slots:
     void opensValidVideo();
     void rejectsInvalidVideo();
     void changesVideoWithoutReopeningPlayer();
+    void changesVideoUsesNewResumePosition();
     void closesPlayer();
     void countsWatchTimeWhilePlaying();
     void ignoresSeeksGapsAndStaleReports();
@@ -32,6 +33,14 @@ private slots:
     void loadMoreHistoryAppendsCachedPages();
     void reloadsWatchHistoryIntoModel();
     void deletesWatchHistoryFromModel();
+    void playbackVolumeDefaultsTo100();
+    void playbackVolumeClampingAndPersistence();
+    void perVideoHeightFallsBackToGlobal();
+    void perVideoHeightOverrideIsolation();
+    void perVideoHeightPersistenceAndDefaultRemoval();
+    void perVideoHeightGlobalChangeRespectsOverride();
+    void currentVideoTitleFromRepository();
+    void currentVideoTitleClearsForUnknownVideo();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -256,6 +265,36 @@ void AppControllerTest::changesVideoWithoutReopeningPlayer()
     QVERIFY(controller->playerOpen());
     QCOMPARE(videoIdChanged.count(), 1);
     QCOMPARE(playerOpenChanged.count(), 0);
+}
+
+void AppControllerTest::changesVideoUsesNewResumePosition()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(
+            makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repository.upsertVideos(
+            {makeVideo(QString::fromUtf8(videoA), QStringLiteral("UCAlpha"), now),
+             makeVideo(QString::fromUtf8(videoB), QStringLiteral("UCAlpha"), now)},
+            &error));
+        QVERIFY(repository.applyWatchProgress(
+            QString::fromUtf8(videoB), 1, 75, true, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->openVideo(QString::fromUtf8(videoA));
+    QCOMPARE(controller->currentStartPosition(), 0);
+
+    controller->openVideo(QString::fromUtf8(videoB));
+    QVERIFY(controller->playerOpen());
+    QCOMPARE(controller->currentStartPosition(), 75);
 }
 
 void AppControllerTest::closesPlayer()
@@ -536,6 +575,246 @@ void AppControllerTest::deletesWatchHistoryFromModel()
     const QVariantMap stats = controller->watchStatsForVideo(QStringLiteral("dQw4w9WgXcQ"));
     QCOMPARE(stats.value(QStringLiteral("watchedSeconds")).toLongLong(), 40);
     QCOMPARE(stats.value(QStringLiteral("watchCount")).toInt(), 2);
+}
+
+void AppControllerTest::playbackVolumeDefaultsTo100()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QCOMPARE(controller->playbackVolume(), 100);
+}
+
+void AppControllerTest::playbackVolumeClampingAndPersistence()
+{
+    QString error;
+    {
+        std::unique_ptr<AppController> controller =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QSignalSpy changed(controller.get(), &AppController::playbackVolumeChanged);
+        controller->setPlaybackVolume(-5);
+        QCOMPARE(controller->playbackVolume(), 0);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(QSettings().value(QString::fromLatin1("playback/volume")).toInt(), 0);
+
+        // No signal when value unchanged after clamping.
+        controller->setPlaybackVolume(-10);
+        QCOMPARE(changed.count(), 1);
+
+        controller->setPlaybackVolume(150);
+        QCOMPARE(controller->playbackVolume(), 100);
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(QSettings().value(QString::fromLatin1("playback/volume")).toInt(), 100);
+
+        controller->setPlaybackVolume(73);
+        QCOMPARE(controller->playbackVolume(), 73);
+        QCOMPARE(changed.count(), 3);
+        QCOMPARE(QSettings().value(QString::fromLatin1("playback/volume")).toInt(), 73);
+    }
+    {
+        std::unique_ptr<AppController> reloaded =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(reloaded->initialize(&error), qPrintable(error));
+        QCOMPARE(reloaded->playbackVolume(), 73);
+    }
+    // Corrupted stored value is clamped on load.
+    QSettings().setValue(QString::fromLatin1("playback/volume"), 999);
+    QSettings().sync();
+    {
+        std::unique_ptr<AppController> clamped =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(clamped->initialize(&error), qPrintable(error));
+        QCOMPARE(clamped->playbackVolume(), 100);
+    }
+}
+
+void AppControllerTest::perVideoHeightFallsBackToGlobal()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->setMaximumVideoHeight(720);
+    QCOMPARE(controller->maximumVideoHeight(), 720);
+
+    const QString videoId = QStringLiteral("dQw4w9WgXcQ");
+    QSignalSpy effectiveChanged(controller.get(), &AppController::currentVideoMaximumHeightChanged);
+    QSignalSpy overrideChanged(controller.get(), &AppController::currentVideoMaximumHeightOverrideChanged);
+    controller->openVideo(videoId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 720);
+    // Opening same video with no stored override should not emit again.
+    effectiveChanged.clear();
+    overrideChanged.clear();
+    controller->openVideo(videoId);
+    QCOMPARE(effectiveChanged.count(), 0);
+    QCOMPARE(overrideChanged.count(), 0);
+}
+
+void AppControllerTest::perVideoHeightOverrideIsolation()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->setMaximumVideoHeight(480);
+
+    const QString videoAId = QStringLiteral("AAAAAAAAAAA");
+    const QString videoBId = QStringLiteral("BBBBBBBBBBB");
+
+    controller->openVideo(videoAId);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 480);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+
+    controller->setCurrentVideoMaximumHeightOverride(1080);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), 1080);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+    QVERIFY(QSettings().contains(QString::fromLatin1("playback/videoMaximumHeight/AAAAAAAAAAA")));
+    QCOMPARE(QSettings().value(QString::fromLatin1("playback/videoMaximumHeight/AAAAAAAAAAA")).toInt(), 1080);
+    QVERIFY(!QSettings().contains(QString::fromLatin1("playback/videoMaximumHeight/BBBBBBBBBBB")));
+
+    controller->openVideo(videoBId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 480);
+
+    controller->openVideo(videoAId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), 1080);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+}
+
+void AppControllerTest::perVideoHeightPersistenceAndDefaultRemoval()
+{
+    QString error;
+    const QString videoId = QStringLiteral("dQw4w9WgXcQ");
+    {
+        std::unique_ptr<AppController> controller =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        controller->setMaximumVideoHeight(720);
+        controller->openVideo(videoId);
+        controller->setCurrentVideoMaximumHeightOverride(1080);
+        QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+        QCOMPARE(QSettings().value(QString::fromLatin1("playback/videoMaximumHeight/dQw4w9WgXcQ")).toInt(), 1080);
+
+        QSignalSpy effectiveChanged(controller.get(), &AppController::currentVideoMaximumHeightChanged);
+        QSignalSpy overrideChanged(controller.get(), &AppController::currentVideoMaximumHeightOverrideChanged);
+        controller->setCurrentVideoMaximumHeightOverride(-1);
+        QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+        QCOMPARE(controller->currentVideoMaximumHeight(), 720);
+        QCOMPARE(effectiveChanged.count(), 1);
+        QCOMPARE(overrideChanged.count(), 1);
+        QVERIFY(!QSettings().contains(QString::fromLatin1("playback/videoMaximumHeight/dQw4w9WgXcQ")));
+    }
+    // Override removal persists across instances, other values remain valid including 0=Auto.
+    QSettings().setValue(QString::fromLatin1("playback/videoMaximumHeight/dQw4w9WgXcQ"), 0);
+    QSettings().sync();
+    {
+        std::unique_ptr<AppController> reloaded =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(reloaded->initialize(&error), qPrintable(error));
+        reloaded->openVideo(videoId);
+        QCOMPARE(reloaded->currentVideoMaximumHeightOverride(), 0);
+        QCOMPARE(reloaded->currentVideoMaximumHeight(), 0);
+        reloaded->setCurrentVideoMaximumHeightOverride(360);
+        QCOMPARE(reloaded->currentVideoMaximumHeight(), 360);
+    }
+}
+
+void AppControllerTest::perVideoHeightGlobalChangeRespectsOverride()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->setMaximumVideoHeight(720);
+    const QString videoId = QStringLiteral("dQw4w9WgXcQ");
+    const QString otherId = QStringLiteral("AAAAAAAAAAA");
+    controller->openVideo(videoId);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 720);
+
+    // No override: global change updates effective.
+    QSignalSpy effectiveChanged(controller.get(), &AppController::currentVideoMaximumHeightChanged);
+    controller->setMaximumVideoHeight(1080);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+    QCOMPARE(effectiveChanged.count(), 1);
+
+    // With override: global change must not affect effective.
+    controller->setCurrentVideoMaximumHeightOverride(480);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 480);
+    effectiveChanged.clear();
+    controller->setMaximumVideoHeight(2160);
+    QCOMPARE(controller->maximumVideoHeight(), 2160);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 480);
+    QCOMPARE(effectiveChanged.count(), 0);
+
+    // Other video without override sees new global.
+    controller->openVideo(otherId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+}
+
+void AppControllerTest::currentVideoTitleFromRepository()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repo(databasePath);
+        QVERIFY2(repo.open(&error), qPrintable(error));
+        QVERIFY(repo.upsertChannel(makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repo.upsertVideos({makeVideo(QStringLiteral("dQw4w9WgXcQ"), QStringLiteral("UCAlpha"), now)}, &error));
+        QVERIFY(repo.upsertVideos({makeVideo(QStringLiteral("AAAAAAAAAAA"), QStringLiteral("UCAlpha"), now)}, &error));
+        // Override title for second video
+        Video second = makeVideo(QStringLiteral("AAAAAAAAAAA"), QStringLiteral("UCAlpha"), now);
+        second.title = QStringLiteral("Second Video Title");
+        QVERIFY(repo.upsertVideos({second}, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+    QSignalSpy titleChanged(controller.get(), &AppController::currentVideoTitleChanged);
+    controller->openVideo(QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(controller->currentVideoTitle(), QStringLiteral("Video dQw4w9WgXcQ"));
+    QCOMPARE(titleChanged.count(), 1);
+
+    titleChanged.clear();
+    controller->openVideo(QStringLiteral("AAAAAAAAAAA"));
+    QCOMPARE(controller->currentVideoTitle(), QStringLiteral("Second Video Title"));
+    QCOMPARE(titleChanged.count(), 1);
+
+    // Switching back updates title again without reopening player effect.
+    titleChanged.clear();
+    controller->openVideo(QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(controller->currentVideoTitle(), QStringLiteral("Video dQw4w9WgXcQ"));
+    QCOMPARE(titleChanged.count(), 1);
+}
+
+void AppControllerTest::currentVideoTitleClearsForUnknownVideo()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repo(databasePath);
+        QVERIFY2(repo.open(&error), qPrintable(error));
+        QVERIFY(repo.upsertChannel(makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repo.upsertVideos({makeVideo(QStringLiteral("dQw4w9WgXcQ"), QStringLiteral("UCAlpha"), now)}, &error));
+    }
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->openVideo(QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(controller->currentVideoTitle(), QStringLiteral("Video dQw4w9WgXcQ"));
+    QSignalSpy titleChanged(controller.get(), &AppController::currentVideoTitleChanged);
+    controller->openVideo(QStringLiteral("BBBBBBBBBBB"));
+    QCOMPARE(controller->currentVideoTitle(), QString());
+    QCOMPARE(titleChanged.count(), 1);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTest)

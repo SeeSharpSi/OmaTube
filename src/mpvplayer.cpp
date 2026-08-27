@@ -18,6 +18,7 @@
 #include <QtQuick/qquickopenglutils.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -95,7 +96,7 @@ private:
     double m_position = 0.0;
     double m_duration = 0.0;
     bool m_paused = false;
-    int m_volume = 0;
+    int m_volume = 100;
     bool m_muted = false;
     bool m_buffering = false;
     bool m_idleActive = false;
@@ -496,6 +497,18 @@ void MpvPlayerNative::setMaximumVideoHeight(int maximumVideoHeight)
         return;
     m_maximumVideoHeight = maximumVideoHeight;
     emit maximumVideoHeightChanged();
+    if (!isValidVideoId(m_videoId))
+        return;
+    if (!m_core || !m_core->initialized() || m_renderFailed)
+        return;
+    if (!m_renderReady) {
+        // Pending load will pick up new quality when ready.
+        return;
+    }
+    int start = m_startSeconds;
+    if (m_fileLoaded && !m_ended && std::isfinite(m_position))
+        start = qMax(0, static_cast<int>(m_position));
+    issueLoad(m_videoId, start);
 }
 
 void MpvPlayerNative::setPaused(bool paused)
@@ -555,6 +568,7 @@ void MpvPlayerNative::stop()
     m_pendingVideoId.clear();
     if (m_core)
         m_core->stop();
+    m_fileLoaded = false;
     setLoading(false);
     setEnded(false);
     m_position = 0.0;
@@ -590,12 +604,13 @@ void MpvPlayerNative::requestLoad()
         m_pendingVideoId = m_videoId;
         return;
     }
-    issueLoad(m_videoId);
+    issueLoad(m_videoId, m_startSeconds);
 }
 
-void MpvPlayerNative::issueLoad(const QString &id)
+void MpvPlayerNative::issueLoad(const QString &id, int startSeconds)
 {
-    applyPlaybackOptions();
+    m_fileLoaded = false;
+    applyPlaybackOptions(startSeconds);
     setError(QString());
     setEnded(false);
     setLoading(true);
@@ -603,7 +618,7 @@ void MpvPlayerNative::issueLoad(const QString &id)
         m_core->loadUrl(QUrl(QStringLiteral("https://www.youtube.com/watch?v=") + id));
 }
 
-void MpvPlayerNative::applyPlaybackOptions()
+void MpvPlayerNative::applyPlaybackOptions(int startSeconds)
 {
     if (!m_core)
         return;
@@ -613,7 +628,7 @@ void MpvPlayerNative::applyPlaybackOptions()
         m_core->clearYtdlFormat();
     else
         m_core->setYtdlFormat(format);
-    m_core->setStartTime(m_startSeconds);
+    m_core->setStartTime(startSeconds);
 }
 
 void MpvPlayerNative::setLoading(bool loading)
@@ -686,6 +701,7 @@ void MpvPlayerNative::onEventsProcessed()
 
 void MpvPlayerNative::onFileLoaded()
 {
+    m_fileLoaded = true;
     setError(QString());
     setEnded(false);
     setLoading(false);
@@ -726,7 +742,7 @@ void MpvPlayerNative::onRenderContextReady()
     if (!m_pendingVideoId.isEmpty()) {
         const QString id = m_pendingVideoId;
         m_pendingVideoId.clear();
-        issueLoad(id);
+        issueLoad(id, m_startSeconds);
     }
 }
 

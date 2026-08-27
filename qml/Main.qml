@@ -31,6 +31,10 @@ ApplicationWindow {
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+    Keybinds {
+        id: keybinds
+    }
+
     width: 900
     height: 820
     minimumWidth: 620
@@ -505,7 +509,7 @@ ApplicationWindow {
         visible: !App.playerOpen && !root.historyOpen
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("h: history\ns: settings\nj/k: scroll\nr: refresh\nq: quit")
+        text: keybinds.footerText("feed")
     }
 
     SettingsDialog {
@@ -520,10 +524,13 @@ ApplicationWindow {
         active: root.historyOpen
         source: "qrc:/qml/HistoryPage.qml"
 
-        onLoaded: item.videoSelected.connect(function(videoId) {
-            root.historyOpen = false
-            App.openVideo(videoId)
-        })
+        onLoaded: {
+            item.keybinds = keybinds
+            item.videoSelected.connect(function(videoId) {
+                root.historyOpen = false
+                App.openVideo(videoId)
+            })
+        }
     }
 
     Loader {

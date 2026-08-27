@@ -3,6 +3,8 @@
 #include "playbacksettings.h"
 #include "repository.h"
 
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -41,6 +43,7 @@ private slots:
     void perVideoHeightGlobalChangeRespectsOverride();
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
+    void keybindsFooterTextOrdering();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -815,6 +818,37 @@ void AppControllerTest::currentVideoTitleClearsForUnknownVideo()
     controller->openVideo(QStringLiteral("BBBBBBBBBBB"));
     QCOMPARE(controller->currentVideoTitle(), QString());
     QCOMPARE(titleChanged.count(), 1);
+}
+
+void AppControllerTest::keybindsFooterTextOrdering()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/qml/Keybinds.qml")));
+    QVERIFY2(!component.isError(), qPrintable(component.errorString()));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QVERIFY2(component.errors().isEmpty(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object != nullptr, qPrintable(component.errorString()));
+    QVERIFY2(!component.isError(), qPrintable(component.errorString()));
+
+    QVariant feedVariant;
+    const bool feedOk = QMetaObject::invokeMethod(
+        object.data(),
+        "footerText",
+        Q_RETURN_ARG(QVariant, feedVariant),
+        Q_ARG(QVariant, QStringLiteral("feed")));
+    QVERIFY2(feedOk, "QMetaObject::invokeMethod footerText(\"feed\") failed");
+    QCOMPARE(feedVariant.toString(), QStringLiteral("h: history\ns: settings\nj/k: scroll\nr: refresh\nq: quit"));
+
+    QVariant historyVariant;
+    const bool historyOk = QMetaObject::invokeMethod(
+        object.data(),
+        "footerText",
+        Q_RETURN_ARG(QVariant, historyVariant),
+        Q_ARG(QVariant, QStringLiteral("history")));
+    QVERIFY2(historyOk, "QMetaObject::invokeMethod footerText(\"history\") failed");
+    QCOMPARE(historyVariant.toString(), QStringLiteral("s: settings\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
 }
 
 QTEST_GUILESS_MAIN(AppControllerTest)

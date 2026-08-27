@@ -12,6 +12,8 @@ Item {
 
     signal videoSelected(string videoId)
 
+    property var keybinds
+
     function scrollBy(delta) {
         const maxY = Math.max(0, historyList.contentHeight - historyList.height)
         historyList.contentY = Math.min(maxY, Math.max(0, historyList.contentY + delta))
@@ -165,6 +167,6 @@ Item {
         anchors.bottomMargin: 14
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("right-click: delete\ns: settings\nq: quit\nesc: feed\nj/k: scroll")
+        text: keybinds ? keybinds.footerText("history") : ""
     }
 }

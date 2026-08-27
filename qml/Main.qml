@@ -120,6 +120,31 @@ ApplicationWindow {
         }
     }
 
+    Shortcut {
+        sequence: "q"
+        context: Qt.WindowShortcut
+        onActivated: Qt.quit()
+    }
+
+    Shortcut {
+        sequence: "j"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen
+        onActivated: {
+            const maxY = Math.max(0, feedList.contentHeight - feedList.height)
+            feedList.contentY = Math.min(maxY, feedList.contentY + 120)
+        }
+    }
+
+    Shortcut {
+        sequence: "k"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen
+        onActivated: {
+            feedList.contentY = Math.max(0, feedList.contentY - 120)
+        }
+    }
+
     ColumnLayout {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -435,9 +460,9 @@ ApplicationWindow {
 
     Rectangle {
         anchors.left: parent.left
-        anchors.bottom: parent.bottom
+        anchors.top: parent.top
         anchors.leftMargin: 18
-        anchors.bottomMargin: 36
+        anchors.topMargin: 18
         z: 10
         width: refreshRow.implicitWidth + 16
         height: 32
@@ -475,7 +500,7 @@ ApplicationWindow {
         visible: !App.playerOpen && !root.historyOpen
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("h: history\ns: settings")
+        text: qsTr("h: history\ns: settings\nj/k: scroll\nr: refresh\nq: quit")
     }
 
     SettingsDialog {

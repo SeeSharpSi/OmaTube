@@ -165,6 +165,6 @@ Item {
         anchors.bottomMargin: 14
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("right-click: delete\nr: refresh\ns: settings\nq: quit\nesc: feed\nj/k: scroll")
+        text: qsTr("right-click: delete\ns: settings\nq: quit\nesc: feed\nj/k: scroll")
     }
 }

@@ -55,14 +55,20 @@ void PointerWatch::poll()
     }
     if (pos != m_lastPos) {
         m_lastPos = pos;
+        if (!cursorOverWindow()) {
+            setHidden(true);
+            return;
+        }
         m_idle.restart();
         if (m_hidden)
             setHidden(false);
         return;
     }
-    if (m_hidden || !m_window->isActive())
+    if (!cursorOverWindow()) {
+        setHidden(true);
         return;
-    if (!cursorOverWindow())
+    }
+    if (m_hidden || !m_window->isActive())
         return;
     if (m_idle.elapsed() >= idleTimeoutMs)
         setHidden(true);

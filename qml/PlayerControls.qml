@@ -106,7 +106,7 @@ Item {
         id: overlay
         anchors.fill: parent
         z: 1
-        visible: root.overlayMode !== "none"
+        visible: root.chromeVisible && root.overlayMode !== "none"
 
         ColumnLayout {
             anchors.centerIn: parent

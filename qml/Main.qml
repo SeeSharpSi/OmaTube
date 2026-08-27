@@ -78,21 +78,14 @@ ApplicationWindow {
     Shortcut {
         sequence: "R"
         context: Qt.WindowShortcut
-        enabled: !root.modalOpen && !App.refreshing
+        enabled: !settingsDialog.visible && !App.playerOpen && !App.refreshing
         onActivated: App.refresh()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+,"
-        context: Qt.WindowShortcut
-        enabled: !root.modalOpen
-        onActivated: settingsDialog.open()
     }
 
     Shortcut {
         sequence: "S"
         context: Qt.WindowShortcut
-        enabled: !root.modalOpen
+        enabled: !settingsDialog.visible && !App.playerOpen
         onActivated: settingsDialog.open()
     }
 
@@ -129,8 +122,13 @@ ApplicationWindow {
     Shortcut {
         sequence: "j"
         context: Qt.WindowShortcut
-        enabled: !root.modalOpen
+        enabled: !settingsDialog.visible && !App.playerOpen
         onActivated: {
+            if (root.historyOpen) {
+                if (historyLoader.item)
+                    historyLoader.item.scrollBy(120)
+                return
+            }
             const maxY = Math.max(0, feedList.contentHeight - feedList.height)
             feedList.contentY = Math.min(maxY, feedList.contentY + 120)
         }
@@ -139,8 +137,13 @@ ApplicationWindow {
     Shortcut {
         sequence: "k"
         context: Qt.WindowShortcut
-        enabled: !root.modalOpen
+        enabled: !settingsDialog.visible && !App.playerOpen
         onActivated: {
+            if (root.historyOpen) {
+                if (historyLoader.item)
+                    historyLoader.item.scrollBy(-120)
+                return
+            }
             feedList.contentY = Math.max(0, feedList.contentY - 120)
         }
     }

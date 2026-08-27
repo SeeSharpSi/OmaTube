@@ -12,6 +12,11 @@ Item {
 
     signal videoSelected(string videoId)
 
+    function scrollBy(delta) {
+        const maxY = Math.max(0, historyList.contentHeight - historyList.height)
+        historyList.contentY = Math.min(maxY, Math.max(0, historyList.contentY + delta))
+    }
+
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
     readonly property color ink: themeColors.foreground
@@ -160,6 +165,6 @@ Item {
         anchors.bottomMargin: 14
         color: root.mutedInk
         font.pixelSize: 11
-        text: qsTr("right-click: delete\nesc: feed")
+        text: qsTr("right-click: delete\nr: refresh\ns: settings\nq: quit\nesc: feed\nj/k: scroll")
     }
 }

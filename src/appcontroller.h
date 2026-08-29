@@ -112,6 +112,7 @@ public:
     Q_INVOKABLE bool addCategory(const QString &name);
     Q_INVOKABLE bool renameCategory(qint64 categoryId, const QString &name);
     Q_INVOKABLE bool removeCategory(qint64 categoryId);
+    Q_INVOKABLE bool moveCategory(qint64 categoryId, int targetIndex);
     Q_INVOKABLE void addChannel(const QString &input, const QVariantList &categoryIds);
     Q_INVOKABLE bool removeChannel(const QString &channelId);
     Q_INVOKABLE bool setChannelInCategory(

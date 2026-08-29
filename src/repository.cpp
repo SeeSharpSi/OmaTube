@@ -143,6 +143,65 @@ bool Repository::removeCategory(qint64 id, QString *error)
     return true;
 }
 
+bool Repository::moveCategory(qint64 id, int targetIndex, QString *error)
+{
+    QList<qint64> ids;
+    QSqlQuery selectQuery(m_database);
+    if (!selectQuery.exec(QStringLiteral("SELECT id FROM categories ORDER BY sort_order, name"))) {
+        setError(error, queryError(selectQuery));
+        return false;
+    }
+    while (selectQuery.next())
+        ids.append(selectQuery.value(0).toLongLong());
+    if (selectQuery.lastError().isValid()) {
+        setError(error, queryError(selectQuery));
+        return false;
+    }
+    selectQuery.finish();
+
+    const int sourceIndex = ids.indexOf(id);
+    if (sourceIndex < 0) {
+        setError(error, QStringLiteral("Category does not exist."));
+        return false;
+    }
+    if (targetIndex < 0 || targetIndex >= ids.size()) {
+        setError(error, QStringLiteral("Target index is out of range."));
+        return false;
+    }
+    if (sourceIndex == targetIndex)
+        return true;
+
+    ids.move(sourceIndex, targetIndex);
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery updateQuery(m_database);
+    updateQuery.prepare(QStringLiteral("UPDATE categories SET sort_order = ? WHERE id = ?"));
+    for (int index = 0; index < ids.size(); ++index) {
+        updateQuery.bindValue(0, index);
+        updateQuery.bindValue(1, ids.at(index));
+        if (!updateQuery.exec()) {
+            m_database.rollback();
+            setError(error, queryError(updateQuery));
+            return false;
+        }
+        if (updateQuery.numRowsAffected() != 1) {
+            m_database.rollback();
+            setError(error, QStringLiteral("Category does not exist."));
+            return false;
+        }
+    }
+    if (!m_database.commit()) {
+        const QString commitError = m_database.lastError().text();
+        m_database.rollback();
+        setError(error, commitError);
+        return false;
+    }
+    return true;
+}
+
 QList<Channel> Repository::channels(std::optional<qint64> categoryId, QString *error) const
 {
     QList<Channel> result;

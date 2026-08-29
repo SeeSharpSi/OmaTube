@@ -46,6 +46,7 @@ private slots:
     void perVideoHeightGlobalChangeRespectsOverride();
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
+    void movesCategoriesAndPersists();
     void keybindsFooterTextOrdering();
     void spaceHoldShortPressEmitsTappedOnly();
     void spaceHoldLongPressTransitionsHeld();
@@ -825,6 +826,41 @@ void AppControllerTest::currentVideoTitleClearsForUnknownVideo()
     controller->openVideo(QStringLiteral("BBBBBBBBBBB"));
     QCOMPARE(controller->currentVideoTitle(), QString());
     QCOMPARE(titleChanged.count(), 1);
+}
+
+void AppControllerTest::movesCategoriesAndPersists()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    QList<qint64> categoryIds;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        for (const QString &name : {QStringLiteral("One"), QStringLiteral("Two"), QStringLiteral("Three")})
+            categoryIds.append(repository.addCategory(name, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QVERIFY(controller->moveCategory(categoryIds.at(1), 0));
+    QCOMPARE(controller->categories()->data(controller->categories()->index(0), CategoryModel::CategoryIdRole)
+                 .toLongLong(),
+             categoryIds.at(1));
+    QCOMPARE(controller->categories()->data(controller->categories()->index(1), CategoryModel::CategoryIdRole)
+                 .toLongLong(),
+             categoryIds.at(0));
+    QCOMPARE(controller->categories()->data(controller->categories()->index(2), CategoryModel::CategoryIdRole)
+                 .toLongLong(),
+             categoryIds.at(2));
+    QVERIFY(!controller->moveCategory(categoryIds.at(1), 3));
+    QVERIFY(!controller->errorMessage().isEmpty());
+    controller.reset();
+
+    Repository repository(databasePath);
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QCOMPARE(repository.categories().value(0).id, categoryIds.at(1));
 }
 
 void AppControllerTest::keybindsFooterTextOrdering()

@@ -430,6 +430,18 @@ bool AppController::removeCategory(qint64 categoryId)
     return true;
 }
 
+bool AppController::moveCategory(qint64 categoryId, int targetIndex)
+{
+    QString error;
+    if (!m_repository.moveCategory(categoryId, targetIndex, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    reloadCategories();
+    setStatusMessage(QStringLiteral("Category moved."));
+    return true;
+}
+
 void AppController::addChannel(const QString &input, const QVariantList &categoryIds)
 {
     if (m_addingChannel)

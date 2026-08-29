@@ -383,13 +383,32 @@ void RepositoryTest::categoryLifecycle()
     QVERIFY2(newsId > 0, qPrintable(error));
     const qint64 musicId = repository.addCategory(QStringLiteral("Music"), &error);
     QVERIFY2(musicId > 0, qPrintable(error));
+    const qint64 sportsId = repository.addCategory(QStringLiteral("Sports"), &error);
+    QVERIFY2(sportsId > 0, qPrintable(error));
+    const qint64 filmsId = repository.addCategory(QStringLiteral("Films"), &error);
+    QVERIFY2(filmsId > 0, qPrintable(error));
 
     QCOMPARE(repository.categories(), QList<Category>({{newsId, QStringLiteral("News")},
-                                                        {musicId, QStringLiteral("Music")}}));
+                                                        {musicId, QStringLiteral("Music")},
+                                                        {sportsId, QStringLiteral("Sports")},
+                                                        {filmsId, QStringLiteral("Films")}}));
+    QVERIFY(repository.moveCategory(sportsId, 0, &error));
+    QCOMPARE(repository.categories().value(0).id, sportsId);
+    QVERIFY(repository.moveCategory(sportsId, 3, &error));
+    QCOMPARE(repository.categories().value(3).id, sportsId);
+    const QList<Category> beforeNoOp = repository.categories();
+    QVERIFY(repository.moveCategory(sportsId, 3, &error));
+    QCOMPARE(repository.categories(), beforeNoOp);
+    QVERIFY(!repository.moveCategory(-1, 0, &error));
+    QCOMPARE(repository.categories(), beforeNoOp);
+    QVERIFY(!repository.moveCategory(filmsId, -1, &error));
+    QCOMPARE(repository.categories(), beforeNoOp);
+    QVERIFY(!repository.moveCategory(filmsId, 4, &error));
+    QCOMPARE(repository.categories(), beforeNoOp);
     QVERIFY(repository.renameCategory(newsId, QStringLiteral("Current events"), &error));
-    QCOMPARE(repository.categories().first().name, QStringLiteral("Current events"));
+    QCOMPARE(repository.categories().value(0).name, QStringLiteral("Current events"));
     QVERIFY(repository.removeCategory(musicId, &error));
-    QCOMPARE(repository.categories().size(), 1);
+    QCOMPARE(repository.categories().size(), 3);
     QCOMPARE(repository.addCategory(QStringLiteral("  "), &error), -1);
     QCOMPARE(error, QStringLiteral("Category name cannot be empty."));
 }

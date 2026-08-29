@@ -30,6 +30,7 @@ public:
     qint64 addCategory(const QString &name, QString *error = nullptr);
     bool renameCategory(qint64 id, const QString &name, QString *error = nullptr);
     bool removeCategory(qint64 id, QString *error = nullptr);
+    bool moveCategory(qint64 id, int targetIndex, QString *error = nullptr);
 
     [[nodiscard]] QList<Channel> channels(
         std::optional<qint64> categoryId = std::nullopt,

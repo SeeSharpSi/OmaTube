@@ -244,6 +244,48 @@ ApplicationWindow {
         }
 
         Flickable {
+            id: categoryFlickable
+            property Item draggedCategory: null
+
+            function updateCategoryDropIndicator() {
+                const dragged = draggedCategory
+                if (dragged === null) {
+                    categoryDropIndicator.visible = false
+                    return
+                }
+
+                let nextItem = null
+                let priorItem = null
+                let rank = 0
+                for (let i = 0; i < categoryRepeater.count; ++i) {
+                    const item = categoryRepeater.itemAt(i)
+                    if (item === null || item === dragged)
+                        continue
+                    if (rank === dragged.candidateIndex) {
+                        nextItem = item
+                        break
+                    }
+                    priorItem = item
+                    ++rank
+                }
+
+                let lineCenter = 0
+                if (nextItem !== null) {
+                    lineCenter = categoryRow.x + nextItem.x - categoryRow.spacing / 2
+                } else if (priorItem !== null) {
+                    lineCenter = categoryRow.x + priorItem.x + priorItem.width
+                        + categoryRow.spacing / 2
+                } else {
+                    categoryDropIndicator.visible = false
+                    return
+                }
+
+                categoryDropIndicator.x = Math.max(0, Math.min(
+                    categoryRow.implicitWidth - categoryDropIndicator.width,
+                    lineCenter - categoryDropIndicator.width / 2))
+                categoryDropIndicator.visible = true
+            }
+
             Layout.fillWidth: true
             implicitHeight: 42
             contentWidth: categoryRow.implicitWidth
@@ -257,12 +299,28 @@ ApplicationWindow {
                 spacing: 8
 
                 Repeater {
+                    id: categoryRepeater
                     model: App.categories
 
                     delegate: Button {
                         id: categoryButton
                         required property var categoryId
                         required property string name
+                        required property int index
+                        property int candidateIndex: index
+
+                        function updateDropTarget(offsetX) {
+                            const draggedCenter = categoryButton.x + categoryButton.width / 2 + offsetX
+                            let target = 0
+                            for (let i = 0; i < categoryRepeater.count; ++i) {
+                                const item = categoryRepeater.itemAt(i)
+                                if (item !== null && item !== categoryButton
+                                    && item.x + item.width / 2 < draggedCenter)
+                                    ++target
+                            }
+                            categoryButton.candidateIndex = target
+                            categoryFlickable.updateCategoryDropIndicator()
+                        }
 
                         height: 40
                         leftPadding: 18
@@ -270,6 +328,37 @@ ApplicationWindow {
                         text: categoryButton.name
                         flat: true
                         onClicked: App.selectCategory(categoryButton.categoryId)
+
+                        transform: Translate {
+                            x: categoryDrag.active ? categoryDrag.activeTranslation.x : 0
+                        }
+                        z: categoryDrag.active ? 1 : 0
+                        opacity: categoryDrag.active ? 0.85 : 1
+
+                        DragHandler {
+                            id: categoryDrag
+                            target: null
+                            yAxis.enabled: false
+
+                            onActiveTranslationChanged: {
+                                if (!active)
+                                    return
+                                categoryButton.updateDropTarget(activeTranslation.x)
+                            }
+
+                            onActiveChanged: {
+                                if (active) {
+                                    categoryFlickable.draggedCategory = categoryButton
+                                    categoryButton.updateDropTarget(activeTranslation.x)
+                                    return
+                                }
+                                const candidate = categoryButton.candidateIndex
+                                categoryFlickable.draggedCategory = null
+                                categoryDropIndicator.visible = false
+                                if (candidate !== categoryButton.index)
+                                    App.moveCategory(categoryButton.categoryId, candidate)
+                            }
+                        }
 
                         PointingCursor {}
 
@@ -292,6 +381,17 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+
+            Rectangle {
+                id: categoryDropIndicator
+                width: 2
+                height: 32
+                y: 4
+                z: 2
+                visible: false
+                color: root.accent
+                radius: 1
             }
         }
 

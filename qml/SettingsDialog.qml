@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import YtClient
 
@@ -489,6 +490,27 @@ Dialog {
                             visible: parent.count === 0
                         }
                     }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: qsTr("Import JSON")
+                            onClicked: channelImportDialog.open()
+
+                            PointingCursor {}
+                        }
+
+                        Button {
+                            text: qsTr("Export JSON")
+                            onClicked: channelExportDialog.open()
+
+                            PointingCursor {}
+                        }
+                    }
                 }
             }
 
@@ -504,6 +526,27 @@ Dialog {
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: qsTr("Import JSON")
+                            onClicked: categoryImportDialog.open()
+
+                            PointingCursor {}
+                        }
+
+                        Button {
+                            text: qsTr("Export JSON")
+                            onClicked: categoryExportDialog.open()
+
+                            PointingCursor {}
+                        }
                     }
 
                     RowLayout {
@@ -1240,5 +1283,39 @@ Dialog {
             else
                 App.removeChannel(root.pendingId)
         }
+    }
+
+    FileDialog {
+        id: channelImportDialog
+        title: qsTr("Import channels")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: App.importChannels(selectedFile)
+    }
+
+    FileDialog {
+        id: channelExportDialog
+        title: qsTr("Export channels")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: App.exportChannels(selectedFile)
+    }
+
+    FileDialog {
+        id: categoryImportDialog
+        title: qsTr("Import categories")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: App.importCategories(selectedFile)
+    }
+
+    FileDialog {
+        id: categoryExportDialog
+        title: qsTr("Export categories")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: App.exportCategories(selectedFile)
     }
 }

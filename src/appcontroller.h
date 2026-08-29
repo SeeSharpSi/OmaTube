@@ -15,6 +15,7 @@
 #include <QDateTime>
 #include <QObject>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantList>
 #include <QtQmlIntegration>
 
@@ -119,6 +120,10 @@ public:
         const QString &channelId,
         qint64 categoryId,
         bool member);
+    Q_INVOKABLE bool exportChannels(const QUrl &fileUrl);
+    Q_INVOKABLE bool importChannels(const QUrl &fileUrl);
+    Q_INVOKABLE bool exportCategories(const QUrl &fileUrl);
+    Q_INVOKABLE bool importCategories(const QUrl &fileUrl);
     Q_INVOKABLE bool setApiKey(const QString &apiKey, bool rememberLocally);
     Q_INVOKABLE void clearApiKey();
     Q_INVOKABLE void setShortVideoCutoffMinutes(int minutes);

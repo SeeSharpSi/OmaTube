@@ -3,9 +3,17 @@
 #include "playbacksettings.h"
 
 #include <QCoreApplication>
+#include <QFile>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QQmlEngine>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSettings>
+#include <QSet>
 
 namespace {
 constexpr auto apiKeySetting = "credentials/youtubeApiKey";
@@ -22,6 +30,118 @@ constexpr int minimumResumePositionSeconds = 30;
 // Positions within this distance of the end count as finished; do not resume.
 constexpr int resumeEndThresholdSeconds = 90;
 constexpr int watchFlushIntervalMs = 30'000;
+constexpr auto channelsExportFormat = "omatube-channels";
+constexpr auto categoriesExportFormat = "omatube-categories";
+constexpr int exportFormatVersion = 1;
+
+QString localFilePath(const QUrl &fileUrl, QString *error)
+{
+    if (!fileUrl.isLocalFile()) {
+        if (error)
+            *error = QStringLiteral("Choose a local file.");
+        return {};
+    }
+
+    const QString path = fileUrl.toLocalFile();
+    if (path.isEmpty() && error)
+        *error = QStringLiteral("Choose a local file.");
+    return path;
+}
+
+bool writeJsonFile(const QUrl &fileUrl, const QJsonObject &object, QString *error)
+{
+    const QString path = localFilePath(fileUrl, error);
+    if (path.isEmpty())
+        return false;
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        if (error)
+            *error = QStringLiteral("Could not open export file: %1").arg(file.errorString());
+        return false;
+    }
+    if (file.write(QJsonDocument(object).toJson(QJsonDocument::Indented)) < 0) {
+        if (error)
+            *error = QStringLiteral("Could not write export file: %1").arg(file.errorString());
+        return false;
+    }
+    if (!file.commit()) {
+        if (error)
+            *error = QStringLiteral("Could not save export file: %1").arg(file.errorString());
+        return false;
+    }
+    return true;
+}
+
+bool readExportArray(
+    const QUrl &fileUrl,
+    const QString &expectedFormat,
+    const QString &arrayName,
+    QJsonArray *result,
+    QString *error)
+{
+    const QString path = localFilePath(fileUrl, error);
+    if (path.isEmpty())
+        return false;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error)
+            *error = QStringLiteral("Could not open import file: %1").arg(file.errorString());
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        if (error)
+            *error = QStringLiteral("Import file is not a valid JSON object.");
+        return false;
+    }
+
+    const QJsonObject object = document.object();
+    if (object.value(QStringLiteral("format")).toString() != expectedFormat) {
+        if (error)
+            *error = QStringLiteral("Import file has the wrong OmaTube format.");
+        return false;
+    }
+    const QJsonValue version = object.value(QStringLiteral("version"));
+    if (!version.isDouble() || version.toDouble() != exportFormatVersion) {
+        if (error)
+            *error = QStringLiteral("Import file version is not supported.");
+        return false;
+    }
+    const QJsonValue entries = object.value(arrayName);
+    if (!entries.isArray()) {
+        if (error)
+            *error = QStringLiteral("Import file is missing the '%1' array.").arg(arrayName);
+        return false;
+    }
+
+    *result = entries.toArray();
+    return true;
+}
+
+bool jsonString(
+    const QJsonObject &object,
+    const QString &name,
+    bool required,
+    QString *result,
+    QString *error)
+{
+    const QJsonValue value = object.value(name);
+    if (value.isUndefined() && !required) {
+        result->clear();
+        return true;
+    }
+    if (!value.isString() || (required && value.toString().trimmed().isEmpty())) {
+        if (error)
+            *error = QStringLiteral("Import field '%1' must be a non-empty string.").arg(name);
+        return false;
+    }
+    *result = value.toString();
+    return true;
+}
 }
 
 AppController *AppController::s_instance = nullptr;
@@ -503,6 +623,293 @@ bool AppController::setChannelInCategory(
     }
     reloadChannels();
     reloadFeed();
+    return true;
+}
+
+bool AppController::exportChannels(const QUrl &fileUrl)
+{
+    QString error;
+    const QList<Category> categories = m_repository.categories(&error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    QHash<qint64, QString> categoryNames;
+    for (const Category &category : categories)
+        categoryNames.insert(category.id, category.name);
+
+    const QList<Channel> channels = m_repository.channels(std::nullopt, &error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    QJsonArray channelArray;
+    for (const Channel &channel : channels) {
+        const QList<qint64> categoryIds = m_repository.categoryIdsForChannel(channel.id, &error);
+        if (!error.isEmpty()) {
+            setErrorMessage(error);
+            return false;
+        }
+
+        QJsonArray channelCategories;
+        for (const qint64 categoryId : categoryIds) {
+            if (categoryNames.contains(categoryId))
+                channelCategories.append(categoryNames.value(categoryId));
+        }
+        channelArray.append(QJsonObject{
+            {QStringLiteral("id"), channel.id},
+            {QStringLiteral("originalInput"), channel.originalInput},
+            {QStringLiteral("handle"), channel.handle},
+            {QStringLiteral("title"), channel.title},
+            {QStringLiteral("avatarUrl"), channel.avatarUrl},
+            {QStringLiteral("uploadsPlaylistId"), channel.uploadsPlaylistId},
+            {QStringLiteral("metadataFetchedAt"),
+             channel.metadataFetchedAt.isValid()
+                 ? channel.metadataFetchedAt.toUTC().toString(Qt::ISODateWithMs)
+                 : QString()},
+            {QStringLiteral("categories"), channelCategories},
+        });
+    }
+
+    const QJsonObject object{
+        {QStringLiteral("format"), QString::fromLatin1(channelsExportFormat)},
+        {QStringLiteral("version"), exportFormatVersion},
+        {QStringLiteral("channels"), channelArray},
+    };
+    if (!writeJsonFile(fileUrl, object, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    setErrorMessage({});
+    setStatusMessage(channelArray.size() == 1
+                         ? QStringLiteral("Exported 1 channel.")
+                         : QStringLiteral("Exported %1 channels.").arg(channelArray.size()));
+    return true;
+}
+
+bool AppController::importChannels(const QUrl &fileUrl)
+{
+    QString error;
+    QJsonArray channelArray;
+    if (!readExportArray(
+            fileUrl,
+            QString::fromLatin1(channelsExportFormat),
+            QStringLiteral("channels"),
+            &channelArray,
+            &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    QList<Repository::ChannelImportRecord> records;
+    QSet<QString> channelIds;
+    for (const QJsonValue &value : channelArray) {
+        if (!value.isObject()) {
+            setErrorMessage(QStringLiteral("Every channel entry must be a JSON object."));
+            return false;
+        }
+
+        const QJsonObject object = value.toObject();
+        Repository::ChannelImportRecord record;
+        if (!jsonString(object, QStringLiteral("id"), true, &record.channel.id, &error)
+            || !jsonString(
+                object,
+                QStringLiteral("originalInput"),
+                false,
+                &record.channel.originalInput,
+                &error)
+            || !jsonString(object, QStringLiteral("handle"), false, &record.channel.handle, &error)
+            || !jsonString(object, QStringLiteral("title"), true, &record.channel.title, &error)
+            || !jsonString(
+                object,
+                QStringLiteral("avatarUrl"),
+                false,
+                &record.channel.avatarUrl,
+                &error)
+            || !jsonString(
+                object,
+                QStringLiteral("uploadsPlaylistId"),
+                true,
+                &record.channel.uploadsPlaylistId,
+                &error)) {
+            setErrorMessage(error);
+            return false;
+        }
+        record.channel.id = record.channel.id.trimmed();
+        record.channel.title = record.channel.title.trimmed();
+        record.channel.uploadsPlaylistId = record.channel.uploadsPlaylistId.trimmed();
+        if (channelIds.contains(record.channel.id)) {
+            setErrorMessage(QStringLiteral("Import file contains duplicate channel IDs."));
+            return false;
+        }
+        channelIds.insert(record.channel.id);
+
+        const QJsonValue fetchedAt = object.value(QStringLiteral("metadataFetchedAt"));
+        if (!fetchedAt.isUndefined()) {
+            if (!fetchedAt.isString()) {
+                setErrorMessage(QStringLiteral("Import field 'metadataFetchedAt' must be a string."));
+                return false;
+            }
+            const QString timestamp = fetchedAt.toString();
+            if (!timestamp.isEmpty()) {
+                record.channel.metadataFetchedAt = QDateTime::fromString(timestamp, Qt::ISODateWithMs);
+                if (!record.channel.metadataFetchedAt.isValid()) {
+                    setErrorMessage(QStringLiteral("Import field 'metadataFetchedAt' is invalid."));
+                    return false;
+                }
+                record.channel.metadataFetchedAt = record.channel.metadataFetchedAt.toUTC();
+            }
+        }
+
+        const QJsonValue categories = object.value(QStringLiteral("categories"));
+        if (!categories.isUndefined()) {
+            if (!categories.isArray()) {
+                setErrorMessage(QStringLiteral("Import field 'categories' must be an array."));
+                return false;
+            }
+            QSet<QString> names;
+            for (const QJsonValue &categoryValue : categories.toArray()) {
+                if (!categoryValue.isString() || categoryValue.toString().trimmed().isEmpty()) {
+                    setErrorMessage(QStringLiteral("Channel category names must be non-empty strings."));
+                    return false;
+                }
+                const QString name = categoryValue.toString().trimmed();
+                if (!names.contains(name)) {
+                    names.insert(name);
+                    record.categoryNames.append(name);
+                }
+            }
+        }
+        records.append(std::move(record));
+    }
+
+    if (!m_repository.importChannels(records, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    setErrorMessage({});
+    reloadCategories();
+    reloadChannels();
+    reloadFeed();
+    setStatusMessage(records.size() == 1
+                         ? QStringLiteral("Imported 1 channel.")
+                         : QStringLiteral("Imported %1 channels.").arg(records.size()));
+    return true;
+}
+
+bool AppController::exportCategories(const QUrl &fileUrl)
+{
+    QString error;
+    const QList<Category> categories = m_repository.categories(&error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    QJsonArray categoryArray;
+    for (const Category &category : categories) {
+        const QList<Channel> channels = m_repository.channels(category.id, &error);
+        if (!error.isEmpty()) {
+            setErrorMessage(error);
+            return false;
+        }
+        QJsonArray channelIds;
+        for (const Channel &channel : channels)
+            channelIds.append(channel.id);
+        categoryArray.append(QJsonObject{
+            {QStringLiteral("name"), category.name},
+            {QStringLiteral("channelIds"), channelIds},
+        });
+    }
+
+    const QJsonObject object{
+        {QStringLiteral("format"), QString::fromLatin1(categoriesExportFormat)},
+        {QStringLiteral("version"), exportFormatVersion},
+        {QStringLiteral("categories"), categoryArray},
+    };
+    if (!writeJsonFile(fileUrl, object, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    setErrorMessage({});
+    setStatusMessage(categoryArray.size() == 1
+                         ? QStringLiteral("Exported 1 category.")
+                         : QStringLiteral("Exported %1 categories.").arg(categoryArray.size()));
+    return true;
+}
+
+bool AppController::importCategories(const QUrl &fileUrl)
+{
+    QString error;
+    QJsonArray categoryArray;
+    if (!readExportArray(
+            fileUrl,
+            QString::fromLatin1(categoriesExportFormat),
+            QStringLiteral("categories"),
+            &categoryArray,
+            &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+
+    QList<Repository::CategoryImportRecord> records;
+    QSet<QString> categoryNames;
+    for (const QJsonValue &value : categoryArray) {
+        if (!value.isObject()) {
+            setErrorMessage(QStringLiteral("Every category entry must be a JSON object."));
+            return false;
+        }
+
+        const QJsonObject object = value.toObject();
+        Repository::CategoryImportRecord record;
+        if (!jsonString(object, QStringLiteral("name"), true, &record.name, &error)) {
+            setErrorMessage(error);
+            return false;
+        }
+        record.name = record.name.trimmed();
+        if (categoryNames.contains(record.name)) {
+            setErrorMessage(QStringLiteral("Import file contains duplicate category names."));
+            return false;
+        }
+        categoryNames.insert(record.name);
+
+        const QJsonValue channelIds = object.value(QStringLiteral("channelIds"));
+        if (!channelIds.isUndefined()) {
+            if (!channelIds.isArray()) {
+                setErrorMessage(QStringLiteral("Import field 'channelIds' must be an array."));
+                return false;
+            }
+            QSet<QString> ids;
+            for (const QJsonValue &channelValue : channelIds.toArray()) {
+                if (!channelValue.isString() || channelValue.toString().trimmed().isEmpty()) {
+                    setErrorMessage(QStringLiteral("Category channel IDs must be non-empty strings."));
+                    return false;
+                }
+                const QString channelId = channelValue.toString().trimmed();
+                if (!ids.contains(channelId)) {
+                    ids.insert(channelId);
+                    record.channelIds.append(channelId);
+                }
+            }
+        }
+        records.append(std::move(record));
+    }
+
+    if (!m_repository.importCategories(records, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    setErrorMessage({});
+    reloadCategories();
+    reloadChannels();
+    reloadFeed();
+    setStatusMessage(records.size() == 1
+                         ? QStringLiteral("Imported 1 category.")
+                         : QStringLiteral("Imported %1 categories.").arg(records.size()));
     return true;
 }
 

@@ -11,6 +11,18 @@
 class Repository
 {
 public:
+    struct ChannelImportRecord
+    {
+        Channel channel;
+        QStringList categoryNames;
+    };
+
+    struct CategoryImportRecord
+    {
+        QString name;
+        QStringList channelIds;
+    };
+
     // Cached history grows without age limits until the database reaches this
     // size; then the oldest videos are pruned first in, first out.
     static constexpr qint64 maximumDatabaseBytes = 10 * 1024 * 1024;
@@ -36,6 +48,12 @@ public:
         std::optional<qint64> categoryId = std::nullopt,
         QString *error = nullptr) const;
     bool upsertChannel(const Channel &channel, QString *error = nullptr);
+    bool importChannels(
+        const QList<ChannelImportRecord> &records,
+        QString *error = nullptr);
+    bool importCategories(
+        const QList<CategoryImportRecord> &records,
+        QString *error = nullptr);
     bool removeChannel(const QString &channelId, QString *error = nullptr);
     bool setChannelCategories(
         const QString &channelId,

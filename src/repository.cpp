@@ -247,13 +247,16 @@ bool Repository::upsertChannel(const Channel &channel, QString *error)
     }
 
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
+    if (!query.prepare(QStringLiteral(
         "INSERT INTO channels(id, original_input, handle, title, avatar_url, "
         "uploads_playlist_id, metadata_fetched_at) VALUES(?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET original_input = excluded.original_input, "
         "handle = excluded.handle, title = excluded.title, avatar_url = excluded.avatar_url, "
         "uploads_playlist_id = excluded.uploads_playlist_id, "
-        "metadata_fetched_at = excluded.metadata_fetched_at"));
+        "metadata_fetched_at = excluded.metadata_fetched_at"))) {
+        setError(error, queryError(query));
+        return false;
+    }
     query.addBindValue(channel.id);
     query.addBindValue(channel.originalInput);
     query.addBindValue(channel.handle);
@@ -263,6 +266,174 @@ bool Repository::upsertChannel(const Channel &channel, QString *error)
     query.addBindValue(toDatabaseTime(channel.metadataFetchedAt));
     if (!query.exec()) {
         setError(error, queryError(query));
+        return false;
+    }
+    return true;
+}
+
+bool Repository::importChannels(
+    const QList<ChannelImportRecord> &records,
+    QString *error)
+{
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery categoryLookup(m_database);
+    if (!categoryLookup.prepare(QStringLiteral("SELECT id FROM categories WHERE name = ?"))) {
+        m_database.rollback();
+        setError(error, queryError(categoryLookup));
+        return false;
+    }
+    QSqlQuery categoryInsert(m_database);
+    if (!categoryInsert.prepare(QStringLiteral(
+            "INSERT INTO categories(name, sort_order) "
+            "VALUES(?, COALESCE((SELECT MAX(sort_order) + 1 FROM categories), 0))"))) {
+        m_database.rollback();
+        setError(error, queryError(categoryInsert));
+        return false;
+    }
+    QSqlQuery membershipInsert(m_database);
+    if (!membershipInsert.prepare(QStringLiteral(
+            "INSERT INTO category_channels(category_id, channel_id) VALUES(?, ?) "
+            "ON CONFLICT(category_id, channel_id) DO NOTHING"))) {
+        m_database.rollback();
+        setError(error, queryError(membershipInsert));
+        return false;
+    }
+
+    for (const ChannelImportRecord &record : records) {
+        if (!upsertChannel(record.channel, error)) {
+            m_database.rollback();
+            return false;
+        }
+
+        for (const QString &categoryName : record.categoryNames) {
+            const QString trimmedName = categoryName.trimmed();
+            if (trimmedName.isEmpty()) {
+                m_database.rollback();
+                setError(error, QStringLiteral("Category name cannot be empty."));
+                return false;
+            }
+
+            categoryLookup.bindValue(0, trimmedName);
+            if (!categoryLookup.exec()) {
+                m_database.rollback();
+                setError(error, queryError(categoryLookup));
+                return false;
+            }
+            qint64 categoryId = -1;
+            if (categoryLookup.next()) {
+                categoryId = categoryLookup.value(0).toLongLong();
+            } else {
+                categoryInsert.bindValue(0, trimmedName);
+                if (!categoryInsert.exec()) {
+                    m_database.rollback();
+                    setError(error, queryError(categoryInsert));
+                    return false;
+                }
+                categoryId = categoryInsert.lastInsertId().toLongLong();
+            }
+            categoryLookup.finish();
+            categoryInsert.finish();
+
+            membershipInsert.bindValue(0, categoryId);
+            membershipInsert.bindValue(1, record.channel.id);
+            if (!membershipInsert.exec()) {
+                m_database.rollback();
+                setError(error, queryError(membershipInsert));
+                return false;
+            }
+        }
+    }
+
+    if (!m_database.commit()) {
+        const QString commitError = m_database.lastError().text();
+        m_database.rollback();
+        setError(error, commitError);
+        return false;
+    }
+    return true;
+}
+
+bool Repository::importCategories(
+    const QList<CategoryImportRecord> &records,
+    QString *error)
+{
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery categoryLookup(m_database);
+    if (!categoryLookup.prepare(QStringLiteral("SELECT id FROM categories WHERE name = ?"))) {
+        m_database.rollback();
+        setError(error, queryError(categoryLookup));
+        return false;
+    }
+    QSqlQuery categoryInsert(m_database);
+    if (!categoryInsert.prepare(QStringLiteral(
+            "INSERT INTO categories(name, sort_order) "
+            "VALUES(?, COALESCE((SELECT MAX(sort_order) + 1 FROM categories), 0))"))) {
+        m_database.rollback();
+        setError(error, queryError(categoryInsert));
+        return false;
+    }
+    QSqlQuery membershipInsert(m_database);
+    if (!membershipInsert.prepare(QStringLiteral(
+            "INSERT INTO category_channels(category_id, channel_id) "
+            "SELECT ?, id FROM channels WHERE id = ? "
+            "ON CONFLICT(category_id, channel_id) DO NOTHING"))) {
+        m_database.rollback();
+        setError(error, queryError(membershipInsert));
+        return false;
+    }
+
+    for (const CategoryImportRecord &record : records) {
+        const QString trimmedName = record.name.trimmed();
+        if (trimmedName.isEmpty()) {
+            m_database.rollback();
+            setError(error, QStringLiteral("Category name cannot be empty."));
+            return false;
+        }
+
+        categoryLookup.bindValue(0, trimmedName);
+        if (!categoryLookup.exec()) {
+            m_database.rollback();
+            setError(error, queryError(categoryLookup));
+            return false;
+        }
+        qint64 categoryId = -1;
+        if (categoryLookup.next()) {
+            categoryId = categoryLookup.value(0).toLongLong();
+        } else {
+            categoryInsert.bindValue(0, trimmedName);
+            if (!categoryInsert.exec()) {
+                m_database.rollback();
+                setError(error, queryError(categoryInsert));
+                return false;
+            }
+            categoryId = categoryInsert.lastInsertId().toLongLong();
+        }
+        categoryLookup.finish();
+        categoryInsert.finish();
+
+        for (const QString &channelId : record.channelIds) {
+            membershipInsert.bindValue(0, categoryId);
+            membershipInsert.bindValue(1, channelId);
+            if (!membershipInsert.exec()) {
+                m_database.rollback();
+                setError(error, queryError(membershipInsert));
+                return false;
+            }
+        }
+    }
+
+    if (!m_database.commit()) {
+        const QString commitError = m_database.lastError().text();
+        m_database.rollback();
+        setError(error, commitError);
         return false;
     }
     return true;

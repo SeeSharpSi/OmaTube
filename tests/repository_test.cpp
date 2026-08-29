@@ -23,6 +23,11 @@ private slots:
     void migratesVersionFourDatabase();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
+    void importChannelsUpsertsFullMetadataByStableId();
+    void importChannelsCreatesAndReusesCategories();
+    void importChannelsMergesMembershipsAndIsIdempotent();
+    void importChannelsRollsBackWholeBatch();
+    void importCategoriesPreservesOrderMembershipsAndIsIdempotent();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
     void feedPagePaginatesWithKeysetCursor();
     void channelHistoryStateLifecycle();
@@ -432,6 +437,131 @@ void RepositoryTest::categoryMembershipFiltersChannels()
     QVERIFY(repository.removeCategory(categoryId, &error));
     QCOMPARE(repository.categoryIdsForChannel(alpha.id).size(), 0);
     QCOMPARE(repository.channels().size(), 2);
+}
+
+void RepositoryTest::importChannelsUpsertsFullMetadataByStableId()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+
+    const QDateTime firstFetched = QDateTime::fromString(
+        QStringLiteral("2026-08-25T12:00:00.000Z"), Qt::ISODateWithMs);
+    const QDateTime secondFetched = QDateTime::fromString(
+        QStringLiteral("2026-08-26T12:00:00.000Z"), Qt::ISODateWithMs);
+    Channel first{
+        QStringLiteral("UCStable"), QStringLiteral("old-input"), QStringLiteral("@old"),
+        QStringLiteral("Old title"), QStringLiteral("old-avatar"), QStringLiteral("UUold"),
+        firstFetched};
+    Channel updated{
+        QStringLiteral("UCStable"), QStringLiteral("new-input"), QStringLiteral("@new"),
+        QStringLiteral("New title"), QStringLiteral("new-avatar"), QStringLiteral("UUnew"),
+        secondFetched};
+
+    QVERIFY2(repository.importChannels({{first, {}}}, &error), qPrintable(error));
+    QVERIFY2(repository.importChannels({{updated, {}}}, &error), qPrintable(error));
+    QCOMPARE(repository.channels(), QList<Channel>({updated}));
+}
+
+void RepositoryTest::importChannelsCreatesAndReusesCategories()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const qint64 existingId = repository.addCategory(QStringLiteral("Existing"), &error);
+    QVERIFY2(existingId > 0, qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCImport"), QStringLiteral("Imported"));
+
+    QVERIFY2(repository.importChannels(
+                  {{channel, {QStringLiteral("Existing"), QStringLiteral("Created")}}}, &error),
+              qPrintable(error));
+    QCOMPARE(repository.categories(), QList<Category>({
+        {existingId, QStringLiteral("Existing")},
+        {existingId + 1, QStringLiteral("Created")},
+    }));
+    QCOMPARE(repository.categoryIdsForChannel(channel.id, &error), QList<qint64>({existingId, existingId + 1}));
+}
+
+void RepositoryTest::importChannelsMergesMembershipsAndIsIdempotent()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const qint64 unrelatedId = repository.addCategory(QStringLiteral("Unrelated"), &error);
+    QVERIFY2(unrelatedId > 0, qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCMerge"), QStringLiteral("Merge"));
+    QVERIFY2(repository.upsertChannel(channel, &error), qPrintable(error));
+    QVERIFY2(repository.setChannelCategories(channel.id, {unrelatedId}, &error), qPrintable(error));
+
+    const Repository::ChannelImportRecord record{
+        channel, {QStringLiteral("Imported"), QStringLiteral("Unrelated")}};
+    QVERIFY2(repository.importChannels({record}, &error), qPrintable(error));
+    const QList<Category> categoriesBefore = repository.categories(&error);
+    const QList<qint64> membershipsBefore = repository.categoryIdsForChannel(channel.id, &error);
+    QVERIFY2(repository.importChannels({record}, &error), qPrintable(error));
+
+    QCOMPARE(repository.categories(), categoriesBefore);
+    QCOMPARE(repository.categoryIdsForChannel(channel.id, &error), membershipsBefore);
+    QCOMPARE(membershipsBefore.size(), 2);
+}
+
+void RepositoryTest::importChannelsRollsBackWholeBatch()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel valid = makeChannel(QStringLiteral("UCValid"), QStringLiteral("Valid"));
+    const Channel invalid{
+        QStringLiteral("UCInvalid"), QStringLiteral("input"), QStringLiteral("@invalid"), {},
+        QStringLiteral("avatar"), QStringLiteral("UUinvalid"), QDateTime::currentDateTimeUtc()};
+
+    QVERIFY2(!repository.importChannels({
+                  {valid, {QStringLiteral("Rolled back")}},
+                  {invalid, {QStringLiteral("Also rolled back")}},
+              }, &error),
+              "invalid later record must fail");
+    QVERIFY2(!error.isEmpty(), "failed import must report an error");
+    QCOMPARE(repository.channels().size(), 0);
+    QCOMPARE(repository.categories().size(), 0);
+    QCOMPARE(repository.categoryIdsForChannel(valid.id, &error).size(), 0);
+}
+
+void RepositoryTest::importCategoriesPreservesOrderMembershipsAndIsIdempotent()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const qint64 existingId = repository.addCategory(QStringLiteral("Existing"), &error);
+    const qint64 tailId = repository.addCategory(QStringLiteral("Tail"), &error);
+    QVERIFY2(existingId > 0 && tailId > 0, qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY2(repository.upsertChannel(alpha, &error), qPrintable(error));
+    QVERIFY2(repository.upsertChannel(beta, &error), qPrintable(error));
+    QVERIFY2(repository.setChannelCategories(alpha.id, {existingId}, &error), qPrintable(error));
+
+    const QList<Repository::CategoryImportRecord> records{
+        {QStringLiteral("Existing"), {beta.id, QStringLiteral("UCUnknown"), alpha.id}},
+        {QStringLiteral("New one"), {beta.id, QStringLiteral("UCUnknown")}},
+        {QStringLiteral("New two"), {QStringLiteral("UCUnknown")}},
+    };
+    QVERIFY2(repository.importCategories(records, &error), qPrintable(error));
+    QCOMPARE(repository.categories(), QList<Category>({
+        {existingId, QStringLiteral("Existing")},
+        {tailId, QStringLiteral("Tail")},
+        {tailId + 1, QStringLiteral("New one")},
+        {tailId + 2, QStringLiteral("New two")},
+    }));
+    QCOMPARE(repository.categoryIdsForChannel(alpha.id, &error), QList<qint64>({existingId}));
+    QCOMPARE(repository.categoryIdsForChannel(beta.id, &error), QList<qint64>({existingId, tailId + 1}));
+
+    const QList<Category> categoriesBefore = repository.categories(&error);
+    const QList<qint64> alphaMembershipsBefore = repository.categoryIdsForChannel(alpha.id, &error);
+    const QList<qint64> betaMembershipsBefore = repository.categoryIdsForChannel(beta.id, &error);
+    QVERIFY2(repository.importCategories(records, &error), qPrintable(error));
+    QCOMPARE(repository.categories(), categoriesBefore);
+    QCOMPARE(repository.categoryIdsForChannel(alpha.id, &error), alphaMembershipsBefore);
+    QCOMPARE(repository.categoryIdsForChannel(beta.id, &error), betaMembershipsBefore);
 }
 
 void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()

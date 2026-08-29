@@ -5,7 +5,11 @@
 #include "spaceholdhandler.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QKeyEvent>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QSettings>
@@ -47,6 +51,9 @@ private slots:
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
     void movesCategoriesAndPersists();
+    void exportsAndImportsChannels();
+    void exportsAndImportsCategories();
+    void rejectsInvalidChannelImportBeforeWrites();
     void keybindsFooterTextOrdering();
     void spaceHoldShortPressEmitsTappedOnly();
     void spaceHoldLongPressTransitionsHeld();
@@ -861,6 +868,197 @@ void AppControllerTest::movesCategoriesAndPersists()
     Repository repository(databasePath);
     QVERIFY2(repository.open(&error), qPrintable(error));
     QCOMPARE(repository.categories().value(0).id, categoryIds.at(1));
+}
+
+void AppControllerTest::exportsAndImportsChannels()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath = directory.filePath(QStringLiteral("source.sqlite3"));
+    const QString targetPath = directory.filePath(QStringLiteral("target.sqlite3"));
+    const QString exportPath = directory.filePath(QStringLiteral("channels.json"));
+    const QDateTime fetchedAt = QDateTime::fromString(
+        QStringLiteral("2026-08-29T12:34:56.789Z"), Qt::ISODateWithMs);
+    Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    alpha.originalInput = QStringLiteral("https://youtube.com/@alpha");
+    alpha.handle = QStringLiteral("@alpha");
+    alpha.avatarUrl = QStringLiteral("https://img/alpha.jpg");
+    alpha.uploadsPlaylistId = QStringLiteral("UUALPHA");
+    alpha.metadataFetchedAt = fetchedAt;
+    Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    beta.originalInput = QStringLiteral("@beta");
+    beta.handle = QStringLiteral("@beta");
+    beta.avatarUrl = QStringLiteral("https://img/beta.jpg");
+    beta.uploadsPlaylistId = QStringLiteral("UUBETA");
+    beta.metadataFetchedAt = fetchedAt.addSecs(1);
+
+    QString error;
+    qint64 favoritesId = -1;
+    qint64 archiveId = -1;
+    {
+        Repository repository(sourcePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        favoritesId = repository.addCategory(QStringLiteral("Favorites"), &error);
+        archiveId = repository.addCategory(QStringLiteral("Archive"), &error);
+        QVERIFY(favoritesId > 0);
+        QVERIFY(archiveId > 0);
+        QVERIFY2(repository.upsertChannel(alpha, &error), qPrintable(error));
+        QVERIFY2(repository.upsertChannel(beta, &error), qPrintable(error));
+        QVERIFY(repository.setChannelCategories(alpha.id, {favoritesId, archiveId}, &error));
+        QVERIFY(repository.setChannelCategories(beta.id, {archiveId}, &error));
+    }
+
+    {
+        std::unique_ptr<AppController> controller = AppController::createApplication(sourcePath);
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QVERIFY(controller->exportChannels(QUrl::fromLocalFile(exportPath)));
+    }
+
+    QFile file(exportPath);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    QVERIFY(document.isObject());
+    const QJsonObject root = document.object();
+    QCOMPARE(root.value(QStringLiteral("format")).toString(), QStringLiteral("omatube-channels"));
+    QCOMPARE(root.value(QStringLiteral("version")).toInt(), 1);
+    const QJsonArray channels = root.value(QStringLiteral("channels")).toArray();
+    QCOMPARE(channels.size(), 2);
+    const QJsonObject alphaJson = channels.at(0).toObject();
+    QCOMPARE(alphaJson.value(QStringLiteral("id")).toString(), alpha.id);
+    QCOMPARE(alphaJson.value(QStringLiteral("originalInput")).toString(), alpha.originalInput);
+    QCOMPARE(alphaJson.value(QStringLiteral("handle")).toString(), alpha.handle);
+    QCOMPARE(alphaJson.value(QStringLiteral("title")).toString(), alpha.title);
+    QCOMPARE(alphaJson.value(QStringLiteral("avatarUrl")).toString(), alpha.avatarUrl);
+    QCOMPARE(alphaJson.value(QStringLiteral("uploadsPlaylistId")).toString(), alpha.uploadsPlaylistId);
+    QCOMPARE(alphaJson.value(QStringLiteral("metadataFetchedAt")).toString(), fetchedAt.toString(Qt::ISODateWithMs));
+    const QVariantList alphaCategories = alphaJson.value(QStringLiteral("categories")).toArray().toVariantList();
+    const QVariantList expectedAlphaCategories{QStringLiteral("Favorites"), QStringLiteral("Archive")};
+    QCOMPARE(alphaCategories, expectedAlphaCategories);
+
+    {
+        Repository repository(targetPath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(makeChannel(QStringLiteral("UCExisting"), QStringLiteral("Existing")), &error));
+        QVERIFY(repository.addCategory(QStringLiteral("Existing category"), &error) > 0);
+    }
+    {
+        std::unique_ptr<AppController> controller = AppController::createApplication(targetPath);
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QVERIFY(controller->importChannels(QUrl::fromLocalFile(exportPath)));
+    }
+    Repository imported(targetPath);
+    QVERIFY2(imported.open(&error), qPrintable(error));
+    QCOMPARE(imported.channels().size(), 3);
+    QCOMPARE(imported.channels().at(0), alpha);
+    QCOMPARE(imported.channels().at(1), beta);
+    const QList<Category> importedCategories = imported.categories();
+    QCOMPARE(importedCategories.size(), 3);
+    QCOMPARE(importedCategories.at(1).name, QStringLiteral("Favorites"));
+    QCOMPARE(importedCategories.at(2).name, QStringLiteral("Archive"));
+    const QList<qint64> alphaCategoryIds{importedCategories.at(1).id, importedCategories.at(2).id};
+    const QList<qint64> betaCategoryIds{importedCategories.at(2).id};
+    QCOMPARE(imported.categoryIdsForChannel(alpha.id), alphaCategoryIds);
+    QCOMPARE(imported.categoryIdsForChannel(beta.id), betaCategoryIds);
+}
+
+void AppControllerTest::exportsAndImportsCategories()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourcePath = directory.filePath(QStringLiteral("source.sqlite3"));
+    const QString targetPath = directory.filePath(QStringLiteral("target.sqlite3"));
+    const QString exportPath = directory.filePath(QStringLiteral("categories.json"));
+    QString error;
+    const Channel first = makeChannel(QStringLiteral("UCFirst"), QStringLiteral("First"));
+    const Channel second = makeChannel(QStringLiteral("UCSecond"), QStringLiteral("Second"));
+    {
+        Repository repository(sourcePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(first, &error));
+        QVERIFY(repository.upsertChannel(second, &error));
+        const qint64 later = repository.addCategory(QStringLiteral("Later"), &error);
+        const qint64 earlier = repository.addCategory(QStringLiteral("Earlier"), &error);
+        QVERIFY(later > 0 && earlier > 0);
+        QVERIFY(repository.moveCategory(earlier, 0, &error));
+        QVERIFY(repository.setChannelCategories(first.id, {earlier}, &error));
+        QVERIFY(repository.setChannelCategories(second.id, {later}, &error));
+    }
+    {
+        std::unique_ptr<AppController> controller = AppController::createApplication(sourcePath);
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QVERIFY(controller->exportCategories(QUrl::fromLocalFile(exportPath)));
+    }
+    QFile file(exportPath);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(root.value(QStringLiteral("format")).toString(), QStringLiteral("omatube-categories"));
+    QCOMPARE(root.value(QStringLiteral("version")).toInt(), 1);
+    const QJsonArray categories = root.value(QStringLiteral("categories")).toArray();
+    QCOMPARE(categories.size(), 2);
+    QCOMPARE(categories.at(0).toObject().value(QStringLiteral("name")).toString(), QStringLiteral("Earlier"));
+    QCOMPARE(categories.at(0).toObject().value(QStringLiteral("channelIds")).toArray().toVariantList(), QVariantList{first.id});
+    QCOMPARE(categories.at(1).toObject().value(QStringLiteral("name")).toString(), QStringLiteral("Later"));
+    QCOMPARE(categories.at(1).toObject().value(QStringLiteral("channelIds")).toArray().toVariantList(), QVariantList{second.id});
+
+    {
+        Repository repository(targetPath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(first, &error));
+        QVERIFY(repository.upsertChannel(second, &error));
+    }
+    {
+        std::unique_ptr<AppController> controller = AppController::createApplication(targetPath);
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QVERIFY(controller->importCategories(QUrl::fromLocalFile(exportPath)));
+    }
+    Repository imported(targetPath);
+    QVERIFY2(imported.open(&error), qPrintable(error));
+    const QList<Category> result = imported.categories();
+    QCOMPARE(result.size(), 2);
+    QCOMPARE(result.at(0).name, QStringLiteral("Earlier"));
+    QCOMPARE(result.at(1).name, QStringLiteral("Later"));
+    QCOMPARE(imported.channels(result.at(0).id).value(0).id, first.id);
+    QCOMPARE(imported.channels(result.at(1).id).value(0).id, second.id);
+}
+
+void AppControllerTest::rejectsInvalidChannelImportBeforeWrites()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString databasePath = directory.filePath(QStringLiteral("database.sqlite3"));
+    const QString importPath = directory.filePath(QStringLiteral("invalid.json"));
+    QString error;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(makeChannel(QStringLiteral("UCExisting"), QStringLiteral("Existing")), &error));
+        QVERIFY(repository.addCategory(QStringLiteral("Existing"), &error) > 0);
+    }
+    QFile file(importPath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QJsonObject valid{{QStringLiteral("id"), QStringLiteral("UCNew")},
+                            {QStringLiteral("title"), QStringLiteral("New")},
+                            {QStringLiteral("uploadsPlaylistId"), QStringLiteral("UUNEW")}};
+    const QJsonObject invalid{{QStringLiteral("id"), QStringLiteral("UCBad")},
+                              {QStringLiteral("title"), 42},
+                              {QStringLiteral("uploadsPlaylistId"), QStringLiteral("UUBAD")}};
+    file.write(QJsonDocument(QJsonObject{{QStringLiteral("format"), QStringLiteral("omatube-channels")},
+                                        {QStringLiteral("version"), 1},
+                                        {QStringLiteral("channels"), QJsonArray{valid, invalid}}})
+                   .toJson());
+    file.close();
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    const int channelCount = controller->channels()->rowCount();
+    const int categoryCount = controller->categories()->rowCount();
+    const QString existingId = controller->channels()->data(
+        controller->channels()->index(0), ChannelModel::ChannelIdRole).toString();
+    QVERIFY(!controller->importChannels(QUrl::fromLocalFile(importPath)));
+    QCOMPARE(controller->channels()->rowCount(), channelCount);
+    QCOMPARE(controller->categories()->rowCount(), categoryCount);
+    QCOMPARE(controller->channels()->data(controller->channels()->index(0), ChannelModel::ChannelIdRole).toString(), existingId);
+    QVERIFY(controller->errorMessage().contains(QStringLiteral("title")));
 }
 
 void AppControllerTest::keybindsFooterTextOrdering()

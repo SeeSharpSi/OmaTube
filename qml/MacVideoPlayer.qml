@@ -21,5 +21,12 @@ Item {
         }
     }
 
-    Component.onDestruction: player.stop()
+    function startSpeedBoost() { player.startSpeedBoost() }
+    function stopSpeedBoost() { player.stopSpeedBoost() }
+    function togglePaused() { player.togglePaused() }
+
+    Component.onDestruction: {
+        player.stopSpeedBoost()
+        player.stop()
+    }
 }

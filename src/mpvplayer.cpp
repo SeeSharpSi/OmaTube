@@ -55,6 +55,7 @@ public:
     bool muted() const { return m_muted; }
     bool buffering() const { return m_buffering; }
     bool idleActive() const { return m_idleActive; }
+    double speed() const { return m_speed; }
 
     // Commands, all safe to call from the GUI thread.
     void loadUrl(const QUrl &url);
@@ -66,6 +67,7 @@ public:
     void setYtdlFormat(const QString &format);
     void clearYtdlFormat();
     void setStartTime(int seconds);
+    void setSpeed(double speed);
 
     // Teardown (GUI thread): stop event dispatch, drop the wakeup callback so
     // no further libmpv API calls are made after the item is gone.
@@ -100,6 +102,7 @@ private:
     bool m_muted = false;
     bool m_buffering = false;
     bool m_idleActive = false;
+    double m_speed = 1.0;
 
     QString m_initError;
     std::atomic_bool m_shutdown{false};
@@ -184,6 +187,7 @@ bool MpvCore::initialize()
     mpv_observe_property(m_handle, 0, "mute", MPV_FORMAT_FLAG);
     mpv_observe_property(m_handle, 0, "paused-for-cache", MPV_FORMAT_FLAG);
     mpv_observe_property(m_handle, 0, "idle-active", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_handle, 0, "speed", MPV_FORMAT_DOUBLE);
 
     return true;
 }
@@ -215,6 +219,8 @@ void MpvCore::handlePropertyChange(const mpv_event_property *prop)
         m_buffering = *static_cast<int *>(prop->data) != 0;
     } else if (prop->format == MPV_FORMAT_FLAG && std::strcmp(name, "idle-active") == 0) {
         m_idleActive = *static_cast<int *>(prop->data) != 0;
+    } else if (prop->format == MPV_FORMAT_DOUBLE && std::strcmp(name, "speed") == 0) {
+        m_speed = *static_cast<double *>(prop->data);
     }
 }
 
@@ -322,6 +328,15 @@ void MpvCore::setStartTime(int seconds)
         mpv_set_property_string(m_handle, "start", QByteArray::number(seconds).constData());
     else
         mpv_del_property(m_handle, "start");
+}
+
+void MpvCore::setSpeed(double speed)
+{
+    if (!m_handle)
+        return;
+    if (!std::isfinite(speed) || speed <= 0.0 || speed > 16.0)
+        return;
+    mpv_set_property(m_handle, "speed", MPV_FORMAT_DOUBLE, &speed);
 }
 
 bool MpvCore::createRenderContextIfNeeded()
@@ -542,6 +557,20 @@ void MpvPlayerNative::setMuted(bool muted)
         m_core->setMuted(muted);
 }
 
+void MpvPlayerNative::setPlaybackRate(double rate)
+{
+    if (!std::isfinite(rate) || rate <= 0.0)
+        return;
+    // Clamp to sensible positive range; 2.0 must work.
+    rate = qBound(0.1, rate, 16.0);
+    if (qFuzzyCompare(m_playbackRate, rate))
+        return;
+    m_playbackRate = rate;
+    emit playbackRateChanged();
+    if (m_core)
+        m_core->setSpeed(rate);
+}
+
 void MpvPlayerNative::togglePaused()
 {
     setPaused(!m_paused);
@@ -696,6 +725,13 @@ void MpvPlayerNative::onEventsProcessed()
     if (buffering != m_buffering) {
         m_buffering = buffering;
         emit loadingChanged();
+    }
+    const double speed = m_core ? m_core->speed() : 1.0;
+    if (!qFuzzyCompare(speed, m_playbackRate)) {
+        if (std::isfinite(speed) && speed > 0.0) {
+            m_playbackRate = speed;
+            emit playbackRateChanged();
+        }
     }
 }
 

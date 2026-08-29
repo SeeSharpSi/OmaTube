@@ -9,6 +9,22 @@ Item {
     property int startSeconds: 0
     property int maximumVideoHeight: 0
 
+    SpaceHoldHandler {
+        id: spaceHold
+        onHeldChanged: {
+            if (!backendLoader.item)
+                return
+            if (held)
+                backendLoader.item.startSpeedBoost()
+            else
+                backendLoader.item.stopSpeedBoost()
+        }
+        onTapped: {
+            if (backendLoader.item)
+                backendLoader.item.togglePaused()
+        }
+    }
+
     Loader {
         id: backendLoader
         anchors.fill: parent
@@ -28,6 +44,8 @@ Item {
             if (item.hasOwnProperty("startSeconds"))
                 item.startSeconds = Qt.binding(function() { return root.startSeconds })
             item.videoId = Qt.binding(function() { return root.videoId })
+            if (spaceHold.held && item.startSpeedBoost)
+                item.startSpeedBoost()
         }
     }
 
@@ -41,5 +59,9 @@ Item {
 
     onHostWindowChanged: App.pointerWatcher.watch(root.hostWindow)
     Component.onCompleted: App.pointerWatcher.watch(root.hostWindow)
-    Component.onDestruction: App.pointerWatcher.stop()
+    Component.onDestruction: {
+        if (backendLoader.item && backendLoader.item.stopSpeedBoost)
+            backendLoader.item.stopSpeedBoost()
+        App.pointerWatcher.stop()
+    }
 }

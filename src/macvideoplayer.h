@@ -21,6 +21,10 @@ public:
     [[nodiscard]] int startSeconds() const;
     void setStartSeconds(int startSeconds);
     Q_INVOKABLE void stop();
+    Q_INVOKABLE void startSpeedBoost();
+    Q_INVOKABLE void stopSpeedBoost();
+    Q_INVOKABLE void togglePaused();
+    void syncSpeedBoost();
 
 signals:
     void videoIdChanged();
@@ -33,8 +37,11 @@ private:
 
     QString m_videoId;
     int m_startSeconds = 0;
+    bool m_speedBoostActive = false;
     QPointer<QQuickWindow> m_window;
     void *m_webView = nullptr;
     void *m_navigationDelegate = nullptr;
     void *m_messageHandler = nullptr;
+
+    void evaluateJavaScript(const QString &script);
 };

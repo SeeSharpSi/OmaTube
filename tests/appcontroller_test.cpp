@@ -2,7 +2,10 @@
 #include "models/historymodel.h"
 #include "playbacksettings.h"
 #include "repository.h"
+#include "spaceholdhandler.h"
 
+#include <QCoreApplication>
+#include <QKeyEvent>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QSettings>
@@ -44,6 +47,10 @@ private slots:
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
     void keybindsFooterTextOrdering();
+    void spaceHoldShortPressEmitsTappedOnly();
+    void spaceHoldLongPressTransitionsHeld();
+    void spaceHoldAutorepeatIgnored();
+    void spaceHoldDeactivationClearsHeldWithoutTap();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -849,6 +856,134 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_ARG(QVariant, QStringLiteral("history")));
     QVERIFY2(historyOk, "QMetaObject::invokeMethod footerText(\"history\") failed");
     QCOMPARE(historyVariant.toString(), QStringLiteral("s: settings\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
+}
+
+void AppControllerTest::spaceHoldShortPressEmitsTappedOnly()
+{
+    SpaceHoldHandler handler;
+    QSignalSpy tapped(&handler, &SpaceHoldHandler::tapped);
+    QSignalSpy held(&handler, &SpaceHoldHandler::heldChanged);
+    QVERIFY(!handler.held());
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &press);
+    QTest::qWait(50);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &release);
+    QTest::qWait(10);
+
+    QCOMPARE(tapped.count(), 1);
+    QCOMPARE(held.count(), 0);
+    QVERIFY(!handler.held());
+}
+
+void AppControllerTest::spaceHoldLongPressTransitionsHeld()
+{
+    SpaceHoldHandler handler;
+    QSignalSpy tapped(&handler, &SpaceHoldHandler::tapped);
+    QSignalSpy held(&handler, &SpaceHoldHandler::heldChanged);
+    QVERIFY(!handler.held());
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &press);
+    // Cross 200ms threshold.
+    QTRY_VERIFY_WITH_TIMEOUT(handler.held(), 800);
+    QCOMPARE(held.count(), 1);
+    QCOMPARE(tapped.count(), 0);
+
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &release);
+    QTRY_VERIFY_WITH_TIMEOUT(!handler.held(), 500);
+    QCOMPARE(held.count(), 2);
+    QCOMPARE(tapped.count(), 0);
+}
+
+void AppControllerTest::spaceHoldAutorepeatIgnored()
+{
+    SpaceHoldHandler handler;
+    QSignalSpy tapped(&handler, &SpaceHoldHandler::tapped);
+    QSignalSpy held(&handler, &SpaceHoldHandler::heldChanged);
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &press);
+    // Autorepeat press should be consumed without duplicating.
+    QKeyEvent repeatPress(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), true, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &repeatPress);
+    QKeyEvent repeatRelease(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), true, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &repeatRelease);
+    QTest::qWait(50);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &release);
+    QTest::qWait(10);
+
+    QCOMPARE(tapped.count(), 1);
+    QCOMPARE(held.count(), 0);
+    QVERIFY(!handler.held());
+
+    // Long hold with autorepeat in middle must still transition held once.
+    SpaceHoldHandler handler2;
+    QSignalSpy tapped2(&handler2, &SpaceHoldHandler::tapped);
+    QSignalSpy held2(&handler2, &SpaceHoldHandler::heldChanged);
+    QKeyEvent p2(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &p2);
+    QTest::qWait(50);
+    QKeyEvent rep2(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), true, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &rep2);
+    QTRY_VERIFY_WITH_TIMEOUT(handler2.held(), 800);
+    QCOMPARE(held2.count(), 1);
+    QCOMPARE(tapped2.count(), 0);
+    QKeyEvent r2(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+    QCoreApplication::sendEvent(QCoreApplication::instance(), &r2);
+    QTRY_VERIFY_WITH_TIMEOUT(!handler2.held(), 500);
+    QCOMPARE(tapped2.count(), 0);
+}
+
+void AppControllerTest::spaceHoldDeactivationClearsHeldWithoutTap()
+{
+    SpaceHoldHandler handler;
+    QSignalSpy tapped(&handler, &SpaceHoldHandler::tapped);
+    QSignalSpy held(&handler, &SpaceHoldHandler::heldChanged);
+
+    // Pending press canceled on deactivation without tap.
+    {
+        QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &press);
+        QTest::qWait(30);
+        QEvent deactivate(QEvent::ApplicationDeactivate);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &deactivate);
+        QTest::qWait(300);
+        QCOMPARE(tapped.count(), 0);
+        QCOMPARE(held.count(), 0);
+        QVERIFY(!handler.held());
+        // Release after deactivation should not emit tapped.
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &release);
+        QTest::qWait(10);
+        QCOMPARE(tapped.count(), 0);
+        QCOMPARE(held.count(), 0);
+    }
+
+    // Active hold reset on deactivation.
+    {
+        SpaceHoldHandler handler2;
+        QSignalSpy tapped2(&handler2, &SpaceHoldHandler::tapped);
+        QSignalSpy held2(&handler2, &SpaceHoldHandler::heldChanged);
+        QKeyEvent press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &press);
+        QTRY_VERIFY_WITH_TIMEOUT(handler2.held(), 800);
+        QCOMPARE(held2.count(), 1);
+        QEvent deactivate(QEvent::ApplicationDeactivate);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &deactivate);
+        QTRY_VERIFY_WITH_TIMEOUT(!handler2.held(), 500);
+        QCOMPARE(held2.count(), 2);
+        QCOMPARE(tapped2.count(), 0);
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier, QStringLiteral(" "), false, 1);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &release);
+        QTest::qWait(10);
+        QCOMPARE(tapped2.count(), 0);
+        // No extra held transition.
+        QCOMPARE(held2.count(), 2);
+    }
 }
 
 QTEST_GUILESS_MAIN(AppControllerTest)

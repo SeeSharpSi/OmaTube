@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "spaceholdhandler.h"
 
 #ifdef OMA_HAS_MPV
 #include "mpvplayer.h"
@@ -52,6 +53,7 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MACOS
     qmlRegisterType<MacVideoPlayerNative>("YtClient", 1, 0, "MacVideoPlayerNative");
 #endif
+    qmlRegisterType<SpaceHoldHandler>("YtClient", 1, 0, "SpaceHoldHandler");
 #ifdef OMA_HAS_MPV
     qmlRegisterType<MpvPlayerNative>("YtClient", 1, 0, "MpvPlayerNative");
 #endif

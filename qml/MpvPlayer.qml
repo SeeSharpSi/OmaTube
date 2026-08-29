@@ -12,6 +12,29 @@ Item {
     property int maximumVideoHeight: 0
     signal playbackUpdated(real positionSeconds, bool playing)
 
+    property bool speedBoostActive: false
+    property double savedPlaybackRate: 1.0
+
+    function startSpeedBoost() {
+        if (speedBoostActive)
+            return
+        savedPlaybackRate = player.playbackRate
+        speedBoostActive = true
+        player.playbackRate = 2.0
+    }
+
+    function stopSpeedBoost() {
+        if (!speedBoostActive)
+            return
+        speedBoostActive = false
+        player.playbackRate = savedPlaybackRate
+    }
+
+    function togglePaused() {
+        if (!player.loading && !player.ended)
+            player.togglePaused()
+    }
+
     MpvPlayerNative {
         id: player
         anchors.fill: parent
@@ -31,5 +54,9 @@ Item {
         onCloseRequested: App.closePlayer()
     }
 
-    Component.onDestruction: player.stop()
+    Component.onDestruction: {
+        if (speedBoostActive)
+            stopSpeedBoost()
+        player.stop()
+    }
 }

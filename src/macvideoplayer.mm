@@ -9,10 +9,21 @@
 #import <AppKit/AppKit.h>
 #import <WebKit/WebKit.h>
 
-@interface VideoNavigationDelegate : NSObject<WKNavigationDelegate>
+@interface VideoNavigationDelegate : NSObject<WKNavigationDelegate> {
+    MacVideoPlayerNative *_owner;
+}
+- (instancetype)initWithOwner:(MacVideoPlayerNative *)owner;
 @end
 
 @implementation VideoNavigationDelegate
+
+- (instancetype)initWithOwner:(MacVideoPlayerNative *)owner
+{
+    self = [super init];
+    if (self)
+        _owner = owner;
+    return self;
+}
 
 - (void)webView:(WKWebView *)webView
     decidePolicyForNavigationAction:(WKNavigationAction *)action
@@ -24,6 +35,14 @@
         return;
     }
     decisionHandler(WKNavigationActionPolicyAllow);
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
+{
+    Q_UNUSED(navigation);
+    Q_UNUSED(webView);
+    if (_owner)
+        _owner->syncSpeedBoost();
 }
 
 @end
@@ -80,16 +99,44 @@ NSURL *playerBaseUrl()
     return [NSURL URLWithString:@"https://dev.ytclient.app/"];
 }
 
-QString playbackReportJavaScript()
+QString playbackReportJavaScript(bool boostActive)
 {
+    const QString boostStr = boostActive ? QStringLiteral("true") : QStringLiteral("false");
     return QStringLiteral(
         "var omaPlayer = null;"
+        "var omaSpeedBoostActive = %1;"
+        "var omaSpeedBoostApplied = false;"
+        "var omaSavedRate = 1;"
+        "function omaApplySpeedBoost() {"
+        "  if (!omaSpeedBoostActive) return;"
+        "  if (!omaPlayer || !omaPlayer.getPlaybackRate || !omaPlayer.setPlaybackRate) return;"
+        "  if (omaSpeedBoostApplied) return;"
+        "  try { var r = omaPlayer.getPlaybackRate();"
+        "    if (typeof r === 'number' && isFinite(r) && r>0) omaSavedRate = r; } catch(e) {}"
+        "  try { omaPlayer.setPlaybackRate(2); } catch(e) {}"
+        "  omaSpeedBoostApplied = true;"
+        "}"
         "window.onYouTubeIframeAPIReady = function() {"
         "  omaPlayer = new YT.Player('player', {"
         "    videoId: decodeURIComponent(window.__omaVideoId),"
         "    playerVars: {autoplay: 1, playsinline: 1, rel: 0, start: window.__omaStartSeconds},"
-        "    events: {onReady: function(e) { omaPlayer = e.target; }}"
+        "    events: {onReady: function(e) { omaPlayer = e.target; omaApplySpeedBoost(); }}"
         "  });"
+        "};"
+        "window.__omaStartSpeedBoost = function() {"
+        "  omaSpeedBoostActive = true;"
+        "  omaApplySpeedBoost();"
+        "};"
+        "window.__omaStopSpeedBoost = function() {"
+        "  omaSpeedBoostActive = false;"
+        "  if (!omaSpeedBoostApplied) return;"
+        "  if (!omaPlayer || !omaPlayer.setPlaybackRate) { omaSpeedBoostApplied = false; return; }"
+        "  var restore = (typeof omaSavedRate === 'number' && isFinite(omaSavedRate) && omaSavedRate>0) ? omaSavedRate : 1;"
+        "  try { omaPlayer.setPlaybackRate(restore); } catch(e) {}"
+        "  omaSpeedBoostApplied = false;"
+        "};"
+        "window.__omaTogglePaused = function() {"
+        "  try { var s = omaPlayer.getPlayerState(); if (s === 1) omaPlayer.pauseVideo(); else omaPlayer.playVideo(); } catch(e) {}"
         "};"
         "window.__omaPlaybackReport = function() {"
         "  try {"
@@ -99,7 +146,7 @@ QString playbackReportJavaScript()
         "    if (typeof t !== 'number' || isNaN(t)) return null;"
         "    return JSON.stringify({state: s, time: t});"
         "  } catch (e) { return null; }"
-        "};");
+        "};").arg(boostStr);
 }
 
 QString playbackPollerJavaScript()
@@ -118,20 +165,20 @@ QString playbackPollerJavaScript()
         "})();");
 }
 
-QString playerHtml(const QString &videoId, int startSeconds)
+QString playerHtml(const QString &videoId, int startSeconds, bool boostActive)
 {
     return QStringLiteral("<!doctype html><html><head><meta charset=\"utf-8\">"
-                          "<style>html,body{width:100%;height:100%;margin:0;border:0;"
-                          "overflow:hidden;background:#000}#player{width:100%;height:100%}"
-                          "</style></head><body>"
-                          "<div id=\"player\"></div>"
-                          "<script>window.__omaVideoId = '%1';"
-                          "window.__omaStartSeconds = %2;</script>"
-                          "<script src=\"https://www.youtube.com/iframe_api\"></script>"
-                          "<script>%3</script></body></html>")
+                           "<style>html,body{width:100%;height:100%;margin:0;border:0;"
+                           "overflow:hidden;background:#000}#player{width:100%;height:100%}"
+                           "</style></head><body>"
+                           "<div id=\"player\"></div>"
+                           "<script>window.__omaVideoId = '%1';"
+                           "window.__omaStartSeconds = %2;</script>"
+                           "<script src=\"https://www.youtube.com/iframe_api\"></script>"
+                           "<script>%3</script></body></html>")
         .arg(QString::fromUtf8(QUrl::toPercentEncoding(videoId)))
         .arg(qMax(0, startSeconds))
-        .arg(playbackReportJavaScript());
+        .arg(playbackReportJavaScript(boostActive));
 }
 }
 
@@ -191,11 +238,50 @@ void MacVideoPlayerNative::setStartSeconds(int startSeconds)
 
 void MacVideoPlayerNative::stop()
 {
+    if (m_speedBoostActive)
+        stopSpeedBoost();
     WKWebView *view = webView(m_webView);
     if (!view)
         return;
     [view stopLoading];
     [view loadHTMLString:@"" baseURL:playerBaseUrl()];
+}
+
+void MacVideoPlayerNative::evaluateJavaScript(const QString &script)
+{
+    WKWebView *view = webView(m_webView);
+    if (!view)
+        return;
+    [view evaluateJavaScript:script.toNSString() completionHandler:nil];
+}
+
+void MacVideoPlayerNative::syncSpeedBoost()
+{
+    if (m_speedBoostActive)
+        evaluateJavaScript(QStringLiteral("if (window.__omaStartSpeedBoost) window.__omaStartSpeedBoost();"));
+    else
+        evaluateJavaScript(QStringLiteral("if (window.__omaStopSpeedBoost) window.__omaStopSpeedBoost();"));
+}
+
+void MacVideoPlayerNative::startSpeedBoost()
+{
+    if (m_speedBoostActive)
+        return;
+    m_speedBoostActive = true;
+    syncSpeedBoost();
+}
+
+void MacVideoPlayerNative::stopSpeedBoost()
+{
+    if (!m_speedBoostActive)
+        return;
+    m_speedBoostActive = false;
+    syncSpeedBoost();
+}
+
+void MacVideoPlayerNative::togglePaused()
+{
+    evaluateJavaScript(QStringLiteral("if (window.__omaTogglePaused) window.__omaTogglePaused();"));
 }
 
 void MacVideoPlayerNative::setWindow(QQuickWindow *window)
@@ -246,7 +332,7 @@ void MacVideoPlayerNative::syncNativeView()
 
         WKWebView *view = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:configuration];
         [configuration release];
-        VideoNavigationDelegate *delegate = [[VideoNavigationDelegate alloc] init];
+        VideoNavigationDelegate *delegate = [[VideoNavigationDelegate alloc] initWithOwner:this];
         view.navigationDelegate = delegate;
         m_navigationDelegate = delegate;
         m_webView = view;
@@ -272,12 +358,14 @@ void MacVideoPlayerNative::syncNativeView()
 void MacVideoPlayerNative::loadVideo()
 {
     WKWebView *view = webView(m_webView);
-    if (!view)
+    if (!view) {
+        // Preserve boost state for when view is created; HTML generation will honor it.
         return;
+    }
     if (m_videoId.isEmpty()) {
         stop();
         return;
     }
-    [view loadHTMLString:playerHtml(m_videoId, m_startSeconds).toNSString()
-                 baseURL:playerBaseUrl()];
+    [view loadHTMLString:playerHtml(m_videoId, m_startSeconds, m_speedBoostActive).toNSString()
+                  baseURL:playerBaseUrl()];
 }

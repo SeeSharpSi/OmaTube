@@ -448,13 +448,6 @@ Item {
     }
 
     Shortcut {
-        sequence: "Space"
-        context: Qt.WindowShortcut
-        enabled: player && !player.loading && !player.ended
-        onActivated: if (player) player.togglePaused()
-    }
-
-    Shortcut {
         sequence: "Left"
         context: Qt.WindowShortcut
         enabled: player

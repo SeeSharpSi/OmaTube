@@ -27,6 +27,7 @@ class MpvPlayerNative : public QQuickFramebufferObject
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool ended READ ended NOTIFY endedChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
+    Q_PROPERTY(double playbackRate READ playbackRate WRITE setPlaybackRate NOTIFY playbackRateChanged)
 
 public:
     explicit MpvPlayerNative(QQuickItem *parent = nullptr);
@@ -57,6 +58,9 @@ public:
     bool ended() const { return m_ended; }
     QString errorMessage() const { return m_errorMessage; }
 
+    double playbackRate() const { return m_playbackRate; }
+    void setPlaybackRate(double rate);
+
     Q_INVOKABLE void togglePaused();
     Q_INVOKABLE void seek(double seconds);
     Q_INVOKABLE void stop();
@@ -75,6 +79,7 @@ signals:
     void loadingChanged();
     void endedChanged();
     void errorMessageChanged();
+    void playbackRateChanged();
     void playbackUpdated(double positionSeconds, bool playing);
 
 private slots:
@@ -115,5 +120,6 @@ private:
     bool m_buffering = false;
     bool m_ended = false;
     QString m_errorMessage;
+    double m_playbackRate = 1.0;
     QTimer *m_playbackTimer = nullptr;
 };

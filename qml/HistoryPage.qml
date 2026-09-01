@@ -115,16 +115,31 @@ Item {
                     }
 
                     Column {
+                        anchors.top: historyThumbnail.bottom
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 10
+                        anchors.topMargin: 10
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
                         spacing: 5
 
                         Text { width: parent.width; text: historyDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
 
                         Text { width: parent.width; text: historyDelegate.channelTitle + "  \u00b7  " + qsTr("last viewed") + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
-                        Text { text: qsTr("%1% watched").arg(historyDelegate.watchProgressPercent); color: root.neonYellow; font.family: "monospace"; font.pixelSize: 10; visible: historyDelegate.watchProgressPercent >= 0 }
+                    }
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        anchors.bottomMargin: 10
+                        text: qsTr("%1% watched").arg(historyDelegate.watchProgressPercent)
+                        color: root.neonYellow
+                        font.family: "monospace"
+                        font.pixelSize: 10
+                        visible: historyDelegate.watchProgressPercent >= 0
                     }
 
                     Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: historyDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, historyDelegate.watchProgressPercent)) / 100 }

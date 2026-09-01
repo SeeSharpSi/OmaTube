@@ -11,6 +11,7 @@ Item {
     id: root
 
     signal videoSelected(string videoId)
+    signal closeRequested()
 
     property var keybinds
 
@@ -28,19 +29,36 @@ Item {
     readonly property color rule: themeColors.muted
     readonly property color softFill: themeColors.selection
     readonly property color neonYellow: themeColors.bright_yellow
+    readonly property color glassPanel: Qt.rgba(
+        panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
 
     Rectangle {
         anchors.fill: parent
-        color: root.paper
+        color: Qt.rgba(root.paper.r, root.paper.g, root.paper.b, 0.88)
     }
 
     ColumnLayout {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 28
-        width: Math.min(parent.width - 56, 820)
-        spacing: 18
+        anchors.topMargin: 20
+        anchors.bottomMargin: 30
+        width: Math.min(parent.width - 40, 1120)
+        spacing: 14
+
+        RowLayout {
+            Layout.fillWidth: true
+            implicitHeight: 42
+            Button {
+                text: qsTr("< BACK")
+                flat: true
+                onClicked: root.closeRequested()
+                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11 }
+                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
+            }
+            Item { Layout.fillWidth: true }
+            Text { text: "OMA / TUBE"; color: root.ink; font.family: "monospace"; font.pixelSize: 16; font.bold: true }
+        }
 
         Label {
             Layout.fillWidth: true
@@ -57,13 +75,17 @@ Item {
             color: root.rule
         }
 
-        ListView {
+        GridView {
             id: historyList
+            readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: App.watchHistory
             clip: true
-            spacing: 0
+            cellWidth: Math.floor(width / columnCount)
+            cellHeight: Math.round((cellWidth - 12) * 0.5625) + 112
+            bottomMargin: 18
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 800
 
@@ -75,62 +97,65 @@ Item {
                 required property date watchedAt
                 required property int watchProgressPercent
 
-                width: ListView.view.width
-                height: historyColumn.implicitHeight + 34
-
-                Column {
-                    id: historyColumn
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.right: parent.right
-                    anchors.rightMargin: historyDelegate.watchProgressPercent >= 0 ? 56 : 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 7
-
-                    Text {
-                        width: parent.width
-                        text: historyDelegate.title
-                        color: root.ink
-                        font.pixelSize: 21
-                        font.weight: Font.Medium
-                        wrapMode: Text.Wrap
-                    }
-
-                    Text {
-                        width: parent.width
-                        text: historyDelegate.channelTitle + "  \u00b7  "
-                              + qsTr("last viewed")
-                              + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: historyDelegate.watchProgressPercent >= 0
-                    text: qsTr("%1%").arg(historyDelegate.watchProgressPercent)
-                    color: root.neonYellow
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                }
-
-                Rectangle {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: 1
-                    color: root.rule
-                }
+                width: historyList.cellWidth - 12
+                height: historyList.cellHeight - 12
 
                 Rectangle {
                     anchors.fill: parent
-                    anchors.leftMargin: -12
-                    anchors.rightMargin: -12
-                    z: -1
-                    color: historyHover.hovered ? root.softFill : "transparent"
+                    color: root.glassPanel
+                    border.color: historyHover.hovered ? root.accent : root.rule
+                    border.width: historyHover.hovered ? 2 : 1
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: width * 0.5625
+                        color: root.softFill
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "OMA / TUBE"
+                            color: root.mutedInk
+                            font.family: "monospace"
+                            font.pixelSize: 10
+                            font.letterSpacing: 1
+                        }
+                    }
+
+                    Image {
+                        id: historyThumbnail
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: width * 0.5625
+                        source: "https://i.ytimg.com/vi/" + historyDelegate.videoId + "/hqdefault.jpg"
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: parent.height - historyThumbnail.height
+                        color: root.glassPanel
+                    }
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 10
+                        spacing: 5
+
+                        Text { width: parent.width; text: historyDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+
+                        Text { width: parent.width; text: historyDelegate.channelTitle + "  \u00b7  " + qsTr("last viewed") + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                        Text { text: qsTr("%1% watched").arg(historyDelegate.watchProgressPercent); color: root.neonYellow; font.family: "monospace"; font.pixelSize: 10; visible: historyDelegate.watchProgressPercent >= 0 }
+                    }
+
+                    Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: historyDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, historyDelegate.watchProgressPercent)) / 100 }
                 }
 
                 HoverHandler {
@@ -166,7 +191,8 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 14
         color: root.mutedInk
+        font.family: "monospace"
         font.pixelSize: 11
-        text: keybinds ? keybinds.footerText("history") : ""
+        text: keybinds ? keybinds.footerText("history").split("\n").join("  /  ") : ""
     }
 }

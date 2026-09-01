@@ -16,18 +16,13 @@ Dialog {
     readonly property color accent: themeColors.accent
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
-    readonly property color paper: Qt.rgba(themeColors.background.r,
-        themeColors.background.g, themeColors.background.b, 0.78)
-    readonly property color panel: Qt.rgba(themeColors.lighter_background.r,
-        themeColors.lighter_background.g, themeColors.lighter_background.b, 0.92)
-    readonly property color rule: Qt.tint(themeColors.muted,
-        Qt.rgba(themeColors.accent.r, themeColors.accent.g, themeColors.accent.b, 0.24))
-    readonly property color softFill: Qt.tint(themeColors.selection,
-        Qt.rgba(themeColors.accent.r, themeColors.accent.g, themeColors.accent.b, 0.32))
+    readonly property color paper: themeColors.background
+    readonly property color panel: themeColors.lighter_background
+    readonly property color rule: themeColors.muted
+    readonly property color softFill: themeColors.selection
     readonly property color danger: themeColors.red
     readonly property color errorFill: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
-    readonly property string chromeFont: "monospace"
     property var selectedCategoryIds: []
     property string pendingAction: ""
     property var pendingId: -1
@@ -63,7 +58,7 @@ Dialog {
     }
 
     modal: true
-    width: Math.min(parent ? parent.width - 32 : 900, 900)
+    width: Math.min(parent ? parent.width - 32 : 760, 760)
     height: Math.min(parent ? parent.height - 24 : 860, 860)
     anchors.centerIn: parent
     padding: 0
@@ -99,7 +94,7 @@ Dialog {
     }
 
     header: Rectangle {
-        implicitHeight: 62
+        implicitHeight: 64
         color: root.panel
 
         Rectangle {
@@ -114,24 +109,10 @@ Dialog {
             anchors.left: parent.left
             anchors.leftMargin: 24
             anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("OMA / SETTINGS")
+            text: qsTr("Settings")
             color: root.ink
-            font.family: root.chromeFont
-            font.pixelSize: 17
-            font.letterSpacing: 1.4
+            font.pixelSize: 21
             font.weight: Font.DemiBold
-        }
-
-        Label {
-            anchors.left: parent.left
-            anchors.leftMargin: 25
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-            text: qsTr("CONFIGURATION")
-            color: root.mutedInk
-            font.family: root.chromeFont
-            font.pixelSize: 9
-            font.letterSpacing: 1.2
         }
 
         ToolButton {
@@ -146,11 +127,7 @@ Dialog {
 
             PointingCursor {}
 
-            background: Rectangle {
-                color: parent.hovered ? root.softFill : "transparent"
-                border.color: parent.hovered ? root.accent : root.rule
-                border.width: 1
-            }
+            background: Item {}
 
             contentItem: Canvas {
                 property color lineColor: parent.hovered ? root.ink : root.mutedInk
@@ -181,20 +158,18 @@ Dialog {
         TabBar {
             id: tabs
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
+            Layout.preferredHeight: 48
             spacing: 0
 
             background: Rectangle {
-                color: Qt.tint(root.paper, Qt.rgba(
-                    root.accent.r, root.accent.g, root.accent.b, 0.035))
+                color: root.paper
 
                 Rectangle {
                     anchors.bottom: parent.bottom
                     x: tabs.currentIndex * width
                     width: parent.width / tabs.count
                     height: 2
-                    color: Qt.tint(root.accent, Qt.rgba(
-                        root.accent.r, root.accent.g, root.accent.b, 0.82))
+                    color: root.accent
                 }
             }
 
@@ -202,7 +177,6 @@ Dialog {
                 id: channelsTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("Channels")
 
                 PointingCursor {}
@@ -213,9 +187,6 @@ Dialog {
                     text: channelsTab.text
                     color: channelsTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: channelsTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -226,7 +197,6 @@ Dialog {
                 id: categoriesTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("Categories")
 
                 PointingCursor {}
@@ -237,9 +207,6 @@ Dialog {
                     text: categoriesTab.text
                     color: categoriesTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: categoriesTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -250,7 +217,6 @@ Dialog {
                 id: feedTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("Feed")
 
                 PointingCursor {}
@@ -261,9 +227,6 @@ Dialog {
                     text: feedTab.text
                     color: feedTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: feedTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -274,7 +237,6 @@ Dialog {
                 id: appearanceTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("Appearance")
 
                 PointingCursor {}
@@ -285,9 +247,6 @@ Dialog {
                     text: appearanceTab.text
                     color: appearanceTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: appearanceTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -298,7 +257,6 @@ Dialog {
                 id: apiTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("API key")
 
                 PointingCursor {}
@@ -309,9 +267,6 @@ Dialog {
                     text: apiTab.text
                     color: apiTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: apiTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -322,7 +277,6 @@ Dialog {
                 id: playbackTab
                 height: tabs.height
                 implicitHeight: tabs.height
-                width: tabs.width / tabs.count
                 text: qsTr("Playback")
 
                 PointingCursor {}
@@ -333,9 +287,6 @@ Dialog {
                     text: playbackTab.text
                     color: playbackTab.checked ? root.ink : root.mutedInk
                     font.pixelSize: 13
-                    font.family: root.chromeFont
-                    font.letterSpacing: 0.5
-                    font.capitalization: Font.AllUppercase
                     font.weight: playbackTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -372,12 +323,6 @@ Dialog {
                             enabled: !App.addingChannel
                             selectByMouse: true
                             onAccepted: addChannelButton.clicked()
-
-                            background: Rectangle {
-                                color: root.paper
-                                border.color: channelInput.activeFocus ? root.accent : root.rule
-                                border.width: 1
-                            }
                         }
 
                         Button {
@@ -405,7 +350,7 @@ Dialog {
                             id: addCategoryRepeater
                             model: App.categories
 
-                            delegate: SquareCheckBox {
+                            delegate: SimpleSquareCheckBox {
                                 id: addCategoryCheck
                                 required property var categoryId
                                 required property string name
@@ -519,7 +464,7 @@ Dialog {
                                     Repeater {
                                         model: App.categories
 
-                                        delegate: SquareCheckBox {
+                                        delegate: SimpleSquareCheckBox {
                                             id: membershipCheck
                                             required property var categoryId
                                             required property string name
@@ -617,12 +562,6 @@ Dialog {
                                 if (App.addCategory(text))
                                     clear()
                             }
-
-                            background: Rectangle {
-                                color: root.paper
-                                border.color: newCategoryInput.activeFocus ? root.accent : root.rule
-                                border.width: 1
-                            }
                         }
 
                         Button {
@@ -666,12 +605,6 @@ Dialog {
                                     Layout.fillWidth: true
                                     text: categoryDelegate.name
                                     selectByMouse: true
-
-                                    background: Rectangle {
-                                        color: root.paper
-                                        border.color: categoryName.activeFocus ? root.accent : root.rule
-                                        border.width: 1
-                                    }
                                 }
 
                                 Button {
@@ -745,12 +678,6 @@ Dialog {
                             onValueModified: App.setShortVideoCutoffMinutes(value)
 
                             PointingCursor {}
-
-                            background: Rectangle {
-                                color: root.paper
-                                border.color: shortVideoCutoff.activeFocus ? root.accent : root.rule
-                                border.width: 1
-                            }
                         }
 
                         Label {
@@ -945,11 +872,10 @@ Dialog {
                         font.weight: Font.DemiBold
                     }
 
-                    SquareCheckBox {
+                    SimpleSquareCheckBox {
                         id: simpleUiCheck
                         text: qsTr("Use simple UI")
                         checked: App.simpleUi
-
                         onToggled: {
                             if (checked !== App.simpleUi)
                                 App.setSimpleUi(checked)
@@ -991,15 +917,9 @@ Dialog {
                         echoMode: TextInput.Password
                         selectByMouse: true
                         onAccepted: saveKeyButton.clicked()
-
-                        background: Rectangle {
-                            color: root.paper
-                            border.color: keyInput.activeFocus ? root.accent : root.rule
-                            border.width: 1
-                        }
                     }
 
-                    SquareCheckBox {
+                    SimpleSquareCheckBox {
                         id: rememberKey
                         text: qsTr("Remember in local settings")
                     }
@@ -1351,9 +1271,6 @@ Dialog {
             Layout.fillWidth: true
             implicitHeight: settingsError.implicitHeight + 18
             color: root.errorFill
-            border.color: Qt.tint(root.danger, Qt.rgba(
-                root.danger.r, root.danger.g, root.danger.b, 0.42))
-            border.width: 1
             visible: App.errorMessage.length > 0
 
             Label {

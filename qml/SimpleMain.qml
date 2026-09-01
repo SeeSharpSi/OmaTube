@@ -22,8 +22,6 @@ ApplicationWindow {
     readonly property color danger: themeColors.red
     readonly property color liveRed: themeColors.bright_red
     readonly property color neonYellow: themeColors.bright_yellow
-    readonly property color glassPanel: Qt.rgba(
-        panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
     readonly property color errorFill: Qt.tint(
         paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
     readonly property color errorBorder: Qt.tint(
@@ -37,15 +35,15 @@ ApplicationWindow {
         id: keybinds
     }
 
-    width: 1180
-    height: 780
+    width: 900
+    height: 820
     minimumWidth: 620
     minimumHeight: 540
     visible: true
     title: App.playerOpen && App.currentVideoTitle.length > 0
         ? App.currentVideoTitle + " - OmaTube"
         : qsTr("OmaTube")
-    color: Qt.rgba(paper.r, paper.g, paper.b, 0.88)
+    color: paper
     palette.window: paper
     palette.windowText: ink
     palette.base: panel
@@ -160,46 +158,10 @@ ApplicationWindow {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 20
-        anchors.bottomMargin: 30
-        width: Math.min(parent.width - 40, 1120)
-        spacing: 14
+        anchors.topMargin: 28
+        width: Math.min(parent.width - 56, 820)
+        spacing: 18
         visible: !App.playerOpen && !root.historyOpen
-
-        RowLayout {
-            Layout.fillWidth: true
-            implicitHeight: 42
-
-            Column {
-                spacing: 1
-                Text { text: "OMA / TUBE"; color: root.ink; font.family: "monospace"; font.pixelSize: 16; font.bold: true }
-                Text { text: qsTr("PERSONAL VIDEO LIBRARY"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 8; font.letterSpacing: 1 }
-            }
-            Item { Layout.fillWidth: true }
-            Label { text: qsTr("FEED"); color: root.accent; font.family: "monospace"; font.pixelSize: 11; font.bold: true }
-            Button {
-                text: qsTr("HISTORY")
-                flat: true
-                onClicked: { App.reloadWatchHistory(); root.historyOpen = true }
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
-            }
-            Button {
-                text: qsTr("SETTINGS")
-                flat: true
-                onClicked: settingsDialog.open()
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
-            }
-            Button {
-                text: App.refreshing ? root.spinnerFrames[root.spinnerFrame] : qsTr("REFRESH")
-                enabled: !App.refreshing
-                flat: true
-                onClicked: App.refresh()
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.ink; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
-            }
-        }
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -229,7 +191,6 @@ ApplicationWindow {
                     required property string channelTitle
                     required property string videoId
                     required property string videoTitle
-                    required property string avatarUrl
 
                     width: 72
                     height: 86
@@ -240,28 +201,18 @@ ApplicationWindow {
 
                         Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: 56
-                            height: 56
+                            width: 58
+                            height: 58
+                            radius: 29
                             color: liveHover.hovered
                                 ? Qt.tint(root.panel, Qt.rgba(
                                     root.liveRed.r, root.liveRed.g, root.liveRed.b, 0.14))
                                 : root.panel
                             border.width: 2
                             border.color: root.liveRed
-                            clip: true
-
-                            Image {
-                                id: avatarImage
-                                anchors.fill: parent
-                                anchors.margins: 2
-                                source: liveDelegate.avatarUrl
-                                visible: status === Image.Ready
-                                fillMode: Image.PreserveAspectCrop
-                            }
 
                             Text {
                                 anchors.centerIn: parent
-                                visible: avatarImage.status !== Image.Ready
                                 text: liveDelegate.channelTitle.length > 0
                                     ? liveDelegate.channelTitle.charAt(0).toUpperCase()
                                     : "?"
@@ -336,7 +287,7 @@ ApplicationWindow {
             }
 
             Layout.fillWidth: true
-            implicitHeight: 36
+            implicitHeight: 42
             contentWidth: categoryRow.implicitWidth
             contentHeight: height
             clip: true
@@ -371,9 +322,9 @@ ApplicationWindow {
                             categoryFlickable.updateCategoryDropIndicator()
                         }
 
-                        height: 34
-                        leftPadding: 14
-                        rightPadding: 14
+                        height: 40
+                        leftPadding: 18
+                        rightPadding: 18
                         text: categoryButton.name
                         flat: true
                         onClicked: App.selectCategory(categoryButton.categoryId)
@@ -422,8 +373,7 @@ ApplicationWindow {
                             text: categoryButton.text
                             color: App.selectedCategoryId === categoryButton.categoryId
                                 ? root.panel : root.ink
-                            font.family: "monospace"
-                            font.pixelSize: 11
+                            font.pixelSize: 14
                             font.weight: App.selectedCategoryId === categoryButton.categoryId
                                 ? Font.DemiBold : Font.Normal
                             horizontalAlignment: Text.AlignHCenter
@@ -474,19 +424,13 @@ ApplicationWindow {
             }
         }
 
-        GridView {
+        ListView {
             id: feedList
-            readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
-
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: App.feed
             clip: true
-            cellWidth: Math.floor(width / columnCount)
-            cellHeight: Math.round((cellWidth - 12) * 0.5625) + 112
-            leftMargin: 0
-            rightMargin: 0
-            bottomMargin: 18
+            spacing: 0
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 800
 
@@ -526,65 +470,61 @@ ApplicationWindow {
                 required property date publishedAt
                 required property int watchProgressPercent
 
-                width: feedList.cellWidth - 12
-                height: feedList.cellHeight - 12
+                width: ListView.view.width
+                height: feedColumn.implicitHeight + 34
+
+                Column {
+                    id: feedColumn
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.right: parent.right
+                    anchors.rightMargin: feedDelegate.watchProgressPercent >= 0 ? 56 : 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 7
+
+                    Text {
+                        width: parent.width
+                        text: feedDelegate.title
+                        color: root.ink
+                        font.pixelSize: 21
+                        font.weight: Font.Medium
+                        wrapMode: Text.Wrap
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: feedDelegate.channelTitle + "  \u00b7  "
+                              + root.relativeTime(feedDelegate.publishedAt)
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: feedDelegate.watchProgressPercent >= 0
+                    text: qsTr("%1%").arg(feedDelegate.watchProgressPercent)
+                    color: root.neonYellow
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: 1
+                    color: root.rule
+                }
 
                 Rectangle {
                     anchors.fill: parent
-                    color: root.glassPanel
-                    border.color: feedHover.hovered ? root.accent : root.rule
-                    border.width: feedHover.hovered ? 2 : 1
-
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: width * 0.5625
-                        color: root.softFill
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "OMA / TUBE"
-                            color: root.mutedInk
-                            font.family: "monospace"
-                            font.pixelSize: 10
-                            font.letterSpacing: 1
-                        }
-                    }
-
-                    Image {
-                        id: thumbnail
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: width * 0.5625
-                        source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                    }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: parent.height - thumbnail.height
-                        color: root.glassPanel
-                    }
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 10
-                        spacing: 5
-
-                        Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
-
-                        Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
-                        Text { text: qsTr("%1% watched").arg(feedDelegate.watchProgressPercent); color: root.neonYellow; font.family: "monospace"; font.pixelSize: 10; visible: feedDelegate.watchProgressPercent >= 0 }
-                    }
-
-                    Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
+                    anchors.leftMargin: -12
+                    anchors.rightMargin: -12
+                    z: -1
+                    color: feedHover.hovered ? root.softFill : "transparent"
                 }
 
                 HoverHandler {
@@ -628,15 +568,15 @@ ApplicationWindow {
     }
 
     Rectangle {
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: 18
-        anchors.bottomMargin: 12
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: 18
+        anchors.topMargin: 18
         z: 10
         width: refreshRow.implicitWidth + 16
         height: 32
         visible: App.refreshing && !App.playerOpen
-        color: root.glassPanel
+        color: root.paper
         border.color: root.rule
 
         Row {
@@ -668,12 +608,11 @@ ApplicationWindow {
         z: 10
         visible: !App.playerOpen && !root.historyOpen
         color: root.mutedInk
-        font.family: "monospace"
         font.pixelSize: 11
-        text: keybinds.footerText("feed").split("\n").join("  /  ")
+        text: keybinds.footerText("feed")
     }
 
-    SettingsDialog {
+    SimpleSettingsDialog {
         id: settingsDialog
         parent: root.contentItem
     }
@@ -683,7 +622,7 @@ ApplicationWindow {
         anchors.fill: parent
         z: 15
         active: root.historyOpen
-        source: "qrc:/qml/HistoryPage.qml"
+        source: "qrc:/qml/SimpleHistoryPage.qml"
 
         onLoaded: {
             item.keybinds = keybinds
@@ -691,7 +630,6 @@ ApplicationWindow {
                 root.historyOpen = false
                 App.openVideo(videoId)
             })
-            item.closeRequested.connect(function() { root.historyOpen = false })
         }
     }
 

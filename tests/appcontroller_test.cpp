@@ -44,6 +44,7 @@ private slots:
     void deletesWatchHistoryFromModel();
     void playbackVolumeDefaultsTo100();
     void playbackVolumeClampingAndPersistence();
+    void simpleUiPersistence();
     void perVideoHeightFallsBackToGlobal();
     void perVideoHeightOverrideIsolation();
     void perVideoHeightPersistenceAndDefaultRemoval();
@@ -645,6 +646,43 @@ void AppControllerTest::playbackVolumeClampingAndPersistence()
             AppController::createApplication(QStringLiteral(":memory:"));
         QVERIFY2(clamped->initialize(&error), qPrintable(error));
         QCOMPARE(clamped->playbackVolume(), 100);
+    }
+}
+
+void AppControllerTest::simpleUiPersistence()
+{
+    QString error;
+    {
+        std::unique_ptr<AppController> controller =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller->initialize(&error), qPrintable(error));
+        QCOMPARE(controller->simpleUi(), false);
+
+        QSignalSpy changed(controller.get(), &AppController::simpleUiChanged);
+        controller->setSimpleUi(true);
+        QCOMPARE(controller->simpleUi(), true);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(QSettings().value(QString::fromLatin1("appearance/simpleUi")).toBool(), true);
+
+        // No extra signal when the value is unchanged.
+        controller->setSimpleUi(true);
+        QCOMPARE(changed.count(), 1);
+
+        // Turning it back off persists and emits again.
+        controller->setSimpleUi(false);
+        QCOMPARE(controller->simpleUi(), false);
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(QSettings().value(QString::fromLatin1("appearance/simpleUi")).toBool(), false);
+
+        controller->setSimpleUi(true);
+        QCOMPARE(changed.count(), 3);
+        QCOMPARE(QSettings().value(QString::fromLatin1("appearance/simpleUi")).toBool(), true);
+    }
+    {
+        std::unique_ptr<AppController> reloaded =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(reloaded->initialize(&error), qPrintable(error));
+        QCOMPARE(reloaded->simpleUi(), true);
     }
 }
 

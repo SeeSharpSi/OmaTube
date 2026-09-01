@@ -47,11 +47,17 @@ Item {
         }
     }
 
-    PlayerControls {
+    Loader {
         anchors.fill: parent
-        player: player
-        hostWindow: root.hostWindow
-        onCloseRequested: App.closePlayer()
+        source: App.simpleUi
+            ? "qrc:/qml/SimplePlayerControls.qml"
+            : "qrc:/qml/PlayerControls.qml"
+
+        onLoaded: {
+            item.player = Qt.binding(function() { return player })
+            item.hostWindow = Qt.binding(function() { return root.hostWindow })
+            item.closeRequested.connect(function() { App.closePlayer() })
+        }
     }
 
     Component.onDestruction: {

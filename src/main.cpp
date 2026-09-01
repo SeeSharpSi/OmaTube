@@ -7,6 +7,7 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QTimer>
@@ -64,7 +65,42 @@ int main(int argc, char *argv[])
         &app,
         [] { QCoreApplication::exit(EXIT_FAILURE); },
         Qt::QueuedConnection);
-    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    const QUrl initialUrl = QUrl(controller->simpleUi()
+        ? QStringLiteral("qrc:/qml/SimpleMain.qml")
+        : QStringLiteral("qrc:/qml/Main.qml"));
+    engine.load(initialUrl);
+    QPointer<QQuickWindow> currentWindow =
+        qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+
+    // The QML toggle handler must finish before the root object is replaced,
+    // so the swap is deferred to the next event loop turn. The replacement is
+    // created and shown before the old root is discarded to avoid triggering
+    // quit-on-last-window while no window exists.
+    QObject::connect(
+        controller.get(),
+        &AppController::simpleUiChanged,
+        &engine,
+        [&engine, &currentWindow, controller = controller.get()]() {
+            QTimer::singleShot(0, &engine, [&engine, &currentWindow, controller]() {
+                QQuickWindow *oldWindow = currentWindow;
+                if (!oldWindow)
+                    return;
+
+                engine.load(QUrl(controller->simpleUi()
+                    ? QStringLiteral("qrc:/qml/SimpleMain.qml")
+                    : QStringLiteral("qrc:/qml/Main.qml")));
+                QQuickWindow *newWindow =
+                    qobject_cast<QQuickWindow *>(engine.rootObjects().constLast());
+                if (!newWindow || newWindow == oldWindow)
+                    return;
+
+                newWindow->setScreen(oldWindow->screen());
+                newWindow->setGeometry(oldWindow->geometry());
+                newWindow->setVisibility(oldWindow->visibility());
+                currentWindow = newWindow;
+                oldWindow->deleteLater();
+            });
+        });
 
     if (smokeTest)
         QTimer::singleShot(100, &app, &QCoreApplication::quit);

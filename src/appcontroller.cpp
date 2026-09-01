@@ -21,6 +21,7 @@ constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
 constexpr auto playbackBackendSetting = "playback/backend";
 constexpr auto maximumVideoHeightSetting = "playback/maximumVideoHeight";
 constexpr auto playbackVolumeSetting = "playback/volume";
+constexpr auto simpleUiSetting = "appearance/simpleUi";
 constexpr auto perVideoHeightPrefix = "playback/videoMaximumHeight/";
 constexpr auto defaultPlaybackBackend = "iframe";
 constexpr int defaultShortVideoCutoffMinutes = 3;
@@ -257,6 +258,7 @@ bool AppController::initialize(QString *error)
     m_maximumVideoHeight = PlaybackSettings::normalizeMaximumVideoHeight(
         settings.value(QString::fromLatin1(maximumVideoHeightSetting)).toInt());
     m_playbackVolume = qBound(0, settings.value(QString::fromLatin1(playbackVolumeSetting), 100).toInt(), 100);
+    m_simpleUi = settings.value(QString::fromLatin1(simpleUiSetting), false).toBool();
     m_currentVideoMaximumHeight = m_maximumVideoHeight;
     m_currentVideoMaximumHeightOverride = -1;
     m_currentVideoTitle.clear();
@@ -410,6 +412,11 @@ bool AppController::mpvAvailable() const
 int AppController::playbackVolume() const
 {
     return m_playbackVolume;
+}
+
+bool AppController::simpleUi() const
+{
+    return m_simpleUi;
 }
 
 int AppController::currentVideoMaximumHeight() const
@@ -1050,6 +1057,18 @@ void AppController::setPlaybackVolume(int volume)
     settings.setValue(QString::fromLatin1(playbackVolumeSetting), clamped);
     settings.sync();
     emit playbackVolumeChanged();
+}
+
+void AppController::setSimpleUi(bool enabled)
+{
+    if (m_simpleUi == enabled)
+        return;
+
+    m_simpleUi = enabled;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(simpleUiSetting), enabled);
+    settings.sync();
+    emit simpleUiChanged();
 }
 
 void AppController::setCurrentVideoMaximumHeightOverride(int height)

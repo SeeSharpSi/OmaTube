@@ -19,7 +19,6 @@ Item {
     readonly property color rule: App.themeColors.muted
     readonly property color softFill: App.themeColors.selection
     readonly property color danger: App.themeColors.red
-    readonly property color chromeInk: "#ffffff"
 
     readonly property bool isFullscreen: hostWindow
         ? hostWindow.visibility === Window.FullScreen : false
@@ -100,10 +99,8 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 52
-        color: Qt.rgba(0.02, 0.02, 0.02, 0.82)
-        border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.72)
-        border.width: 1
+        height: 48
+        color: Qt.rgba(0, 0, 0, 0.72)
         z: 2
         visible: root.chromeVisible
 
@@ -114,27 +111,19 @@ Item {
             spacing: 8
 
             ToolButton {
-                implicitWidth: 76
-                implicitHeight: 36
+                implicitHeight: 42
                 text: qsTr("Back")
                 flat: true
                 focusPolicy: Qt.NoFocus
                 onClicked: root.closeRequested()
 
                 PointingCursor {}
-                background: Rectangle {
-                    color: parent.hovered
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
-                        : "transparent"
-                    border.color: parent.hovered ? root.accent : root.rule
-                    border.width: 1
-                }
+                background: Item {}
 
                 contentItem: Text {
-                    text: "< " + parent.text.toUpperCase()
-                    color: root.chromeInk
+                    text: parent.text
+                    color: parent.hovered ? "#ffffff" : root.ink
                     font.pixelSize: 14
-                    font.family: "monospace"
                     font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignHCenter
@@ -146,10 +135,9 @@ Item {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 80
                 text: App.currentVideoTitle
-                color: root.chromeInk
+                color: root.paper
                 font.pixelSize: 13
                 font.weight: Font.Medium
-                font.family: "monospace"
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 visible: text.length > 0
@@ -175,19 +163,18 @@ Item {
                 PointingCursor {}
                 background: Rectangle {
                     color: qualitySelector.hovered || qualitySelector.popup.visible
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.24)
-                        : Qt.rgba(root.paper.r, root.paper.g, root.paper.b, 0.18)
+                        ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(1, 1, 1, 0.14)
+                    radius: 4
                     border.width: 1
                     border.color: qualitySelector.hovered || qualitySelector.popup.visible
-                        ? root.accent : root.rule
+                        ? Qt.rgba(1, 1, 1, 0.78) : Qt.rgba(1, 1, 1, 0.52)
                 }
                 contentItem: Text {
                     leftPadding: 8
                     rightPadding: 24
                     text: qsTr("Quality: %1").arg(qualitySelector.displayText)
-                    color: root.chromeInk
+                    color: "#ffffff"
                     font.pixelSize: 12
-                    font.family: "monospace"
                     font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -197,7 +184,7 @@ Item {
                     y: qualitySelector.height / 2 - height / 2
                     width: 8
                     height: 5
-                    readonly property color chevronColor: root.chromeInk
+                    readonly property color chevronColor: "#ffffff"
                     onChevronColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -220,11 +207,7 @@ Item {
                     width: qualitySelector.width
                     highlighted: qualitySelector.highlightedIndex === qualityOption.index
                     PointingCursor {}
-                    background: Rectangle {
-                        color: qualityOption.highlighted ? root.softFill : root.paper
-                        border.color: qualityOption.highlighted ? root.accent : "transparent"
-                        border.width: qualityOption.highlighted ? 1 : 0
-                    }
+                    background: Rectangle { color: qualityOption.highlighted ? root.softFill : root.paper }
                     contentItem: RowLayout {
                         spacing: 8
                         Rectangle {
@@ -237,7 +220,6 @@ Item {
                             text: qualityOption.modelData.label
                             color: qualitySelector.currentIndex === qualityOption.index ? root.ink : root.mutedInk
                             font.pixelSize: 12
-                            font.family: "monospace"
                             elide: Text.ElideRight
                         }
                     }
@@ -247,11 +229,7 @@ Item {
                     width: qualitySelector.width
                     implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
                     padding: 1
-                    background: Rectangle {
-                        color: root.paper
-                        border.color: root.accent
-                        border.width: 1
-                    }
+                    background: Rectangle { color: root.paper; border.color: root.rule }
                     contentItem: ListView {
                         clip: true
                         implicitHeight: contentHeight
@@ -270,25 +248,14 @@ Item {
         z: 1
         visible: root.chromeVisible && root.overlayMode !== "none"
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 32, 520)
-            height: overlayColumn.implicitHeight + 32
-            color: Qt.rgba(0.02, 0.02, 0.02, 0.88)
-            border.color: root.overlayMode === "error" ? root.danger : root.accent
-            border.width: 1
-        }
-
         ColumnLayout {
-            id: overlayColumn
             anchors.centerIn: parent
-            width: Math.min(parent.width - 64, 456)
-            spacing: 12
+            spacing: 16
 
             Text {
                 text: root.spinnerFrames[root.spinnerFrame]
                 visible: root.overlayMode === "loading"
-                color: root.chromeInk
+                color: root.paper
                 font.pixelSize: 34
                 font.family: "monospace"
                 horizontalAlignment: Text.AlignHCenter
@@ -300,9 +267,8 @@ Item {
                     : root.overlayMode === "loading"
                         ? qsTr("Loading...") : qsTr("Playback ended")
                 visible: root.overlayMode !== "loading"
-                color: root.overlayMode === "error" ? root.danger : root.chromeInk
+                color: root.overlayMode === "error" ? root.danger : root.paper
                 font.pixelSize: 16
-                font.family: "monospace"
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
             }
@@ -320,20 +286,6 @@ Item {
                 }
 
                 PointingCursor {}
-                background: Rectangle {
-                    color: root.softFill
-                    border.color: root.accent
-                    border.width: 1
-                }
-                contentItem: Text {
-                    text: parent.text.toUpperCase()
-                    color: root.ink
-                    font.family: "monospace"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
             }
         }
     }
@@ -342,10 +294,8 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 64
-        color: Qt.rgba(0.02, 0.02, 0.02, 0.82)
-        border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.72)
-        border.width: 1
+        height: 56
+        color: Qt.rgba(0, 0, 0, 0.72)
         z: 2
         visible: root.chromeVisible
 
@@ -356,23 +306,17 @@ Item {
 
             ToolButton {
                 id: playButton
-                implicitWidth: 40
+                implicitWidth: 44
                 implicitHeight: 40
                 flat: true
                 focusPolicy: Qt.NoFocus
                 onClicked: if (root.player) root.player.togglePaused()
 
                 PointingCursor {}
-                background: Rectangle {
-                    color: playButton.hovered
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
-                        : "transparent"
-                    border.color: playButton.hovered ? root.accent : root.rule
-                    border.width: 1
-                }
+                background: Item {}
 
                 contentItem: Canvas {
-                    readonly property color color: root.chromeInk
+                    readonly property color color: playButton.hovered ? "#ffffff" : root.ink
                     readonly property bool iconPlaying: root.playing
 
                     onColorChanged: requestPaint()
@@ -399,9 +343,8 @@ Item {
 
             Text {
                 text: root.formatTime(root.shownPosition)
-                color: root.chromeInk
+                color: root.ink
                 font.pixelSize: 12
-                font.family: "monospace"
                 verticalAlignment: Text.AlignVCenter
             }
 
@@ -433,36 +376,12 @@ Item {
                 onMoved: root.seekPreview = value
 
                 PointingCursor {}
-                background: Rectangle {
-                    x: seekSlider.leftPadding
-                    y: seekSlider.topPadding + seekSlider.availableHeight / 2 - height / 2
-                    width: seekSlider.availableWidth
-                    height: 4
-                    color: root.rule
-                    border.color: root.mutedInk
-                    border.width: 1
-                    Rectangle {
-                        width: seekSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: root.accent
-                    }
-                }
-                handle: Rectangle {
-                    x: seekSlider.leftPadding + seekSlider.visualPosition * seekSlider.availableWidth - width / 2
-                    y: seekSlider.topPadding + seekSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 10
-                    implicitHeight: 10
-                    color: seekSlider.pressed || seekSlider.hovered ? root.accent : root.ink
-                    border.color: Qt.rgba(0, 0, 0, 0.82)
-                    border.width: 1
-                }
             }
 
             Text {
                 text: root.formatTime(root.durationS)
-                color: root.chromeInk
+                color: root.ink
                 font.pixelSize: 12
-                font.family: "monospace"
                 verticalAlignment: Text.AlignVCenter
             }
 
@@ -474,19 +393,12 @@ Item {
                 onClicked: if (root.player) root.player.muted = !root.player.muted
 
                 PointingCursor {}
-                background: Rectangle {
-                    color: muteButton.hovered
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
-                        : "transparent"
-                    border.color: muteButton.hovered ? root.accent : root.rule
-                    border.width: 1
-                }
+                background: Item {}
 
                 contentItem: Text {
-                    text: parent.text.toUpperCase()
-                    color: root.chromeInk
+                    text: parent.text
+                    color: parent.hovered ? "#ffffff" : root.ink
                     font.pixelSize: 12
-                    font.family: "monospace"
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -512,29 +424,6 @@ Item {
                 }
 
                 PointingCursor {}
-                background: Rectangle {
-                    x: volumeSlider.leftPadding
-                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                    width: volumeSlider.availableWidth
-                    height: 4
-                    color: root.rule
-                    border.color: root.mutedInk
-                    border.width: 1
-                    Rectangle {
-                        width: volumeSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: root.accent
-                    }
-                }
-                handle: Rectangle {
-                    x: volumeSlider.leftPadding + volumeSlider.visualPosition * volumeSlider.availableWidth - width / 2
-                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 10
-                    implicitHeight: 10
-                    color: volumeSlider.pressed || volumeSlider.hovered ? root.accent : root.ink
-                    border.color: Qt.rgba(0, 0, 0, 0.82)
-                    border.width: 1
-                }
             }
 
             ToolButton {
@@ -545,19 +434,12 @@ Item {
                 onClicked: root.toggleFullscreen()
 
                 PointingCursor {}
-                background: Rectangle {
-                    color: fullscreenButton.hovered
-                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
-                        : "transparent"
-                    border.color: fullscreenButton.hovered ? root.accent : root.rule
-                    border.width: 1
-                }
+                background: Item {}
 
                 contentItem: Text {
-                    text: parent.text.toUpperCase()
-                    color: root.chromeInk
+                    text: parent.text
+                    color: parent.hovered ? "#ffffff" : root.ink
                     font.pixelSize: 12
-                    font.family: "monospace"
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignHCenter
                 }

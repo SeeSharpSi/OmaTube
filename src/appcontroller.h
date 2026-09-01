@@ -56,6 +56,7 @@ class AppController final : public QObject
     Q_PROPERTY(PointerWatch *pointerWatcher READ pointerWatcher CONSTANT)
     Q_PROPERTY(QString videoBackend READ videoBackend NOTIFY videoBackendChanged)
     Q_PROPERTY(int maximumVideoHeight READ maximumVideoHeight NOTIFY maximumVideoHeightChanged)
+    Q_PROPERTY(bool simpleUi READ simpleUi NOTIFY simpleUiChanged)
     Q_PROPERTY(bool mpvAvailable READ mpvAvailable CONSTANT)
     Q_PROPERTY(int playbackVolume READ playbackVolume NOTIFY playbackVolumeChanged)
     Q_PROPERTY(int currentVideoMaximumHeight READ currentVideoMaximumHeight NOTIFY
@@ -98,6 +99,7 @@ public:
     [[nodiscard]] PointerWatch *pointerWatcher();
     [[nodiscard]] QString videoBackend() const;
     [[nodiscard]] int maximumVideoHeight() const;
+    [[nodiscard]] bool simpleUi() const;
     [[nodiscard]] bool mpvAvailable() const;
     [[nodiscard]] int playbackVolume() const;
     [[nodiscard]] int currentVideoMaximumHeight() const;
@@ -132,6 +134,7 @@ public:
     Q_INVOKABLE void closePlayer();
     Q_INVOKABLE void setVideoBackend(const QString &backend);
     Q_INVOKABLE void setMaximumVideoHeight(int height);
+    Q_INVOKABLE void setSimpleUi(bool enabled);
     Q_INVOKABLE void setPlaybackVolume(int volume);
     Q_INVOKABLE void setCurrentVideoMaximumHeightOverride(int height);
     Q_INVOKABLE void reportPlayback(const QString &videoId, double positionSeconds, bool playing);
@@ -156,6 +159,7 @@ signals:
     void currentStartPositionChanged();
     void videoBackendChanged();
     void maximumVideoHeightChanged();
+    void simpleUiChanged();
     void playbackVolumeChanged();
     void currentVideoMaximumHeightChanged();
     void currentVideoMaximumHeightOverrideChanged();
@@ -214,6 +218,7 @@ private:
     int m_currentStartPosition = 0;
     QString m_videoBackend = QStringLiteral("iframe");
     int m_maximumVideoHeight = 0;
+    bool m_simpleUi = false;
     int m_playbackVolume = 100;
     int m_currentVideoMaximumHeight = 0;
     int m_currentVideoMaximumHeightOverride = -1;

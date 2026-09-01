@@ -1,4 +1,4 @@
-QT += testlib qml
+QT += testlib qml quick
 
 TEMPLATE = app
 TARGET = appcontroller_tests

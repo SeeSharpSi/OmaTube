@@ -12,6 +12,8 @@
 #include <QJsonObject>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickWindow>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -60,6 +62,16 @@ private slots:
     void spaceHoldLongPressTransitionsHeld();
     void spaceHoldAutorepeatIgnored();
     void spaceHoldDeactivationClearsHeldWithoutTap();
+    void errorNotificationsCreatesWithSafeDefaults();
+    void errorNotificationsInitialMessageBecomesNotification();
+    void errorNotificationsIgnoresEmptyMessage();
+    void errorNotificationsDeduplicatesExactMessages();
+    void errorNotificationsMaximumVisibleEvictsOldest();
+    void errorNotificationsDismissRemovesExactlyOne();
+    void errorNotificationsDismissInvalidIndexIsHarmless();
+    void errorNotificationsClearRemovesAllWithoutDismissedSignal();
+    void errorNotificationsTimeoutAutoDismisses();
+    void errorNotificationsHeightGrowsWithDelegates();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -100,6 +112,41 @@ Video makeVideo(
         QDateTime::currentDateTimeUtc(),
         durationSeconds,
     };
+}
+
+std::unique_ptr<QObject> createErrorNotifications(
+    QQmlEngine *engine,
+    QString *errorString,
+    const QVariantMap &initialProperties = {})
+{
+    QQmlComponent component(engine, QUrl(QStringLiteral("qrc:/qml/ErrorNotifications.qml")));
+    if (component.isError()) {
+        if (errorString)
+            *errorString = component.errorString();
+        return nullptr;
+    }
+    std::unique_ptr<QObject> object(component.createWithInitialProperties(initialProperties));
+    if (component.isError()) {
+        if (errorString)
+            *errorString = component.errorString();
+        return nullptr;
+    }
+    return object;
+}
+
+bool invokePushError(QObject *target, const QString &message)
+{
+    return QMetaObject::invokeMethod(target, "pushError", Q_ARG(QVariant, message));
+}
+
+bool invokeDismiss(QObject *target, int index)
+{
+    return QMetaObject::invokeMethod(target, "dismiss", Q_ARG(QVariant, index));
+}
+
+bool invokeClear(QObject *target)
+{
+    return QMetaObject::invokeMethod(target, "clear");
 }
 }
 
@@ -1258,6 +1305,235 @@ void AppControllerTest::spaceHoldDeactivationClearsHeldWithoutTap()
     }
 }
 
-QTEST_GUILESS_MAIN(AppControllerTest)
+void AppControllerTest::errorNotificationsCreatesWithSafeDefaults()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QCOMPARE(notifications->property("errorMessage").toString(), QString());
+    QCOMPARE(notifications->property("timeoutMs").toInt(), 30000);
+    QCOMPARE(notifications->property("maximumVisible").toInt(), 4);
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QVERIFY(notifications->property("width").toReal() > 0.0);
+    QCOMPARE(notifications->property("height").toReal(), 0.0);
+}
+
+void AppControllerTest::errorNotificationsInitialMessageBecomesNotification()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(
+        &engine,
+        &error,
+        QVariantMap{{QStringLiteral("errorMessage"), QStringLiteral("Boom")}});
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 1);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Boom"));
+}
+
+void AppControllerTest::errorNotificationsIgnoresEmptyMessage()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QString()));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Real")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    // An empty errorMessage update is ignored and must not clear anything.
+    QVERIFY(notifications->setProperty("errorMessage", QString()));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+}
+
+void AppControllerTest::errorNotificationsDeduplicatesExactMessages()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Alpha")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Alpha")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Beta")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    // Alpha -> Beta -> Alpha is ignored while Alpha is still visible.
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Alpha")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 2);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Alpha"));
+    QCOMPARE(dismissed.at(1).at(0).toString(), QStringLiteral("Beta"));
+}
+
+void AppControllerTest::errorNotificationsMaximumVisibleEvictsOldest()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(
+        &engine, &error, QVariantMap{{QStringLiteral("maximumVisible"), 2}});
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("One")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Two")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Three")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Four")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    // Oldest entries were evicted without a dismissed signal; survivors are the newest two.
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 2);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Three"));
+    QCOMPARE(dismissed.at(1).at(0).toString(), QStringLiteral("Four"));
+}
+
+void AppControllerTest::errorNotificationsDismissRemovesExactlyOne()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("One")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Two")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Three")));
+    QCOMPARE(notifications->property("count").toInt(), 3);
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+
+    QVERIFY(invokeDismiss(notifications.get(), 1));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+    QCOMPARE(dismissed.count(), 1);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Two"));
+
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 3);
+    QCOMPARE(dismissed.at(1).at(0).toString(), QStringLiteral("One"));
+    QCOMPARE(dismissed.at(2).at(0).toString(), QStringLiteral("Three"));
+}
+
+void AppControllerTest::errorNotificationsDismissInvalidIndexIsHarmless()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+
+    QVERIFY(invokeDismiss(notifications.get(), 0));
+    QVERIFY(invokeDismiss(notifications.get(), -1));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 0);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Only")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+    QVERIFY(invokeDismiss(notifications.get(), 1));
+    QVERIFY(invokeDismiss(notifications.get(), -7));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+    QCOMPARE(dismissed.count(), 0);
+}
+
+void AppControllerTest::errorNotificationsClearRemovesAllWithoutDismissedSignal()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("One")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Two")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+    QVERIFY(invokeClear(notifications.get()));
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 0);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Three")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+}
+
+void AppControllerTest::errorNotificationsTimeoutAutoDismisses()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(
+        &engine, &error, QVariantMap{{QStringLiteral("timeoutMs"), 50}});
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Transient")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    QTRY_COMPARE_WITH_TIMEOUT(notifications->property("count").toInt(), 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(dismissed.count(), 1, 5000);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Transient"));
+}
+
+void AppControllerTest::errorNotificationsHeightGrowsWithDelegates()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    // Standalone (no parent) the root falls back to a usable width.
+    QVERIFY(notifications->property("width").toReal() > 0.0);
+    QCOMPARE(notifications->property("height").toReal(), 0.0);
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Sized one")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    // The Column computes its implicit size during polish, which requires a
+    // window; host the component the way Main.qml does before checking heights.
+    QQuickWindow window;
+    window.resize(600, 400);
+    qobject_cast<QQuickItem *>(notifications.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > 0.0, 5000);
+    const qreal singleHeight = notifications->property("height").toReal();
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Sized two")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+    QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > singleHeight, 5000);
+}
+
+QTEST_MAIN(AppControllerTest)
 
 #include "appcontroller_test.moc"

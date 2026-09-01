@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/qml">
         <file alias="AddChannelDialog.qml">AddChannelDialog.qml</file>
+        <file alias="ErrorNotifications.qml">ErrorNotifications.qml</file>
         <file alias="HistoryPage.qml">HistoryPage.qml</file>
         <file alias="Keybinds.qml">Keybinds.qml</file>
         <file alias="Main.qml">Main.qml</file>

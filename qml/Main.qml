@@ -24,10 +24,6 @@ ApplicationWindow {
     readonly property color neonYellow: themeColors.bright_yellow
     readonly property color glassPanel: Qt.rgba(
         panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
-    readonly property color errorFill: Qt.tint(
-        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
-    readonly property color errorBorder: Qt.tint(
-        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.48))
     property bool historyOpen: false
     property bool modalOpen: settingsDialog.visible || App.playerOpen || root.historyOpen
     property int spinnerFrame: 0
@@ -452,29 +448,6 @@ ApplicationWindow {
             color: root.rule
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: errorText.implicitHeight + 20
-            color: root.errorFill
-            border.color: root.errorBorder
-            visible: App.errorMessage.length > 0
-
-            Text {
-                id: errorText
-                anchors.fill: parent
-                anchors.margins: 10
-                text: App.errorMessage
-                color: root.danger
-                wrapMode: Text.Wrap
-                font.pixelSize: 12
-            }
-
-            TapHandler {
-                cursorShape: Qt.PointingHandCursor
-                onTapped: App.clearError()
-            }
-        }
-
         GridView {
             id: feedList
             readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
@@ -626,7 +599,26 @@ ApplicationWindow {
 
     }
 
+    ErrorNotifications {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 18
+        anchors.bottomMargin: refreshPill.visible ? 52 : 18
+        z: 30
+        errorMessage: App.errorMessage
+        cardFill: root.glassPanel
+        cardBorder: Qt.tint(
+            root.paper, Qt.rgba(root.danger.r, root.danger.g, root.danger.b, 0.48))
+        cardAccent: root.danger
+        textColor: root.danger
+        onDismissed: function(sourceMessage) {
+            if (App.errorMessage === sourceMessage)
+                App.clearError()
+        }
+    }
+
     Rectangle {
+        id: refreshPill
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 18

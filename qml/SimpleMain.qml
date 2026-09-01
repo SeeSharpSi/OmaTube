@@ -22,10 +22,6 @@ ApplicationWindow {
     readonly property color danger: themeColors.red
     readonly property color liveRed: themeColors.bright_red
     readonly property color neonYellow: themeColors.bright_yellow
-    readonly property color errorFill: Qt.tint(
-        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.14))
-    readonly property color errorBorder: Qt.tint(
-        paper, Qt.rgba(danger.r, danger.g, danger.b, 0.48))
     property bool historyOpen: false
     property bool modalOpen: settingsDialog.visible || App.playerOpen || root.historyOpen
     property int spinnerFrame: 0
@@ -402,29 +398,6 @@ ApplicationWindow {
             color: root.rule
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: errorText.implicitHeight + 20
-            color: root.errorFill
-            border.color: root.errorBorder
-            visible: App.errorMessage.length > 0
-
-            Text {
-                id: errorText
-                anchors.fill: parent
-                anchors.margins: 10
-                text: App.errorMessage
-                color: root.danger
-                wrapMode: Text.Wrap
-                font.pixelSize: 12
-            }
-
-            TapHandler {
-                cursorShape: Qt.PointingHandCursor
-                onTapped: App.clearError()
-            }
-        }
-
         ListView {
             id: feedList
 
@@ -564,6 +537,24 @@ ApplicationWindow {
             }
         }
 
+    }
+
+    ErrorNotifications {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 18
+        z: 30
+        errorMessage: App.errorMessage
+        cardFill: root.panel
+        cardBorder: Qt.tint(
+            root.paper, Qt.rgba(root.danger.r, root.danger.g, root.danger.b, 0.48))
+        cardAccent: root.danger
+        textColor: root.danger
+        onDismissed: function(sourceMessage) {
+            if (App.errorMessage === sourceMessage)
+                App.clearError()
+        }
     }
 
     Rectangle {

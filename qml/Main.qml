@@ -643,7 +643,7 @@ ApplicationWindow {
         anchors.bottomMargin: refreshPill.visible ? 52 : 18
         z: 30
         errorMessage: App.errorMessage
-        cardFill: root.glassPanel
+        cardFill: root.panel
         cardBorder: Qt.tint(
             root.paper, Qt.rgba(root.danger.r, root.danger.g, root.danger.b, 0.48))
         cardAccent: root.danger
@@ -664,7 +664,7 @@ ApplicationWindow {
         width: refreshRow.implicitWidth + 16
         height: 32
         visible: App.refreshing && !App.playerOpen
-        color: root.glassPanel
+        color: root.panel
         border.color: root.rule
 
         Row {

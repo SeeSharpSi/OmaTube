@@ -110,8 +110,12 @@ Item {
                     opacity: cardHover.hovered ? 1.0 : 0.6
                 }
 
-                TapHandler {
-                    onTapped: errorNotifications.dismiss(card.index)
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: function(mouse) { mouse.accepted = true; errorNotifications.dismiss(card.index) }
                 }
 
                 HoverHandler {

@@ -5,7 +5,10 @@
 #include "mpvplayer.h"
 #endif
 
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QPointer>
 #include <QQuickWindow>
@@ -37,13 +40,39 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName(QStringLiteral("YT Client"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    const bool smokeTest = app.arguments().contains(QStringLiteral("--quit-after-startup"));
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral(
+        "OmaTube is a Qt Quick YouTube client with feed browsing, channel "
+        "tracking, and selectable playback backends."));
+    parser.addHelpOption();
+    QCommandLineOption smokeOption(QStringLiteral("quit-after-startup"),
+        QStringLiteral("Smoke-test mode: run against an in-memory database and "
+                       "quit 100 ms after startup, without opening a video."));
+    parser.addOption(smokeOption);
+    QCommandLineOption verboseOption(QStringLiteral("verbose"),
+        QStringLiteral("Enable debug logging for the omatube.* logging "
+                       "categories."));
+    parser.addOption(verboseOption);
+    QCommandLineOption databaseOption(
+        QStringLiteral("database"),
+        QStringLiteral("Use <path> as the SQLite database file instead of the "
+                       "default per-user location. Accepts the literal "
+                       "\":memory:\" for an in-memory database."),
+        QStringLiteral("path"));
+    parser.addOption(databaseOption);
+    parser.process(app);
+
+    const bool smokeTest = parser.isSet(smokeOption);
+    if (parser.isSet(verboseOption)) {
+        QLoggingCategory::setFilterRules(QStringLiteral("omatube.*.debug=true"));
+        qInfo("Verbose logging enabled for omatube.* categories");
+    }
 #ifdef OMA_HAS_MPV
     if (!smokeTest)
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 #endif
     std::unique_ptr<AppController> controller = AppController::createApplication(
-        smokeTest ? QStringLiteral(":memory:") : QString{});
+        smokeTest ? QStringLiteral(":memory:") : parser.value(databaseOption));
     QString initializationError;
     if (!controller->initialize(&initializationError)) {
         qCritical("Could not initialize application: %s", qPrintable(initializationError));

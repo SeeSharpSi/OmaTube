@@ -548,7 +548,9 @@ bool Repository::upsertVideos(const QList<Video> &videos, QString *error)
         "ON CONFLICT(id) DO UPDATE SET channel_id = excluded.channel_id, "
         "title = excluded.title, published_at = excluded.published_at, "
         "is_broadcast = excluded.is_broadcast, broadcast_state = excluded.broadcast_state, "
-        "fetched_at = excluded.fetched_at, duration_seconds = excluded.duration_seconds"));
+        "fetched_at = excluded.fetched_at, duration_seconds = "
+        "CASE WHEN excluded.duration_seconds < 0 THEN videos.duration_seconds "
+        "ELSE excluded.duration_seconds END"));
     for (const Video &video : videos) {
         query.bindValue(0, video.id);
         query.bindValue(1, video.channelId);
@@ -602,9 +604,11 @@ QList<Video> Repository::feedPage(
     if (categoryId) {
         statement += QStringLiteral(
             "JOIN category_channels cc ON cc.channel_id = c.id "
-            "WHERE v.is_broadcast = 0 AND v.duration_seconds > ? AND cc.category_id = ? ");
+            "WHERE v.is_broadcast = 0 "
+            "AND (v.duration_seconds < 0 OR v.duration_seconds > ?) AND cc.category_id = ? ");
     } else {
-        statement += QStringLiteral("WHERE v.is_broadcast = 0 AND v.duration_seconds > ? ");
+        statement += QStringLiteral(
+            "WHERE v.is_broadcast = 0 AND (v.duration_seconds < 0 OR v.duration_seconds > ?) ");
     }
     const bool useCursor = publishedBefore.isValid() && !idBefore.isEmpty();
     if (useCursor) {

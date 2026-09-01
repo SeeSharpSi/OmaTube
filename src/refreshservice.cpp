@@ -4,9 +4,12 @@
 #include "youtubeclient.h"
 
 #include <QDateTime>
+#include <QLoggingCategory>
 
 #include <algorithm>
 #include <utility>
+
+Q_LOGGING_CATEGORY(refreshLog, "omatube.refresh", QtWarningMsg)
 
 RefreshService::RefreshService(
     Repository *repository,
@@ -34,6 +37,7 @@ void RefreshService::refresh()
         return;
 
     m_refreshing = true;
+    qCDebug(refreshLog) << "starting feed refresh";
     emit refreshingChanged();
     m_channels.clear();
     m_metadataQueue.clear();
@@ -41,7 +45,6 @@ void RefreshService::refresh()
     m_videoQueue.clear();
     m_liveQueue.clear();
     m_videoIds.clear();
-    m_liveChannels.clear();
     m_feedErrors.clear();
     m_liveErrors.clear();
     m_metadataInFlight = 0;
@@ -49,15 +52,9 @@ void RefreshService::refresh()
     m_videosInFlight = 0;
     m_liveInFlight = 0;
 
-    if (!m_youTubeClient->hasApiKey()) {
-        m_feedErrors.append(QStringLiteral("YouTube API key is not configured."));
-        m_liveErrors.append(QStringLiteral("YouTube API key is not configured."));
-        finish();
-        return;
-    }
-
     QString error;
     m_channels = m_repository->channels(std::nullopt, &error);
+    qCDebug(refreshLog) << "loaded" << m_channels.size() << "channels";
     if (!error.isEmpty()) {
         m_feedErrors.append(error);
         m_liveErrors.append(error);
@@ -65,9 +62,17 @@ void RefreshService::refresh()
         return;
     }
     if (m_channels.isEmpty()) {
+        m_liveChannels.clear();
+        emit liveChannelsChanged({});
         finish();
         return;
     }
+    QSet<QString> channelIds;
+    for (const Channel &channel : std::as_const(m_channels))
+        channelIds.insert(channel.id);
+    m_liveChannels.removeIf([&channelIds](const LiveChannel &live) {
+        return !channelIds.contains(live.channelId);
+    });
     beginMetadataRefresh();
 }
 
@@ -80,11 +85,7 @@ void RefreshService::loadOlder(std::optional<qint64> categoryId)
 {
     if (m_refreshing || m_historyLoading)
         return;
-    if (!m_youTubeClient->hasApiKey()) {
-        emit historyFinished(QStringLiteral("YouTube API key is not configured."));
-        return;
-    }
-
+    qCDebug(refreshLog) << "loading older videos for category" << categoryId;
     QString error;
     const QList<Channel> channels = m_repository->channels(categoryId, &error);
     if (!error.isEmpty()) {
@@ -140,9 +141,13 @@ void RefreshService::dispatchHistoryPages()
                     m_historyErrors.append(
                         QStringLiteral("%1: %2").arg(channel.title, error));
                 } else {
+                    QString databaseError;
+                    if (!page.videos.isEmpty()
+                        && !m_repository->upsertVideos(page.videos, &databaseError)) {
+                        m_historyErrors.append(databaseError);
+                    }
                     for (const QString &id : page.videoIds)
                         m_historyVideoIds.insert(id);
-                    QString databaseError;
                     if (!m_repository->setChannelHistoryState(
                             channel.id,
                             page.nextPageToken,
@@ -210,13 +215,16 @@ void RefreshService::finishHistoryLoad()
 void RefreshService::beginMetadataRefresh()
 {
     const QDateTime refreshBefore = QDateTime::currentDateTimeUtc().addDays(-29);
-    for (const Channel &channel : std::as_const(m_channels)) {
-        if (!channel.metadataFetchedAt.isValid() || channel.metadataFetchedAt < refreshBefore)
-            m_metadataQueue.enqueue(channel);
+    if (m_youTubeClient->hasApiKey()) {
+        for (const Channel &channel : std::as_const(m_channels)) {
+            if (!channel.metadataFetchedAt.isValid() || channel.metadataFetchedAt < refreshBefore)
+                m_metadataQueue.enqueue(channel);
+        }
     }
 
     m_stageCompleted = 0;
     m_stageTotal = m_metadataQueue.size();
+    qCDebug(refreshLog) << "metadata refresh count" << m_stageTotal;
     if (m_stageTotal == 0) {
         beginUploads();
         return;
@@ -271,6 +279,7 @@ void RefreshService::beginUploads()
         m_uploadQueue.enqueue(channel);
     m_stageCompleted = 0;
     m_stageTotal = m_uploadQueue.size();
+    qCDebug(refreshLog) << "upload feed count" << m_stageTotal;
     setProgressText(QStringLiteral("Loading uploads 0/%1").arg(m_stageTotal));
     dispatchUploads();
 }
@@ -289,6 +298,8 @@ void RefreshService::dispatchUploads()
                 if (!error.isEmpty()) {
                     m_feedErrors.append(QStringLiteral("%1: %2").arg(channel.title, error));
                 } else {
+                    if (!page.videos.isEmpty())
+                        storeSourceVideos(channel, page.videos);
                     for (const QString &id : page.videoIds)
                         m_videoIds.insert(id);
                     QString databaseError;
@@ -323,6 +334,7 @@ void RefreshService::beginVideoDetails()
 
     m_stageCompleted = 0;
     m_stageTotal = m_videoQueue.size();
+    qCDebug(refreshLog) << "video detail batch count" << m_stageTotal;
     if (m_stageTotal == 0) {
         beginLiveChecks();
         return;
@@ -364,6 +376,7 @@ void RefreshService::beginLiveChecks()
         m_liveQueue.enqueue(channel);
     m_stageCompleted = 0;
     m_stageTotal = m_liveQueue.size();
+    qCDebug(refreshLog) << "live check count" << m_stageTotal;
     setProgressText(QStringLiteral("Checking live channels 0/%1").arg(m_stageTotal));
     dispatchLiveChecks();
 }
@@ -380,8 +393,8 @@ void RefreshService::dispatchLiveChecks()
                 ++m_stageCompleted;
                 if (!error.isEmpty())
                     m_liveErrors.append(QStringLiteral("%1: %2").arg(channel.title, error));
-                else if (live)
-                    m_liveChannels.append(std::move(*live));
+                else
+                    updateLiveChannel(channel, std::move(live));
                 setProgressText(
                     QStringLiteral("Checking live channels %1/%2").arg(m_stageCompleted).arg(m_stageTotal));
                 if (m_liveQueue.isEmpty() && m_liveInFlight == 0)
@@ -392,6 +405,51 @@ void RefreshService::dispatchLiveChecks()
     }
 }
 
+void RefreshService::storeSourceVideos(const Channel &channel, const QList<Video> &videos)
+{
+    QString error;
+    if (!m_repository->upsertVideos(videos, &error)) {
+        m_feedErrors.append(error);
+        return;
+    }
+    emit feedChanged();
+    m_youTubeClient->enrichVideos(
+        channel,
+        videos,
+        [this](QList<Video> enriched, QString enrichmentError) {
+            if (!enrichmentError.isEmpty() || enriched.isEmpty())
+                return;
+            QString databaseError;
+            if (m_repository->upsertVideos(enriched, &databaseError))
+                emit feedChanged();
+        });
+}
+
+void RefreshService::updateLiveChannel(
+    const Channel &channel,
+    std::optional<LiveChannel> live)
+{
+    const auto existing = std::find_if(
+        m_liveChannels.begin(),
+        m_liveChannels.end(),
+        [&channel](const LiveChannel &candidate) { return candidate.channelId == channel.id; });
+    if (live) {
+        if (existing == m_liveChannels.end())
+            m_liveChannels.append(std::move(*live));
+        else
+            *existing = std::move(*live);
+    } else if (existing != m_liveChannels.end()) {
+        m_liveChannels.erase(existing);
+    }
+    std::sort(
+        m_liveChannels.begin(),
+        m_liveChannels.end(),
+        [](const LiveChannel &left, const LiveChannel &right) {
+            return left.channelTitle.localeAwareCompare(right.channelTitle) < 0;
+        });
+    emit liveChannelsChanged(m_liveChannels);
+}
+
 void RefreshService::finish()
 {
     QString pruneError;
@@ -399,6 +457,8 @@ void RefreshService::finish()
         m_feedErrors.append(pruneError);
 
     m_refreshing = false;
+    qCDebug(refreshLog) << "refresh finished with" << m_feedErrors.size() << "feed errors and"
+                        << m_liveErrors.size() << "live errors";
     std::sort(
         m_liveChannels.begin(),
         m_liveChannels.end(),

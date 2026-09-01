@@ -5,6 +5,7 @@
 #include <QList>
 #include <QNetworkAccessManager>
 #include <QObject>
+#include <QQueue>
 #include <QStringList>
 
 #include <functional>
@@ -36,6 +37,7 @@ public:
 
     void setApiKey(QString apiKey);
     [[nodiscard]] virtual bool hasApiKey() const;
+    [[nodiscard]] virtual bool canFetchHistory() const;
 
     virtual void resolveChannel(const QString &input, ResolveCallback callback);
     virtual void fetchUploadPage(
@@ -44,6 +46,10 @@ public:
         UploadPageCallback callback);
     virtual void fetchVideos(const QStringList &videoIds, VideosCallback callback);
     virtual void fetchLiveChannel(const Channel &channel, LiveCallback callback);
+    virtual void enrichVideos(
+        const Channel &channel,
+        const QList<Video> &videos,
+        VideosCallback callback);
 
     static std::optional<ChannelReference> parseChannelReference(
         const QString &input,
@@ -59,15 +65,56 @@ public:
         const QByteArray &json,
         const Channel &channel,
         QString *error = nullptr);
+    static std::optional<Channel> parseYtDlpChannel(
+        const QByteArray &json,
+        const QString &originalInput,
+        QString *error = nullptr);
+    static QList<Video> parseYtDlpVideos(
+        const QByteArray &json,
+        const Channel &channel,
+        QString *error = nullptr);
+    static std::optional<LiveChannel> parseYtDlpLive(
+        const QByteArray &json,
+        const Channel &channel,
+        QString *error = nullptr);
 
 private:
-    using JsonCallback = std::function<void(QByteArray, QString)>;
+    using DataCallback = std::function<void(QByteArray, QString)>;
 
-    void getJson(QUrl url, JsonCallback callback);
+    struct YtDlpJob
+    {
+        QStringList arguments;
+        int timeoutMs = 30000;
+        DataCallback callback;
+    };
+
+    void getData(QUrl url, DataCallback callback);
+    void getJson(QUrl url, DataCallback callback);
+    void resolveChannelKeyless(
+        const QString &input,
+        const ChannelReference &reference,
+        ResolveCallback callback);
+    void resolveChannelWithYtDlp(const QString &input, ResolveCallback callback);
+    void fetchFeed(const Channel &channel, UploadPageCallback callback);
+    void fetchYtDlpUploadPage(
+        const Channel &channel,
+        int startIndex,
+        bool flat,
+        UploadPageCallback callback);
+    void runYtDlp(
+        QStringList arguments,
+        int timeoutMs,
+        bool highPriority,
+        DataCallback callback);
+    void dispatchYtDlp();
+    [[nodiscard]] QUrl channelTabUrl(const Channel &channel, const QString &tab) const;
     [[nodiscard]] QUrl apiUrl(const QString &path, const QList<QPair<QString, QString>> &items) const;
     static QString apiErrorMessage(const QByteArray &json);
     static void setError(QString *target, const QString &message);
 
     QString m_apiKey;
+    QString m_ytDlpExecutable;
     QNetworkAccessManager m_network;
+    QQueue<YtDlpJob> m_ytDlpQueue;
+    int m_ytDlpInFlight = 0;
 };

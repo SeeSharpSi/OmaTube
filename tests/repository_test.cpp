@@ -29,6 +29,7 @@ private slots:
     void importChannelsRollsBackWholeBatch();
     void importCategoriesPreservesOrderMembershipsAndIsIdempotent();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
+    void provisionalMetadataPreservesKnownDuration();
     void feedPagePaginatesWithKeysetCursor();
     void channelHistoryStateLifecycle();
     void appliesWatchProgressAndSurvivesPruning();
@@ -135,7 +136,8 @@ void RepositoryTest::migratesVersionOneDatabase()
     QString error;
     QVERIFY2(repository.open(&error), qPrintable(error));
     QCOMPARE(repository.channels().size(), 1);
-    QCOMPARE(repository.feed().size(), 0);
+    QCOMPARE(repository.feed().size(), 1);
+    QCOMPARE(repository.feed().first().durationSeconds, -1);
     QVERIFY(repository.upsertVideos({makeVideo(
         QStringLiteral("regular"),
         QStringLiteral("UCAlpha"),
@@ -597,6 +599,26 @@ void RepositoryTest::feedExcludesBroadcastsShortVideosAndFiltersCategories()
     const QList<Video> unfilteredFeed = repository.feed(std::nullopt, 0);
     QCOMPARE(unfilteredFeed.size(), 3);
     QCOMPARE(unfilteredFeed.first().id, QStringLiteral("short"));
+}
+
+void RepositoryTest::provisionalMetadataPreservesKnownDuration()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime publishedAt = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos(
+        {makeVideo(QStringLiteral("video"), channel.id, publishedAt, false, 600)},
+        &error));
+    QVERIFY(repository.upsertVideos(
+        {makeVideo(QStringLiteral("video"), channel.id, publishedAt, false, -1)},
+        &error));
+
+    const std::optional<Video> stored = repository.video(QStringLiteral("video"), &error);
+    QVERIFY2(stored.has_value(), qPrintable(error));
+    QCOMPARE(stored->durationSeconds, 600);
 }
 
 void RepositoryTest::feedPagePaginatesWithKeysetCursor()

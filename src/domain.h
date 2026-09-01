@@ -51,6 +51,9 @@ struct UploadPage
 {
     QStringList videoIds;
     QString nextPageToken;
+    // Sources such as Atom feeds already provide usable video metadata and
+    // can skip a separate details request.
+    QList<Video> videos;
 };
 
 // How far a channel's uploads history has been fetched and where to resume.

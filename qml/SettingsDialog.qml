@@ -299,7 +299,7 @@ Dialog {
                 height: tabs.height
                 implicitHeight: tabs.height
                 width: tabs.width / tabs.count
-                text: qsTr("API key")
+                text: qsTr("Data API")
 
                 PointingCursor {}
 
@@ -978,7 +978,7 @@ Dialog {
                         Layout.fillWidth: true
                         text: App.apiKeyConfigured
                             ? qsTr("An API key is configured. Enter a new key to replace it.")
-                            : qsTr("Enter your YouTube Data API v3 key. This is not a YouTube login.")
+                            : qsTr("Optional: enter a YouTube Data API v3 key for the official metadata backend. Without one, OmaTube uses public feeds and yt-dlp when available.")
                         color: root.ink
                         font.pixelSize: 15
                         wrapMode: Text.Wrap

@@ -137,6 +137,7 @@ ApplicationWindow {
             }
             const maxY = Math.max(0, feedList.contentHeight - feedList.height)
             feedList.contentY = Math.min(maxY, feedList.contentY + 120)
+            feedList.maybeLoadMore()
         }
     }
 
@@ -426,6 +427,13 @@ ApplicationWindow {
 
         ListView {
             id: feedList
+
+            function maybeLoadMore() {
+                if (App.historyLoading || !App.historyHasMore)
+                    return
+                if (contentY + height >= contentHeight - 160)
+                    App.loadMoreHistory()
+            }
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: App.feed
@@ -434,18 +442,7 @@ ApplicationWindow {
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 800
 
-            onContentYChanged: {
-                if (App.historyLoading || !App.historyHasMore)
-                    return
-                if (contentY + height >= contentHeight - 600)
-                    App.loadMoreHistory()
-            }
-            onCountChanged: {
-                if (App.historyLoading || !App.historyHasMore)
-                    return
-                if (contentHeight <= height)
-                    App.loadMoreHistory()
-            }
+            onMovementEnded: maybeLoadMore()
 
             footer: Item {
                 width: feedList.width
@@ -458,7 +455,13 @@ ApplicationWindow {
                     font.pixelSize: 12
                     text: App.historyLoading
                           ? root.spinnerFrames[root.spinnerFrame]
-                          : (feedList.count > 0 ? qsTr("Scroll for more") : "")
+                          : (feedList.count > 0 ? qsTr("Load more") : "")
+                }
+
+                TapHandler {
+                    enabled: !App.historyLoading && App.historyHasMore
+                    cursorShape: Qt.PointingHandCursor
+                    onTapped: App.loadMoreHistory()
                 }
             }
 
@@ -547,9 +550,7 @@ ApplicationWindow {
                     color: root.ink
                     font.pixelSize: 19
                     font.weight: Font.Medium
-                    text: App.apiKeyConfigured
-                        ? qsTr("No videos yet")
-                        : qsTr("Set up OmaTube")
+                    text: qsTr("No videos yet")
                 }
 
                 Label {
@@ -558,9 +559,7 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                     color: root.mutedInk
                     font.pixelSize: 13
-                    text: App.apiKeyConfigured
-                        ? qsTr("Add a channel in Settings, then refresh.")
-                        : qsTr("Open Settings to add your YouTube API key and channels.")
+                    text: qsTr("Add a channel in Settings, then refresh.")
                 }
             }
         }

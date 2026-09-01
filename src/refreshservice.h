@@ -36,6 +36,7 @@ signals:
     void refreshingChanged();
     void progressTextChanged();
     void feedChanged();
+    void liveChannelsChanged(QList<LiveChannel> liveChannels);
     void historyLoadingChanged();
     void historyFinished(QString error);
     void refreshFinished(
@@ -62,6 +63,8 @@ private:
     void finishHistoryLoad();
     void setProgressText(QString text);
     static QString summarizeErrors(const QStringList &errors);
+    void storeSourceVideos(const Channel &channel, const QList<Video> &videos);
+    void updateLiveChannel(const Channel &channel, std::optional<LiveChannel> live);
 
     Repository *m_repository;
     YouTubeClient *m_youTubeClient;

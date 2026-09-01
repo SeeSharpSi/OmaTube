@@ -2,7 +2,10 @@
 
 YT Client is a small desktop YouTube feed built with C++20, Qt 6, and QML. It keeps subscriptions and categories locally, shows current live channels separately, and plays videos inside the app.
 
-No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
+No YouTube login or API key is required. Public Atom feeds provide recent
+long-form uploads. A current `yt-dlp` executable adds handle lookup, duration
+enrichment, older history, and current-live detection. Users can still supply
+a YouTube Data API v3 key to use the documented metadata backend instead.
 
 ## Features
 
@@ -22,7 +25,8 @@ No YouTube login is used. Each user supplies their own YouTube Data API v3 key.
 - qmake and Make
 - Qt 6.8 or newer with Core, GUI, Network, Quick, Quick Controls 2, SQL, and SQLite driver
 - Linux only: Qt WebEngine Quick with its QML module
-- Optional native playback: libmpv development files and a current `yt-dlp` executable
+- Recommended keyless metadata and optional native playback: a current `yt-dlp` executable
+- Optional native playback: libmpv development files
 
 The official embedded player remains available when libmpv is absent. qmake detects libmpv through `pkg-config`; the Playback settings expose mpv only in builds where it was found.
 
@@ -34,23 +38,23 @@ On Arch Linux:
 sudo pacman -S --needed base-devel qt6-base qt6-declarative qt6-webengine mpv yt-dlp
 ```
 
-`mpv` provides the libmpv development files and pkg-config metadata used at build time, while `yt-dlp` is required at runtime by the embedded mpv backend.
+`mpv` provides the libmpv development files and pkg-config metadata used at build time. `yt-dlp` enables complete keyless metadata and is also required at runtime by the embedded mpv backend.
 
 On macOS with Homebrew:
 
 ```sh
 xcode-select --install
-brew install qt
+brew install qt yt-dlp
 # Optional embedded mpv backend:
-brew install pkg-config mpv yt-dlp
+brew install pkg-config mpv
 ```
 
 On Ubuntu 24.04 or similar:
 
 ```sh
-sudo apt install make g++ qt6-base-dev qt6-declarative-dev qt6-webengine-dev libqt6sql6-sqlite
+sudo apt install make g++ qt6-base-dev qt6-declarative-dev qt6-webengine-dev libqt6sql6-sqlite yt-dlp
 # Optional embedded mpv backend:
-sudo apt install pkg-config libmpv-dev yt-dlp
+sudo apt install pkg-config libmpv-dev
 ```
 
 Package names vary between Linux distributions.
@@ -80,9 +84,30 @@ Run on Linux:
 ./build/yt-client
 ```
 
+Useful diagnostics:
+
+```sh
+./build/yt-client --verbose
+./build/yt-client --database :memory:
+```
+
+`--verbose` enables only `omatube.*` debug categories. `--database` selects an
+alternate SQLite path and is useful for isolated testing. Run
+`./build/yt-client --help` for all options.
+
 Build output uses Qt installation selected by `qmake6` or `qmake`. Producing signed, self-contained distribution packages is intentionally separate from source builds because Qt runtime deployment and signing differ between Linux distributions and macOS release channels.
 
-## API Key
+## Metadata Sources
+
+OmaTube uses the following sources in order:
+
+- Without an API key, recent long-form uploads come from YouTube's public Atom feeds.
+- `yt-dlp` runs in the background, at most two processes at once, to enrich durations and check current live streams. Older history and `@handle` lookup also use it.
+- With an API key, OmaTube uses YouTube Data API v3 for channel, upload, video, and live metadata.
+
+Cached SQLite data loads before any network request. Feed results appear as each channel responds; live checks and duration enrichment do not hold up recent uploads. If a source fails, cached feed and last-known live entries remain available.
+
+### Optional API Key
 
 Create a Google Cloud project, enable YouTube Data API v3, create an API key, and restrict the key to that API. Enter it through `API key` in the application.
 
@@ -101,17 +126,16 @@ Never commit a key or distribute one shared key with binaries.
 
 ## Use
 
-1. Configure API key.
-2. Add categories through `Manage`.
-3. Add channels by `@handle`, channel URL, or `UC...` channel ID.
-4. Assign channels to categories.
-5. Press `R` whenever a fresh snapshot is wanted.
+1. Add categories through `Manage`.
+2. Add channels by `@handle`, channel URL, or `UC...` channel ID.
+3. Assign channels to categories.
+4. Press `R` whenever a fresh snapshot is wanted.
 
 Category switching only filters local SQLite data. It does not make network requests. Clicking a video title or live circle replaces the feed with the selected player. The official YouTube embedded player is the default. Builds with libmpv can select `Embedded mpv` and a preferred maximum quality under `Settings` > `Playback`; the actual resolution can be lower when a rendition is unavailable. Use Back or Escape to return to the feed.
 
 ## Refresh and Quota
 
-Each refresh retrieves recent upload IDs, fetches video details in batches, and performs one live search per channel. No timer or background polling runs after refresh completes.
+In keyless mode each refresh reads recent long-form Atom feeds, then performs low-priority duration enrichment and current-live checks through `yt-dlp`. With an API key, refresh retrieves recent upload IDs, fetches video details in batches, and performs one live search per channel. No timer or background polling runs after refresh completes.
 
 YouTube currently gives `search.list` a separate default limit of 100 calls per day. With 25 channels, one startup plus three manual refreshes consumes 100 live-search calls. Feed refresh can still succeed when live-search quota is exhausted; application reports live status as incomplete rather than claiming nobody is live.
 
@@ -123,7 +147,7 @@ The feed loads 50 videos at a time. Scrolling toward the bottom serves further c
 
 - `AppController`: QML-facing operations and state
 - `RefreshService`: staged uploads, details, and live refresh
-- `YouTubeClient`: asynchronous HTTPS requests and response parsing
+- `YouTubeClient`: optional Data API, Atom feed requests, and capped `yt-dlp` jobs
 - `Repository`: SQLite schema, migrations, and queries
 - `MpvPlayerNative`: optional libmpv OpenGL renderer and playback controls
 - `QAbstractListModel` implementations: category, channel, feed, and live data
@@ -131,7 +155,9 @@ The feed loads 50 videos at a time. Scrolling toward the bottom serves further c
 
 ## Policy Notes
 
-The default backend uses documented YouTube APIs and the official YouTube embedded player. Linux uses Qt WebEngine; macOS uses WKWebView. It does not scrape pages, download media, block ads, or modify YouTube playback. Videos disabled by their owner for embedding remain unavailable through that backend.
+The playback default remains the official YouTube embedded player. Linux uses Qt WebEngine; macOS uses WKWebView. Videos disabled by their owner for embedding remain unavailable through that backend.
+
+Keyless metadata uses public Atom feeds plus optional `yt-dlp` extraction. These sources are not covered by the documented YouTube Data API contract and can break when YouTube changes its site. The optional API-key backend remains available for users who prefer documented metadata access.
 
 The optional mpv backend has a different behavior and policy surface: libmpv invokes yt-dlp to resolve YouTube media streams, then plays those streams directly. It can apply a preferred maximum resolution and may play public videos disabled for embedding. Users enabling it are responsible for complying with YouTube terms and applicable law.
 

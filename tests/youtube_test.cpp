@@ -1,5 +1,6 @@
 #include "refreshservice.h"
 #include "repository.h"
+#include "youtubefeed.h"
 #include "youtubeclient.h"
 
 #include <QHash>
@@ -43,13 +44,18 @@ public:
         ++uploadPageRequestCount;
         lastRequestedPageToken = pageToken;
         const auto pages = uploadPagesByChannel.constFind(channel.id);
+        const auto sourceVideos = sourceVideosByChannel.constFind(channel.id);
+        if (pageToken.isEmpty() && sourceVideos != sourceVideosByChannel.constEnd()) {
+            callback({{}, sourceNextPageToken, *sourceVideos}, {});
+            return;
+        }
         if (pages == uploadPagesByChannel.constEnd()) {
-            callback({{QStringLiteral("video-%1").arg(channel.id)}, {}}, {});
+            callback({{QStringLiteral("video-%1").arg(channel.id)}, {}, {}}, {});
             return;
         }
         for (const FakeUploadPage &page : *pages) {
             if (page.requestToken == pageToken) {
-                callback({page.videoIds, page.nextPageToken}, page.error);
+                callback({page.videoIds, page.nextPageToken, {}}, page.error);
                 return;
             }
         }
@@ -104,6 +110,8 @@ public:
     int videoDetailRequestCount = 0;
     QString lastRequestedPageToken;
     QHash<QString, QList<FakeUploadPage>> uploadPagesByChannel;
+    QHash<QString, QList<Video>> sourceVideosByChannel;
+    QString sourceNextPageToken;
 
 private:
     int m_publishedAtOffset = 0;
@@ -120,12 +128,19 @@ private slots:
     void parsesApiResponses();
     void refreshServiceStoresFeedAndLiveSnapshot();
     void refreshServiceReportsIncompleteLiveStatus();
+    void refreshServiceStoresSourceVideosImmediately();
+    void refreshServiceKeepsLiveStateOnFailure();
     void refreshServiceRefreshesStaleChannelMetadata();
     void refreshServiceInitializesChannelHistoryState();
     void loadOlderFetchesNextUploadPages();
     void loadOlderScopesToCategoryChannels();
     void loadOlderKeepsTokenOnFailure();
     void loadOlderSkipsCompleteChannels();
+    void generatesLongFormFeedUrls();
+    void parsesAtomFeed();
+    void ignoresMalformedFeedEntries();
+    void rejectsInvalidFeedXml();
+    void parsesYtDlpResponses();
 };
 
 namespace {
@@ -271,6 +286,68 @@ void YouTubeTest::refreshServiceReportsIncompleteLiveStatus()
 
     QVERIFY(!liveComplete);
     QVERIFY(liveError.contains(QStringLiteral("quota exceeded")));
+}
+
+void YouTubeTest::refreshServiceStoresSourceVideosImmediately()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    FakeYouTubeClient client;
+    client.sourceNextPageToken = QStringLiteral("ytdlp:2");
+    client.sourceVideosByChannel.insert(
+        channel.id,
+        {Video{
+            QStringLiteral("source-video"),
+            channel.id,
+            channel.title,
+            QStringLiteral("Source video"),
+            QDateTime::currentDateTimeUtc(),
+            false,
+            QStringLiteral("none"),
+            QDateTime::currentDateTimeUtc(),
+            -1,
+        }});
+    RefreshService service(&repository, &client);
+    QSignalSpy feedSpy(&service, &RefreshService::feedChanged);
+
+    service.refresh();
+
+    QCOMPARE(client.videoDetailRequestCount, 0);
+    QCOMPARE(repository.feed(std::nullopt, 180).size(), 1);
+    QVERIFY(feedSpy.count() >= 1);
+    const QList<ChannelHistoryState> states = repository.channelHistoryStates(&error);
+    QCOMPARE(states.first().nextPageToken, QStringLiteral("ytdlp:2"));
+}
+
+void YouTubeTest::refreshServiceKeepsLiveStateOnFailure()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QVERIFY(repository.upsertChannel(
+        makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")),
+        &error));
+    FakeYouTubeClient client;
+    RefreshService service(&repository, &client);
+    QList<LiveChannel> live;
+    connect(
+        &service,
+        &RefreshService::refreshFinished,
+        this,
+        [&live](QList<LiveChannel> channels, bool, const QString &, const QString &) {
+            live = std::move(channels);
+        });
+
+    service.refresh();
+    QCOMPARE(live.size(), 1);
+    client.failLive = true;
+    service.refresh();
+
+    QCOMPARE(live.size(), 1);
+    QCOMPARE(live.first().channelId, QStringLiteral("UCAlpha"));
 }
 
 void YouTubeTest::refreshServiceRefreshesStaleChannelMetadata()
@@ -473,6 +550,198 @@ void YouTubeTest::loadOlderSkipsCompleteChannels()
 
     QVERIFY2(historyError.isEmpty(), qPrintable(historyError));
     QCOMPARE(client.uploadPageRequestCount, requestsBefore);
+}
+
+void YouTubeTest::generatesLongFormFeedUrls()
+{
+    const QUrl url =
+        longFormYouTubeFeedUrl(QStringLiteral("UC1234567890123456789012"));
+    QCOMPARE(
+        url.toString(),
+        QStringLiteral(
+            "https://www.youtube.com/feeds/videos.xml?playlist_id=UULF1234567890123456789012"));
+    QCOMPARE(url.query(), QStringLiteral("playlist_id=UULF1234567890123456789012"));
+
+    QVERIFY(!longFormYouTubeFeedUrl(QString()).isValid());
+    QVERIFY(!longFormYouTubeFeedUrl(QStringLiteral("UUX1234567890123456789012")).isValid());
+    QVERIFY(!longFormYouTubeFeedUrl(QStringLiteral("UC123456789012345678901")).isValid());
+    QVERIFY(!longFormYouTubeFeedUrl(QStringLiteral("UC12345678901234567890123")).isValid());
+    QVERIFY(!longFormYouTubeFeedUrl(QStringLiteral("UC12345678901234567890&2")).isValid());
+}
+
+void YouTubeTest::parsesAtomFeed()
+{
+    const QByteArray xml = R"(<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/">
+  <link rel="hub" href="https://pubsubhubbub.appspot.com"/>
+  <title>Qt uploads</title>
+  <id>yt:channel:UC1234567890123456789012</id>
+  <author>
+    <name>Qt</name>
+    <uri>https://www.youtube.com/channel/UC1234567890123456789012</uri>
+  </author>
+  <yt:channelId>UC1234567890123456789012</yt:channelId>
+  <entry>
+    <id>yt:video:vid-one</id>
+    <yt:videoId>vid-one</yt:videoId>
+    <yt:channelId>UC1234567890123456789012</yt:channelId>
+    <title>First video</title>
+    <published>2026-08-30T10:00:00+00:00</published>
+    <media:group>
+      <media:title>First video</media:title>
+    </media:group>
+  </entry>
+  <entry>
+    <id>yt:video:vid-two</id>
+    <yt:videoId>vid-two</yt:videoId>
+    <yt:channelId>UC1234567890123456789012</yt:channelId>
+    <title>Second video</title>
+    <published>2026-08-29T09:30:00Z</published>
+  </entry>
+</feed>)";
+    QString error = QStringLiteral("unset");
+    const std::optional<YouTubeFeed> feed = parseYouTubeFeed(xml, &error);
+    QVERIFY2(feed.has_value(), qPrintable(error));
+    QCOMPARE(feed->channelId, QStringLiteral("UC1234567890123456789012"));
+    QCOMPARE(feed->channelTitle, QStringLiteral("Qt"));
+    QCOMPARE(feed->videos.size(), 2);
+    QCOMPARE(feed->videos.first().id, QStringLiteral("vid-one"));
+    QCOMPARE(feed->videos.first().channelId, QStringLiteral("UC1234567890123456789012"));
+    QCOMPARE(feed->videos.first().channelTitle, QStringLiteral("Qt"));
+    QCOMPARE(feed->videos.first().title, QStringLiteral("First video"));
+    QCOMPARE(
+        feed->videos.first().publishedAt.toString(Qt::ISODate),
+        QStringLiteral("2026-08-30T10:00:00Z"));
+    QVERIFY(!feed->videos.first().isBroadcast);
+    QCOMPARE(feed->videos.first().broadcastState, QStringLiteral("none"));
+    QCOMPARE(feed->videos.first().durationSeconds, -1);
+    QVERIFY(feed->videos.first().fetchedAt.isValid());
+    QCOMPARE(feed->videos.last().id, QStringLiteral("vid-two"));
+    QCOMPARE(
+        feed->videos.last().publishedAt.toString(Qt::ISODate),
+        QStringLiteral("2026-08-29T09:30:00Z"));
+
+    // An empty feed is valid when feed-level channel metadata is present,
+    // and the feed title is the fallback when no author name exists.
+    const QByteArray emptyFeed = R"(<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <title>Qt uploads</title>
+  <yt:channelId>UC1234567890123456789012</yt:channelId>
+</feed>)";
+    error.clear();
+    const std::optional<YouTubeFeed> empty = parseYouTubeFeed(emptyFeed, &error);
+    QVERIFY2(empty.has_value(), qPrintable(error));
+    QCOMPARE(empty->videos.size(), 0);
+    QCOMPARE(empty->channelTitle, QStringLiteral("Qt uploads"));
+}
+
+void YouTubeTest::ignoresMalformedFeedEntries()
+{
+    const QByteArray xml = R"(<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <title>Qt uploads</title>
+  <yt:channelId>UC1234567890123456789012</yt:channelId>
+  <entry>
+    <yt:videoId>missing-channel</yt:videoId>
+    <title>No channel id</title>
+    <published>2026-08-30T10:00:00Z</published>
+  </entry>
+  <entry>
+    <yt:videoId>missing-timestamp</yt:videoId>
+    <yt:channelId>UC1234567890123456789012</yt:channelId>
+    <title>No timestamp</title>
+    <published>not-a-date</published>
+  </entry>
+  <entry>
+    <yt:videoId>good</yt:videoId>
+    <yt:channelId>UC1234567890123456789012</yt:channelId>
+    <title>Good video</title>
+    <published>2026-08-30T11:00:00Z</published>
+  </entry>
+</feed>)";
+    QString error = QStringLiteral("unset");
+    const std::optional<YouTubeFeed> feed = parseYouTubeFeed(xml, &error);
+    QVERIFY2(feed.has_value(), qPrintable(error));
+    QCOMPARE(feed->videos.size(), 1);
+    QCOMPARE(feed->videos.first().id, QStringLiteral("good"));
+    QCOMPARE(feed->videos.first().title, QStringLiteral("Good video"));
+}
+
+void YouTubeTest::rejectsInvalidFeedXml()
+{
+    QString error;
+    QVERIFY(!parseYouTubeFeed(QByteArray(), &error));
+    QVERIFY(!error.isEmpty());
+
+    error.clear();
+    QVERIFY(!parseYouTubeFeed(QByteArray("<feed><title>truncated"), &error));
+    QVERIFY(!error.isEmpty());
+
+    error.clear();
+    QVERIFY(!parseYouTubeFeed(QByteArray("<rss/>"), &error));
+    QVERIFY(!error.isEmpty());
+
+    error.clear();
+    QVERIFY(!parseYouTubeFeed(QByteArray("not xml at all"), &error));
+    QVERIFY(!error.isEmpty());
+
+    // Entry-level title and channelId must not satisfy feed metadata.
+    error.clear();
+    const QByteArray noFeedMetadata = R"(<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <entry>
+    <yt:videoId>vid</yt:videoId>
+    <yt:channelId>UC1234567890123456789012</yt:channelId>
+    <title>Only entry title</title>
+    <published>2026-08-30T10:00:00Z</published>
+  </entry>
+</feed>)";
+    QVERIFY(!parseYouTubeFeed(noFeedMetadata, &error));
+    QVERIFY(!error.isEmpty());
+
+    error.clear();
+    const QByteArray noChannelId = R"(<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Qt uploads</title>
+</feed>)";
+    QVERIFY(!parseYouTubeFeed(noChannelId, &error));
+    QVERIFY(!error.isEmpty());
+}
+
+void YouTubeTest::parsesYtDlpResponses()
+{
+    const QByteArray channelJson = R"({"id":"UC1234567890123456789012","channel":"Qt","uploader_id":"@QtGroup","thumbnails":[{"url":"small"},{"url":"large"}],"entries":[]})";
+    QString error;
+    const std::optional<Channel> channel = YouTubeClient::parseYtDlpChannel(
+        channelJson,
+        QStringLiteral("@QtGroup"),
+        &error);
+    QVERIFY2(channel.has_value(), qPrintable(error));
+    QCOMPARE(channel->id, QStringLiteral("UC1234567890123456789012"));
+    QCOMPARE(channel->title, QStringLiteral("Qt"));
+    QCOMPARE(channel->handle, QStringLiteral("@QtGroup"));
+    QCOMPARE(channel->avatarUrl, QStringLiteral("large"));
+    QCOMPARE(channel->uploadsPlaylistId, QStringLiteral("UU1234567890123456789012"));
+
+    const QByteArray videosJson =
+        R"({"id":"regular-id","title":"Regular","channel_id":"UC1234567890123456789012","channel":"Qt","timestamp":1788170400,"duration":601,"live_status":"not_live"})"
+        "\n"
+        R"({"id":"stream-id","title":"Stream","channel_id":"UC1234567890123456789012","channel":"Qt","upload_date":"20260830","duration":3600,"live_status":"was_live"})";
+    const QList<Video> videos = YouTubeClient::parseYtDlpVideos(videosJson, *channel, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(videos.size(), 2);
+    QCOMPARE(videos.first().durationSeconds, 601);
+    QVERIFY(!videos.first().isBroadcast);
+    QVERIFY(videos.last().isBroadcast);
+
+    const QByteArray liveJson =
+        R"({"id":"scheduled","title":"Later","live_status":"is_upcoming"})"
+        "\n"
+        R"({"id":"live-now","title":"Live now","live_status":"is_live"})";
+    const std::optional<LiveChannel> live =
+        YouTubeClient::parseYtDlpLive(liveJson, *channel, &error);
+    QVERIFY2(live.has_value(), qPrintable(error));
+    QCOMPARE(live->videoId, QStringLiteral("live-now"));
 }
 
 QTEST_GUILESS_MAIN(YouTubeTest)

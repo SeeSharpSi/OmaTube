@@ -175,6 +175,11 @@ AppController::AppController(QString databasePath, QObject *parent)
     connect(&m_refreshService, &RefreshService::feedChanged, this, &AppController::reloadFeed);
     connect(
         &m_refreshService,
+        &RefreshService::liveChannelsChanged,
+        this,
+        [this](QList<LiveChannel> live) { m_liveChannels.setLiveChannels(std::move(live)); });
+    connect(
+        &m_refreshService,
         &RefreshService::historyFinished,
         this,
         [this](const QString &error) {
@@ -439,10 +444,6 @@ void AppController::startupRefresh()
     if (m_startupRefreshRequested)
         return;
     m_startupRefreshRequested = true;
-    if (!apiKeyConfigured()) {
-        setStatusMessage(QStringLiteral("Add a YouTube API key, then press R to refresh."));
-        return;
-    }
     refresh();
 }
 
@@ -573,11 +574,6 @@ void AppController::addChannel(const QString &input, const QVariantList &categor
 {
     if (m_addingChannel)
         return;
-    if (!apiKeyConfigured()) {
-        setErrorMessage(QStringLiteral("Add a YouTube API key before adding channels."));
-        return;
-    }
-
     m_addingChannel = true;
     emit addingChannelChanged();
     setErrorMessage({});
@@ -1234,7 +1230,8 @@ void AppController::refreshHistoryHasMore()
     } else if (!error.isEmpty()) {
         setErrorMessage(error);
         return;
-    } else if (apiKeyConfigured() && m_repository.canFetchMoreHistory()) {
+    } else if (m_startupRefreshRequested && m_youTubeClient.canFetchHistory()
+               && m_repository.canFetchMoreHistory()) {
         hasMore = m_repository.historyIncomplete(feedCategoryScope(), &error);
         if (!error.isEmpty()) {
             setErrorMessage(error);

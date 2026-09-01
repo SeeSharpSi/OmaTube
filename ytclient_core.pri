@@ -25,7 +25,8 @@ HEADERS += \
     $$PROJECT_ROOT/src/refreshservice.h \
     $$PROJECT_ROOT/src/repository.h \
     $$PROJECT_ROOT/src/watchtracker.h \
-    $$PROJECT_ROOT/src/youtubeclient.h
+    $$PROJECT_ROOT/src/youtubeclient.h \
+    $$PROJECT_ROOT/src/youtubefeed.h
 
 SOURCES += \
     $$PROJECT_ROOT/src/models/categorymodel.cpp \
@@ -38,4 +39,5 @@ SOURCES += \
     $$PROJECT_ROOT/src/refreshservice.cpp \
     $$PROJECT_ROOT/src/repository.cpp \
     $$PROJECT_ROOT/src/watchtracker.cpp \
-    $$PROJECT_ROOT/src/youtubeclient.cpp
+    $$PROJECT_ROOT/src/youtubeclient.cpp \
+    $$PROJECT_ROOT/src/youtubefeed.cpp

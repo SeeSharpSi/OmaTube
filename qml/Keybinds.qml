@@ -2,7 +2,7 @@ import QtQuick
 
 QtObject {
     readonly property var entries: [
-        { key: "h", label: qsTr("history"), pages: ["feed"] },
+        { key: "h", label: qsTr("history"), pages: ["feed", "history"] },
         { key: "s", label: qsTr("settings"), pages: ["feed", "history"] },
         { key: "j/k", label: qsTr("scroll"), pages: ["feed", "history"] },
         { key: "r", label: qsTr("refresh"), pages: ["feed"] },

@@ -1174,7 +1174,7 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_RETURN_ARG(QVariant, historyVariant),
         Q_ARG(QVariant, QStringLiteral("history")));
     QVERIFY2(historyOk, "QMetaObject::invokeMethod footerText(\"history\") failed");
-    QCOMPARE(historyVariant.toString(), QStringLiteral("s: settings\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
+    QCOMPARE(historyVariant.toString(), QStringLiteral("h: history\ns: settings\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
 }
 
 void AppControllerTest::spaceHoldShortPressEmitsTappedOnly()

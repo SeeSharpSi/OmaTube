@@ -23,7 +23,7 @@ ApplicationWindow {
     readonly property color liveRed: themeColors.bright_red
     readonly property color neonYellow: themeColors.bright_yellow
     property bool historyOpen: false
-    property bool modalOpen: settingsDialog.visible || App.playerOpen || root.historyOpen
+    property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -110,6 +110,10 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
         onActivated: {
+            if (root.historyOpen) {
+                root.historyOpen = false
+                return
+            }
             App.reloadWatchHistory()
             root.historyOpen = true
         }

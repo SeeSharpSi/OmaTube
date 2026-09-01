@@ -25,7 +25,7 @@ ApplicationWindow {
     readonly property color glassPanel: Qt.rgba(
         panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
     property bool historyOpen: false
-    property bool modalOpen: settingsDialog.visible || App.playerOpen || root.historyOpen
+    property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -112,6 +112,10 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
         onActivated: {
+            if (root.historyOpen) {
+                root.historyOpen = false
+                return
+            }
             App.reloadWatchHistory()
             root.historyOpen = true
         }
@@ -161,7 +165,7 @@ ApplicationWindow {
         anchors.bottomMargin: 30
         width: Math.min(parent.width - 40, 1120)
         spacing: 14
-        visible: !App.playerOpen && !root.historyOpen
+        visible: !App.playerOpen
 
         RowLayout {
             Layout.fillWidth: true
@@ -173,13 +177,24 @@ ApplicationWindow {
                 Text { text: qsTr("PERSONAL VIDEO LIBRARY"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 8; font.letterSpacing: 1 }
             }
             Item { Layout.fillWidth: true }
-            Label { text: qsTr("FEED"); color: root.accent; font.family: "monospace"; font.pixelSize: 11; font.bold: true }
+            Button {
+                text: qsTr("FEED")
+                flat: true
+                onClicked: root.historyOpen = false
+                contentItem: Text { text: parent.text; color: !root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                background: Rectangle { color: !root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: !root.historyOpen ? root.accent : root.rule }
+            }
             Button {
                 text: qsTr("HISTORY")
                 flat: true
-                onClicked: { App.reloadWatchHistory(); root.historyOpen = true }
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
+                onClicked: {
+                    if (!root.historyOpen) {
+                        App.reloadWatchHistory()
+                        root.historyOpen = true
+                    }
+                }
+                contentItem: Text { text: parent.text; color: root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                background: Rectangle { color: root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.historyOpen ? root.accent : root.rule }
             }
             Button {
                 text: qsTr("SETTINGS")
@@ -200,403 +215,425 @@ ApplicationWindow {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: liveList.count > 0
-            spacing: 9
+            Layout.fillHeight: true
+            visible: !root.historyOpen
+            spacing: 14
 
-            Label {
-                text: qsTr("LIVE NOW")
-                color: root.liveRed
-                font.pixelSize: 11
-                font.weight: Font.Bold
-                font.letterSpacing: 1.5
-            }
-
-            ListView {
-                id: liveList
+            ColumnLayout {
                 Layout.fillWidth: true
-                implicitHeight: 88
-                orientation: ListView.Horizontal
-                spacing: 10
-                clip: true
-                model: App.liveChannels
-                boundsBehavior: Flickable.StopAtBounds
+                visible: liveList.count > 0
+                spacing: 9
 
-                delegate: Item {
-                    id: liveDelegate
-                    required property string channelTitle
-                    required property string videoId
-                    required property string videoTitle
-                    required property string avatarUrl
+                Label {
+                    text: qsTr("LIVE NOW")
+                    color: root.liveRed
+                    font.pixelSize: 11
+                    font.weight: Font.Bold
+                    font.letterSpacing: 1.5
+                }
 
-                    width: 72
-                    height: 86
+                ListView {
+                    id: liveList
+                    Layout.fillWidth: true
+                    implicitHeight: 88
+                    orientation: ListView.Horizontal
+                    spacing: 10
+                    clip: true
+                    model: App.liveChannels
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    Column {
-                        width: parent.width
-                        spacing: 5
+                    delegate: Item {
+                        id: liveDelegate
+                        required property string channelTitle
+                        required property string videoId
+                        required property string videoTitle
+                        required property string avatarUrl
 
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: 56
-                            height: 56
-                            color: liveHover.hovered
-                                ? Qt.tint(root.panel, Qt.rgba(
-                                    root.liveRed.r, root.liveRed.g, root.liveRed.b, 0.14))
-                                : root.panel
-                            border.width: 2
-                            border.color: root.liveRed
-                            clip: true
+                        width: 72
+                        height: 86
 
-                            Image {
-                                id: avatarImage
-                                anchors.fill: parent
-                                anchors.margins: 2
-                                source: liveDelegate.avatarUrl
-                                visible: status === Image.Ready
-                                fillMode: Image.PreserveAspectCrop
+                        Column {
+                            width: parent.width
+                            spacing: 5
+
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 56
+                                height: 56
+                                color: liveHover.hovered
+                                    ? Qt.tint(root.panel, Qt.rgba(
+                                        root.liveRed.r, root.liveRed.g, root.liveRed.b, 0.14))
+                                    : root.panel
+                                border.width: 2
+                                border.color: root.liveRed
+                                clip: true
+
+                                Image {
+                                    id: avatarImage
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    source: liveDelegate.avatarUrl
+                                    visible: status === Image.Ready
+                                    fillMode: Image.PreserveAspectCrop
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: avatarImage.status !== Image.Ready
+                                    text: liveDelegate.channelTitle.length > 0
+                                        ? liveDelegate.channelTitle.charAt(0).toUpperCase()
+                                        : "?"
+                                    color: root.ink
+                                    font.pixelSize: 20
+                                    font.weight: Font.DemiBold
+                                }
                             }
 
                             Text {
-                                anchors.centerIn: parent
-                                visible: avatarImage.status !== Image.Ready
-                                text: liveDelegate.channelTitle.length > 0
-                                    ? liveDelegate.channelTitle.charAt(0).toUpperCase()
-                                    : "?"
+                                width: parent.width
+                                text: liveDelegate.channelTitle
                                 color: root.ink
-                                font.pixelSize: 20
-                                font.weight: Font.DemiBold
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
                             }
                         }
 
-                        Text {
-                            width: parent.width
-                            text: liveDelegate.channelTitle
-                            color: root.ink
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
+                        TapHandler { onTapped: App.openVideo(liveDelegate.videoId) }
+                        HoverHandler {
+                            id: liveHover
+                            cursorShape: Qt.PointingHandCursor
                         }
+                        ToolTip.visible: liveHover.hovered
+                        ToolTip.text: liveDelegate.videoTitle
                     }
-
-                    TapHandler { onTapped: App.openVideo(liveDelegate.videoId) }
-                    HoverHandler {
-                        id: liveHover
-                        cursorShape: Qt.PointingHandCursor
-                    }
-                    ToolTip.visible: liveHover.hovered
-                    ToolTip.text: liveDelegate.videoTitle
                 }
             }
-        }
 
-        Flickable {
-            id: categoryFlickable
-            property Item draggedCategory: null
+            Flickable {
+                id: categoryFlickable
+                property Item draggedCategory: null
 
-            function updateCategoryDropIndicator() {
-                const dragged = draggedCategory
-                if (dragged === null) {
-                    categoryDropIndicator.visible = false
-                    return
-                }
-
-                let nextItem = null
-                let priorItem = null
-                let rank = 0
-                for (let i = 0; i < categoryRepeater.count; ++i) {
-                    const item = categoryRepeater.itemAt(i)
-                    if (item === null || item === dragged)
-                        continue
-                    if (rank === dragged.candidateIndex) {
-                        nextItem = item
-                        break
+                function updateCategoryDropIndicator() {
+                    const dragged = draggedCategory
+                    if (dragged === null) {
+                        categoryDropIndicator.visible = false
+                        return
                     }
-                    priorItem = item
-                    ++rank
+
+                    let nextItem = null
+                    let priorItem = null
+                    let rank = 0
+                    for (let i = 0; i < categoryRepeater.count; ++i) {
+                        const item = categoryRepeater.itemAt(i)
+                        if (item === null || item === dragged)
+                            continue
+                        if (rank === dragged.candidateIndex) {
+                            nextItem = item
+                            break
+                        }
+                        priorItem = item
+                        ++rank
+                    }
+
+                    let lineCenter = 0
+                    if (nextItem !== null) {
+                        lineCenter = categoryRow.x + nextItem.x - categoryRow.spacing / 2
+                    } else if (priorItem !== null) {
+                        lineCenter = categoryRow.x + priorItem.x + priorItem.width
+                            + categoryRow.spacing / 2
+                    } else {
+                        categoryDropIndicator.visible = false
+                        return
+                    }
+
+                    categoryDropIndicator.x = Math.max(0, Math.min(
+                        categoryRow.implicitWidth - categoryDropIndicator.width,
+                        lineCenter - categoryDropIndicator.width / 2))
+                    categoryDropIndicator.visible = true
                 }
 
-                let lineCenter = 0
-                if (nextItem !== null) {
-                    lineCenter = categoryRow.x + nextItem.x - categoryRow.spacing / 2
-                } else if (priorItem !== null) {
-                    lineCenter = categoryRow.x + priorItem.x + priorItem.width
-                        + categoryRow.spacing / 2
-                } else {
-                    categoryDropIndicator.visible = false
-                    return
-                }
+                Layout.fillWidth: true
+                implicitHeight: 36
+                contentWidth: categoryRow.implicitWidth
+                contentHeight: height
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
 
-                categoryDropIndicator.x = Math.max(0, Math.min(
-                    categoryRow.implicitWidth - categoryDropIndicator.width,
-                    lineCenter - categoryDropIndicator.width / 2))
-                categoryDropIndicator.visible = true
-            }
+                Row {
+                    id: categoryRow
+                    height: parent.height
+                    spacing: 8
 
-            Layout.fillWidth: true
-            implicitHeight: 36
-            contentWidth: categoryRow.implicitWidth
-            contentHeight: height
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
+                    Repeater {
+                        id: categoryRepeater
+                        model: App.categories
 
-            Row {
-                id: categoryRow
-                height: parent.height
-                spacing: 8
+                        delegate: Button {
+                            id: categoryButton
+                            required property var categoryId
+                            required property string name
+                            required property int index
+                            property int candidateIndex: index
 
-                Repeater {
-                    id: categoryRepeater
-                    model: App.categories
-
-                    delegate: Button {
-                        id: categoryButton
-                        required property var categoryId
-                        required property string name
-                        required property int index
-                        property int candidateIndex: index
-
-                        function updateDropTarget(offsetX) {
-                            const draggedCenter = categoryButton.x + categoryButton.width / 2 + offsetX
-                            let target = 0
-                            for (let i = 0; i < categoryRepeater.count; ++i) {
-                                const item = categoryRepeater.itemAt(i)
-                                if (item !== null && item !== categoryButton
-                                    && item.x + item.width / 2 < draggedCenter)
-                                    ++target
-                            }
-                            categoryButton.candidateIndex = target
-                            categoryFlickable.updateCategoryDropIndicator()
-                        }
-
-                        height: 34
-                        leftPadding: 14
-                        rightPadding: 14
-                        text: categoryButton.name
-                        flat: true
-                        onClicked: App.selectCategory(categoryButton.categoryId)
-
-                        transform: Translate {
-                            x: categoryDrag.active ? categoryDrag.activeTranslation.x : 0
-                        }
-                        z: categoryDrag.active ? 1 : 0
-                        opacity: categoryDrag.active ? 0.85 : 1
-
-                        DragHandler {
-                            id: categoryDrag
-                            target: null
-                            yAxis.enabled: false
-
-                            onActiveTranslationChanged: {
-                                if (!active)
-                                    return
-                                categoryButton.updateDropTarget(activeTranslation.x)
-                            }
-
-                            onActiveChanged: {
-                                if (active) {
-                                    categoryFlickable.draggedCategory = categoryButton
-                                    categoryButton.updateDropTarget(activeTranslation.x)
-                                    return
+                            function updateDropTarget(offsetX) {
+                                const draggedCenter = categoryButton.x + categoryButton.width / 2 + offsetX
+                                let target = 0
+                                for (let i = 0; i < categoryRepeater.count; ++i) {
+                                    const item = categoryRepeater.itemAt(i)
+                                    if (item !== null && item !== categoryButton
+                                        && item.x + item.width / 2 < draggedCenter)
+                                        ++target
                                 }
-                                const candidate = categoryButton.candidateIndex
-                                categoryFlickable.draggedCategory = null
-                                categoryDropIndicator.visible = false
-                                if (candidate !== categoryButton.index)
-                                    App.moveCategory(categoryButton.categoryId, candidate)
+                                categoryButton.candidateIndex = target
+                                categoryFlickable.updateCategoryDropIndicator()
+                            }
+
+                            height: 34
+                            leftPadding: 14
+                            rightPadding: 14
+                            text: categoryButton.name
+                            flat: true
+                            onClicked: App.selectCategory(categoryButton.categoryId)
+
+                            transform: Translate {
+                                x: categoryDrag.active ? categoryDrag.activeTranslation.x : 0
+                            }
+                            z: categoryDrag.active ? 1 : 0
+                            opacity: categoryDrag.active ? 0.85 : 1
+
+                            DragHandler {
+                                id: categoryDrag
+                                target: null
+                                yAxis.enabled: false
+
+                                onActiveTranslationChanged: {
+                                    if (!active)
+                                        return
+                                    categoryButton.updateDropTarget(activeTranslation.x)
+                                }
+
+                                onActiveChanged: {
+                                    if (active) {
+                                        categoryFlickable.draggedCategory = categoryButton
+                                        categoryButton.updateDropTarget(activeTranslation.x)
+                                        return
+                                    }
+                                    const candidate = categoryButton.candidateIndex
+                                    categoryFlickable.draggedCategory = null
+                                    categoryDropIndicator.visible = false
+                                    if (candidate !== categoryButton.index)
+                                        App.moveCategory(categoryButton.categoryId, candidate)
+                                }
+                            }
+
+                            PointingCursor {}
+
+                            background: Rectangle {
+                                color: App.selectedCategoryId === categoryButton.categoryId
+                                    ? root.accent : "transparent"
+                                border.color: App.selectedCategoryId === categoryButton.categoryId
+                                    ? root.accent : root.rule
+                            }
+
+                            contentItem: Text {
+                                text: categoryButton.text
+                                color: App.selectedCategoryId === categoryButton.categoryId
+                                    ? root.panel : root.ink
+                                font.family: "monospace"
+                                font.pixelSize: 11
+                                font.weight: App.selectedCategoryId === categoryButton.categoryId
+                                    ? Font.DemiBold : Font.Normal
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
                         }
-
-                        PointingCursor {}
-
-                        background: Rectangle {
-                            color: App.selectedCategoryId === categoryButton.categoryId
-                                ? root.accent : "transparent"
-                            border.color: App.selectedCategoryId === categoryButton.categoryId
-                                ? root.accent : root.rule
-                        }
-
-                        contentItem: Text {
-                            text: categoryButton.text
-                            color: App.selectedCategoryId === categoryButton.categoryId
-                                ? root.panel : root.ink
-                            font.family: "monospace"
-                            font.pixelSize: 11
-                            font.weight: App.selectedCategoryId === categoryButton.categoryId
-                                ? Font.DemiBold : Font.Normal
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
                     }
+                }
+
+                Rectangle {
+                    id: categoryDropIndicator
+                    width: 2
+                    height: 32
+                    y: 4
+                    z: 2
+                    visible: false
+                    color: root.accent
+                    radius: 1
                 }
             }
 
             Rectangle {
-                id: categoryDropIndicator
-                width: 2
-                height: 32
-                y: 4
-                z: 2
-                visible: false
-                color: root.accent
-                radius: 1
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: root.rule
+            }
+
+            GridView {
+                id: feedList
+                readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
+
+                function maybeLoadMore() {
+                    if (App.historyLoading || !App.historyHasMore)
+                        return
+                    if (contentY + height >= contentHeight - 160)
+                        App.loadMoreHistory()
+                }
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                model: App.feed
+                clip: true
+                cellWidth: Math.floor(width / columnCount)
+                cellHeight: Math.round((cellWidth - 12) * 0.5625) + 112
+                leftMargin: 0
+                rightMargin: 0
+                bottomMargin: 18
+                boundsBehavior: Flickable.StopAtBounds
+                cacheBuffer: 800
+
+                onMovementEnded: maybeLoadMore()
+
+                footer: Item {
+                    width: feedList.width
+                    height: visible ? 52 : 0
+                    visible: App.historyLoading || App.historyHasMore
+
+                    Label {
+                        anchors.centerIn: parent
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        text: App.historyLoading
+                              ? root.spinnerFrames[root.spinnerFrame]
+                              : (feedList.count > 0 ? qsTr("Load more") : "")
+                    }
+
+                    TapHandler {
+                        enabled: !App.historyLoading && App.historyHasMore
+                        cursorShape: Qt.PointingHandCursor
+                        onTapped: App.loadMoreHistory()
+                    }
+                }
+
+                delegate: Item {
+                    id: feedDelegate
+                    required property string videoId
+                    required property string channelTitle
+                    required property string title
+                    required property date publishedAt
+                    required property int watchProgressPercent
+
+                    width: feedList.cellWidth - 12
+                    height: feedList.cellHeight - 12
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: root.glassPanel
+                        border.color: feedHover.hovered ? root.accent : root.rule
+                        border.width: feedHover.hovered ? 2 : 1
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: width * 0.5625
+                            color: root.softFill
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "OMA / TUBE"
+                                color: root.mutedInk
+                                font.family: "monospace"
+                                font.pixelSize: 10
+                                font.letterSpacing: 1
+                            }
+                        }
+
+                        Image {
+                            id: thumbnail
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: width * 0.5625
+                            source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: parent.height - thumbnail.height
+                            color: root.glassPanel
+                        }
+
+                        Column {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 10
+                            spacing: 5
+
+                            Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+
+                            Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                            Text { text: qsTr("%1% watched").arg(feedDelegate.watchProgressPercent); color: root.neonYellow; font.family: "monospace"; font.pixelSize: 10; visible: feedDelegate.watchProgressPercent >= 0 }
+                        }
+
+                        Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
+                    }
+
+                    HoverHandler {
+                        id: feedHover
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
+                }
+
+                Column {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 40, 430)
+                    spacing: 8
+                    visible: feedList.count === 0 && !App.refreshing
+
+                    Label {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        color: root.ink
+                        font.pixelSize: 19
+                        font.weight: Font.Medium
+                        text: qsTr("No videos yet")
+                    }
+
+                    Label {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        color: root.mutedInk
+                        font.pixelSize: 13
+                        text: qsTr("Add a channel in Settings, then refresh.")
+                    }
+                }
             }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 1
-            color: root.rule
-        }
-
-        GridView {
-            id: feedList
-            readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
-
-            function maybeLoadMore() {
-                if (App.historyLoading || !App.historyHasMore)
-                    return
-                if (contentY + height >= contentHeight - 160)
-                    App.loadMoreHistory()
-            }
-
+        Loader {
+            id: historyLoader
             Layout.fillWidth: true
             Layout.fillHeight: true
-            model: App.feed
-            clip: true
-            cellWidth: Math.floor(width / columnCount)
-            cellHeight: Math.round((cellWidth - 12) * 0.5625) + 112
-            leftMargin: 0
-            rightMargin: 0
-            bottomMargin: 18
-            boundsBehavior: Flickable.StopAtBounds
-            cacheBuffer: 800
+            active: root.historyOpen
+            visible: root.historyOpen
+            source: "qrc:/qml/HistoryPage.qml"
 
-            onMovementEnded: maybeLoadMore()
-
-            footer: Item {
-                width: feedList.width
-                height: visible ? 52 : 0
-                visible: App.historyLoading || App.historyHasMore
-
-                Label {
-                    anchors.centerIn: parent
-                    color: root.mutedInk
-                    font.pixelSize: 12
-                    text: App.historyLoading
-                          ? root.spinnerFrames[root.spinnerFrame]
-                          : (feedList.count > 0 ? qsTr("Load more") : "")
-                }
-
-                TapHandler {
-                    enabled: !App.historyLoading && App.historyHasMore
-                    cursorShape: Qt.PointingHandCursor
-                    onTapped: App.loadMoreHistory()
-                }
-            }
-
-            delegate: Item {
-                id: feedDelegate
-                required property string videoId
-                required property string channelTitle
-                required property string title
-                required property date publishedAt
-                required property int watchProgressPercent
-
-                width: feedList.cellWidth - 12
-                height: feedList.cellHeight - 12
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: root.glassPanel
-                    border.color: feedHover.hovered ? root.accent : root.rule
-                    border.width: feedHover.hovered ? 2 : 1
-
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: width * 0.5625
-                        color: root.softFill
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "OMA / TUBE"
-                            color: root.mutedInk
-                            font.family: "monospace"
-                            font.pixelSize: 10
-                            font.letterSpacing: 1
-                        }
-                    }
-
-                    Image {
-                        id: thumbnail
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: width * 0.5625
-                        source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                    }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: parent.height - thumbnail.height
-                        color: root.glassPanel
-                    }
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 10
-                        spacing: 5
-
-                        Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
-
-                        Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
-                        Text { text: qsTr("%1% watched").arg(feedDelegate.watchProgressPercent); color: root.neonYellow; font.family: "monospace"; font.pixelSize: 10; visible: feedDelegate.watchProgressPercent >= 0 }
-                    }
-
-                    Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
-                }
-
-                HoverHandler {
-                    id: feedHover
-                    cursorShape: Qt.PointingHandCursor
-                }
-                TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
-            }
-
-            Column {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - 40, 430)
-                spacing: 8
-                visible: feedList.count === 0 && !App.refreshing
-
-                Label {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    color: root.ink
-                    font.pixelSize: 19
-                    font.weight: Font.Medium
-                    text: qsTr("No videos yet")
-                }
-
-                Label {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    color: root.mutedInk
-                    font.pixelSize: 13
-                    text: qsTr("Add a channel in Settings, then refresh.")
-                }
+            onLoaded: {
+                item.videoSelected.connect(function(videoId) {
+                    root.historyOpen = false
+                    App.openVideo(videoId)
+                })
             }
         }
-
     }
 
     ErrorNotifications {
@@ -657,33 +694,16 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 14
         z: 10
-        visible: !App.playerOpen && !root.historyOpen
+        visible: !App.playerOpen
         color: root.mutedInk
         font.family: "monospace"
         font.pixelSize: 11
-        text: keybinds.footerText("feed").split("\n").join("  /  ")
+        text: keybinds.footerText(root.historyOpen ? "history" : "feed").split("\n").join("  /  ")
     }
 
     SettingsDialog {
         id: settingsDialog
         parent: root.contentItem
-    }
-
-    Loader {
-        id: historyLoader
-        anchors.fill: parent
-        z: 15
-        active: root.historyOpen
-        source: "qrc:/qml/HistoryPage.qml"
-
-        onLoaded: {
-            item.keybinds = keybinds
-            item.videoSelected.connect(function(videoId) {
-                root.historyOpen = false
-                App.openVideo(videoId)
-            })
-            item.closeRequested.connect(function() { root.historyOpen = false })
-        }
     }
 
     Loader {

@@ -11,9 +11,6 @@ Item {
     id: root
 
     signal videoSelected(string videoId)
-    signal closeRequested()
-
-    property var keybinds
 
     function scrollBy(delta) {
         const maxY = Math.max(0, historyList.contentHeight - historyList.height)
@@ -24,7 +21,6 @@ Item {
     readonly property color accent: themeColors.accent
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
-    readonly property color paper: themeColors.background
     readonly property color panel: themeColors.lighter_background
     readonly property color rule: themeColors.muted
     readonly property color softFill: themeColors.selection
@@ -32,33 +28,9 @@ Item {
     readonly property color glassPanel: Qt.rgba(
         panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
 
-    Rectangle {
-        anchors.fill: parent
-        color: Qt.rgba(root.paper.r, root.paper.g, root.paper.b, 0.88)
-    }
-
     ColumnLayout {
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 20
-        anchors.bottomMargin: 30
-        width: Math.min(parent.width - 40, 1120)
+        anchors.fill: parent
         spacing: 14
-
-        RowLayout {
-            Layout.fillWidth: true
-            implicitHeight: 42
-            Button {
-                text: qsTr("< BACK")
-                flat: true
-                onClicked: root.closeRequested()
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11 }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
-            }
-            Item { Layout.fillWidth: true }
-            Text { text: "OMA / TUBE"; color: root.ink; font.family: "monospace"; font.pixelSize: 16; font.bold: true }
-        }
 
         Label {
             Layout.fillWidth: true
@@ -183,16 +155,5 @@ Item {
                 text: qsTr("No watch history yet. Videos you watch appear here.")
             }
         }
-    }
-
-    Label {
-        anchors.left: parent.left
-        anchors.leftMargin: 18
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 14
-        color: root.mutedInk
-        font.family: "monospace"
-        font.pixelSize: 11
-        text: keybinds ? keybinds.footerText("history").split("\n").join("  /  ") : ""
     }
 }

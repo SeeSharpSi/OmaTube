@@ -594,16 +594,25 @@ ApplicationWindow {
         }
     }
 
-    Label {
+    Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 18
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 14
         z: 10
         visible: !App.playerOpen && !root.historyOpen
-        color: root.mutedInk
-        font.pixelSize: 11
-        text: keybinds.footerText("feed")
+        color: root.paper
+        border.color: root.rule
+        width: keybindsLabel.implicitWidth + 20
+        height: keybindsLabel.implicitHeight + 12
+
+        Label {
+            id: keybindsLabel
+            anchors.centerIn: parent
+            color: root.mutedInk
+            font.pixelSize: 11
+            text: keybinds.footerText("feed")
+        }
     }
 
     SimpleSettingsDialog {

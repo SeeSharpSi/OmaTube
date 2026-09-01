@@ -469,7 +469,7 @@ ApplicationWindow {
                 color: root.rule
             }
 
-            GridView {
+            Flickable {
                 id: feedList
                 readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
 
@@ -482,135 +482,161 @@ ApplicationWindow {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                model: App.feed
                 clip: true
-                cellWidth: Math.floor(width / columnCount)
-                cellHeight: Math.round((cellWidth - 12) * 0.5625) + 112
-                leftMargin: 0
-                rightMargin: 0
-                bottomMargin: 18
+                contentWidth: width
+                contentHeight: feedContentColumn.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                cacheBuffer: 800
 
                 onMovementEnded: maybeLoadMore()
 
-                footer: Item {
-                    width: feedList.width
-                    height: visible ? 52 : 0
-                    visible: App.historyLoading || App.historyHasMore
+                Column {
+                    id: feedContentColumn
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
 
-                    Label {
-                        anchors.centerIn: parent
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        text: App.historyLoading
-                              ? root.spinnerFrames[root.spinnerFrame]
-                              : (feedList.count > 0 ? qsTr("Load more") : "")
-                    }
+                    GridLayout {
+                        id: feedGrid
+                        readonly property real cardWidth: Math.max(0,
+                            (width - (columns - 1) * columnSpacing) / columns)
 
-                    TapHandler {
-                        enabled: !App.historyLoading && App.historyHasMore
-                        cursorShape: Qt.PointingHandCursor
-                        onTapped: App.loadMoreHistory()
-                    }
-                }
+                        width: Math.max(0, parent.width - 12)
+                        columns: feedList.columnCount
+                        columnSpacing: 12
+                        rowSpacing: 12
 
-                delegate: Item {
-                    id: feedDelegate
-                    required property string videoId
-                    required property string channelTitle
-                    required property string title
-                    required property date publishedAt
-                    required property int watchProgressPercent
+                        Repeater {
+                            id: feedRepeater
+                            model: App.feed
 
-                    width: feedList.cellWidth - 12
-                    height: feedList.cellHeight - 12
+                            delegate: Item {
+                                id: feedDelegate
+                                required property string videoId
+                                required property string channelTitle
+                                required property string title
+                                required property date publishedAt
+                                required property int watchProgressPercent
 
-                    Rectangle {
-                        anchors.fill: parent
-                        color: root.glassPanel
-                        border.color: feedHover.hovered ? root.accent : root.rule
-                        border.width: feedHover.hovered ? 2 : 1
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: feedGrid.cardWidth
+                                implicitHeight: thumbnail.height + 10 + infoColumn.implicitHeight + 10
+                                    + (feedDelegate.watchProgressPercent >= 0
+                                       ? 5 + watchProgress.implicitHeight : 0)
 
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: width * 0.5625
-                            color: root.softFill
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: root.glassPanel
+                                    border.color: feedHover.hovered ? root.accent : root.rule
+                                    border.width: feedHover.hovered ? 2 : 1
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: "OMA / TUBE"
-                                color: root.mutedInk
-                                font.family: "monospace"
-                                font.pixelSize: 10
-                                font.letterSpacing: 1
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        height: width * 0.5625
+                                        color: root.softFill
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "OMA / TUBE"
+                                            color: root.mutedInk
+                                            font.family: "monospace"
+                                            font.pixelSize: 10
+                                            font.letterSpacing: 1
+                                        }
+                                    }
+
+                                    Image {
+                                        id: thumbnail
+                                        anchors.top: parent.top
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        height: width * 0.5625
+                                        source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                    }
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: parent.height - thumbnail.height
+                                        color: root.glassPanel
+                                    }
+
+                                    Column {
+                                        id: infoColumn
+                                        anchors.top: thumbnail.bottom
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.topMargin: 10
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 5
+
+                                        Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+
+                                        Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                                    }
+
+                                    Text {
+                                        id: watchProgress
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        anchors.bottomMargin: 10
+                                        text: qsTr("%1% watched").arg(feedDelegate.watchProgressPercent)
+                                        color: root.neonYellow
+                                        font.family: "monospace"
+                                        font.pixelSize: 10
+                                        visible: feedDelegate.watchProgressPercent >= 0
+                                    }
+
+                                    Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
+                                }
+
+                                HoverHandler {
+                                    id: feedHover
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+                                TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
                             }
                         }
-
-                        Image {
-                            id: thumbnail
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: width * 0.5625
-                            source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                        }
-
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: parent.height - thumbnail.height
-                            color: root.glassPanel
-                        }
-
-                        Column {
-                            anchors.top: thumbnail.bottom
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.topMargin: 10
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 5
-
-                            Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
-
-                            Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
-                        }
-
-                        Text {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            anchors.bottomMargin: 10
-                            text: qsTr("%1% watched").arg(feedDelegate.watchProgressPercent)
-                            color: root.neonYellow
-                            font.family: "monospace"
-                            font.pixelSize: 10
-                            visible: feedDelegate.watchProgressPercent >= 0
-                        }
-
-                        Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
                     }
 
-                    HoverHandler {
-                        id: feedHover
-                        cursorShape: Qt.PointingHandCursor
+                    Item {
+                        width: parent.width
+                        height: visible ? 52 : 0
+                        visible: App.historyLoading || App.historyHasMore
+
+                        Label {
+                            anchors.centerIn: parent
+                            color: root.mutedInk
+                            font.pixelSize: 12
+                            text: App.historyLoading
+                                  ? root.spinnerFrames[root.spinnerFrame]
+                                  : (feedRepeater.count > 0 ? qsTr("Load more") : "")
+                        }
+
+                        TapHandler {
+                            enabled: !App.historyLoading && App.historyHasMore
+                            cursorShape: Qt.PointingHandCursor
+                            onTapped: App.loadMoreHistory()
+                        }
                     }
-                    TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
+
+                    Item { width: 1; height: 18 }
                 }
 
                 Column {
                     anchors.centerIn: parent
                     width: Math.min(parent.width - 40, 430)
                     spacing: 8
-                    visible: feedList.count === 0 && !App.refreshing
+                    visible: feedRepeater.count === 0 && !App.refreshing
 
                     Label {
                         width: parent.width

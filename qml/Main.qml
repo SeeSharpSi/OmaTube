@@ -183,6 +183,7 @@ ApplicationWindow {
                 onClicked: root.historyOpen = false
                 contentItem: Text { text: parent.text; color: !root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: !root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: !root.historyOpen ? root.accent : root.rule }
+                PointingCursor {}
             }
             Button {
                 text: qsTr("HISTORY")
@@ -195,6 +196,7 @@ ApplicationWindow {
                 }
                 contentItem: Text { text: parent.text; color: root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.historyOpen ? root.accent : root.rule }
+                PointingCursor {}
             }
             Button {
                 text: qsTr("SETTINGS")
@@ -202,6 +204,7 @@ ApplicationWindow {
                 onClicked: settingsDialog.open()
                 contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
+                PointingCursor {}
             }
             Button {
                 id: refreshButton
@@ -223,6 +226,7 @@ ApplicationWindow {
                     color: refreshButton.hovered ? root.softFill : root.panel
                     border.color: root.rule
                 }
+                PointingCursor {}
             }
         }
 

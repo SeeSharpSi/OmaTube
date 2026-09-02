@@ -1184,7 +1184,7 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_RETURN_ARG(QVariant, feedVariant),
         Q_ARG(QVariant, QStringLiteral("feed")));
     QVERIFY2(feedOk, "QMetaObject::invokeMethod footerText(\"feed\") failed");
-    QCOMPARE(feedVariant.toString(), QStringLiteral("h: history\ns: settings\nj/k: scroll\nr: refresh\nq: quit"));
+    QCOMPARE(feedVariant.toString(), QStringLiteral("h: history\ns: config\nj/k: scroll\nr: refresh\nq: quit"));
 
     QVariant historyVariant;
     const bool historyOk = QMetaObject::invokeMethod(
@@ -1193,7 +1193,7 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_RETURN_ARG(QVariant, historyVariant),
         Q_ARG(QVariant, QStringLiteral("history")));
     QVERIFY2(historyOk, "QMetaObject::invokeMethod footerText(\"history\") failed");
-    QCOMPARE(historyVariant.toString(), QStringLiteral("h: history\ns: settings\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
+    QCOMPARE(historyVariant.toString(), QStringLiteral("h: history\ns: config\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
 }
 
 void AppControllerTest::spaceHoldShortPressEmitsTappedOnly()

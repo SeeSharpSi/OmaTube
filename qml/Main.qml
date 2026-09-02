@@ -210,7 +210,7 @@ ApplicationWindow {
             }
             Button {
                 id: settingsButton
-                text: qsTr("SETTINGS")
+                text: qsTr("CONFIG")
                 flat: true
                 onClicked: settingsDialog.open()
                 contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
@@ -747,7 +747,7 @@ ApplicationWindow {
                         wrapMode: Text.Wrap
                         color: root.mutedInk
                         font.pixelSize: 13
-                        text: qsTr("Add a channel in Settings, then refresh.")
+                        text: qsTr("Open Config to add a channel, then refresh.")
                     }
                 }
             }

@@ -550,7 +550,7 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                     color: root.mutedInk
                     font.pixelSize: 13
-                    text: qsTr("Add a channel in Settings, then refresh.")
+                    text: qsTr("Open Config to add a channel, then refresh.")
                 }
             }
         }

@@ -72,7 +72,7 @@ ApplicationWindow {
     minimumWidth: 700
     minimumHeight: 500
     visible: false
-    title: qsTr("Settings")
+    title: qsTr("Config")
     color: root.panel
     palette.window: root.panel
     palette.windowText: root.ink
@@ -156,24 +156,12 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.leftMargin: 24
             anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("OMA / SETTINGS")
+            text: qsTr("OMA / CONFIG")
             color: root.ink
             font.family: root.chromeFont
             font.pixelSize: 17
             font.letterSpacing: 1.4
             font.weight: Font.DemiBold
-        }
-
-        Label {
-            anchors.left: parent.left
-            anchors.leftMargin: 25
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-            text: qsTr("CONFIGURATION")
-            color: root.mutedInk
-            font.family: root.chromeFont
-            font.pixelSize: 9
-            font.letterSpacing: 1.2
         }
 
         ToolButton {
@@ -439,14 +427,9 @@ ApplicationWindow {
                         }
                     }
 
-                    Label {
-                        text: qsTr("Add to categories")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                    }
-
                     Flow {
                         Layout.fillWidth: true
+                        visible: addCategoryRepeater.count > 0
                         Layout.preferredHeight: childrenRect.height
                         spacing: 6
 
@@ -473,15 +456,6 @@ ApplicationWindow {
                                 }
                             }
                         }
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        visible: addCategoryRepeater.count === 0
-                        text: qsTr("No categories yet. Add one from the Categories tab.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     Rectangle {
@@ -624,14 +598,6 @@ ApplicationWindow {
                     anchors.margins: 22
                     spacing: 14
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Create categories for switching between focused feeds. Channels can belong to more than one.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                    }
-
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -703,7 +669,7 @@ ApplicationWindow {
                             required property string name
 
                             width: ListView.view.width
-                            height: 54
+                            height: 56
                             color: root.paper
                             border.color: root.rule
 
@@ -715,6 +681,7 @@ ApplicationWindow {
                                 TextField {
                                     id: categoryName
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
                                     text: categoryDelegate.name
                                     selectByMouse: true
 
@@ -727,6 +694,7 @@ ApplicationWindow {
 
                                 Button {
                                     text: qsTr("Save")
+                                    Layout.preferredHeight: 40
                                     enabled: categoryName.text.trim().length > 0
                                              && categoryName.text.trim() !== categoryDelegate.name
 
@@ -739,6 +707,7 @@ ApplicationWindow {
                                 Button {
                                     text: qsTr("Delete")
                                     flat: true
+                                    Layout.preferredHeight: 40
                                     onClicked: root.confirmDelete(
                                         "category", categoryDelegate.categoryId, categoryDelegate.name)
 
@@ -770,63 +739,30 @@ ApplicationWindow {
                         font.weight: Font.DemiBold
                     }
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Hide videos at or below a chosen duration. YouTube does not expose a Shorts flag, so duration is used instead.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                    }
-
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 148
+                        Layout.preferredHeight: 72
                         color: root.popupColor
                         border.color: root.rule
 
-                        ColumnLayout {
+                        RowLayout {
                             anchors.fill: parent
                             anchors.margins: 16
                             spacing: 10
 
-                            Label {
-                                text: qsTr("Cutoff")
-                                color: root.ink
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
+                            Label { text: qsTr("Hide videos up to"); color: root.ink }
+                            SpinBox {
+                                id: shortVideoCutoff
+                                Layout.preferredWidth: 100
+                                from: 0
+                                to: 60
+                                value: App.shortVideoCutoffMinutes
+                                editable: true
+                                onValueModified: App.setShortVideoCutoffMinutes(value)
+                                PointingCursor {}
                             }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-
-                                Label { text: qsTr("Hide videos up to"); color: root.ink }
-
-                                SpinBox {
-                                    id: shortVideoCutoff
-                                    Layout.preferredWidth: 100
-                                    from: 0
-                                    to: 60
-                                    value: App.shortVideoCutoffMinutes
-                                    editable: true
-                                    onValueModified: App.setShortVideoCutoffMinutes(value)
-                                    PointingCursor {}
-                                }
-
-                                Label { text: qsTr("minutes"); color: root.ink }
-                                Item { Layout.fillWidth: true }
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                text: shortVideoCutoff.value === 0
-                                    ? qsTr("Duration filtering is off.")
-                                    : qsTr("Videos %1 minutes or shorter are hidden from every feed.")
-                                          .arg(shortVideoCutoff.value)
-                                color: root.mutedInk
-                                font.pixelSize: 12
-                                wrapMode: Text.Wrap
-                            }
+                            Label { text: qsTr("minutes"); color: root.ink }
+                            Item { Layout.fillWidth: true }
                         }
                     }
 
@@ -845,14 +781,6 @@ ApplicationWindow {
                         color: root.ink
                         font.pixelSize: 16
                         font.weight: Font.DemiBold
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Choose the colors used throughout OmaTube.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     ComboBox {
@@ -1014,14 +942,6 @@ ApplicationWindow {
                         }
                     }
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Use the original compact list layout and opaque controls.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                    }
-
                     Item { Layout.fillHeight: true }
                 }
             }
@@ -1031,16 +951,6 @@ ApplicationWindow {
                     anchors.fill: parent
                     anchors.margins: 22
                     spacing: 14
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: App.apiKeyConfigured
-                            ? qsTr("An API key is configured. Enter a new key to replace it.")
-                            : qsTr("Optional: enter a YouTube Data API v3 key for the official metadata backend. Without one, OmaTube uses public feeds and yt-dlp when available.")
-                        color: root.ink
-                        font.pixelSize: 15
-                        wrapMode: Text.Wrap
-                    }
 
                     TextField {
                         id: keyInput
@@ -1059,12 +969,12 @@ ApplicationWindow {
 
                     SquareCheckBox {
                         id: rememberKey
-                        text: qsTr("Remember in local settings")
+                        text: qsTr("Remember locally")
                     }
 
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("Remembering stores the key as plain local configuration. Leave this off or use YT_CLIENT_API_KEY to avoid local storage.")
+                        text: qsTr("Saved keys use plain local storage. Leave this unchecked or set YT_CLIENT_API_KEY to avoid it.")
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
@@ -1119,7 +1029,7 @@ ApplicationWindow {
 
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("After adding or changing a key, refresh the feed from the main window.")
+                        text: qsTr("Key changes apply on the next feed refresh.")
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
@@ -1140,14 +1050,6 @@ ApplicationWindow {
                         color: root.ink
                         font.pixelSize: 16
                         font.weight: Font.DemiBold
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Choose how videos are played. The official player uses YouTube's embedded viewer; mpv offers native playback when available.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     Label {
@@ -1406,7 +1308,7 @@ ApplicationWindow {
 
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("Quality is a preferred maximum; the actual resolution may be lower. The official player controls quality automatically.")
+                        text: qsTr("mpv treats this as a maximum; unavailable resolutions fall back lower.")
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap

@@ -4,6 +4,7 @@
 #include "repository.h"
 #include "spaceholdhandler.h"
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QFile>
 #include <QKeyEvent>
@@ -72,6 +73,9 @@ private slots:
     void errorNotificationsClearRemovesAllWithoutDismissedSignal();
     void errorNotificationsTimeoutAutoDismisses();
     void errorNotificationsHeightGrowsWithDelegates();
+    void errorNotificationsLeftClickCopiesMessageAndKeepsCard();
+    void errorNotificationsRightClickDismissesCard();
+    void errorNotificationsCloseButtonDismissesCard();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -147,6 +151,21 @@ bool invokeDismiss(QObject *target, int index)
 bool invokeClear(QObject *target)
 {
     return QMetaObject::invokeMethod(target, "clear");
+}
+
+// Repeater delegates are JS-owned with no QObject parent, so QObject-based
+// findChild() cannot see them; search the visual item tree instead.
+QList<QQuickItem *> findVisualChildrenByName(QQuickItem *parent, const QString &name)
+{
+    QList<QQuickItem *> matches;
+    if (!parent)
+        return matches;
+    if (parent->objectName() == name)
+        matches.append(parent);
+    const QList<QQuickItem *> children = parent->childItems();
+    for (QQuickItem *child : children)
+        matches.append(findVisualChildrenByName(child, name));
+    return matches;
 }
 }
 
@@ -1532,6 +1551,125 @@ void AppControllerTest::errorNotificationsHeightGrowsWithDelegates()
     QVERIFY(invokePushError(notifications.get(), QStringLiteral("Sized two")));
     QCOMPARE(notifications->property("count").toInt(), 2);
     QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > singleHeight, 5000);
+}
+
+void AppControllerTest::errorNotificationsLeftClickCopiesMessageAndKeepsCard()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    const QString message = QStringLiteral("Copy this exact text 42");
+    QVERIFY(invokePushError(notifications.get(), message));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    QQuickWindow window;
+    window.resize(600, 400);
+    qobject_cast<QQuickItem *>(notifications.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > 0.0, 5000);
+
+    QQuickItem *rootItem = qobject_cast<QQuickItem *>(notifications.get());
+    QVERIFY(rootItem != nullptr);
+    const QList<QQuickItem *> cards =
+        findVisualChildrenByName(rootItem, QStringLiteral("errorNotificationCard"));
+    QCOMPARE(cards.size(), 1);
+    QQuickItem *card = cards.first();
+
+    // Sentinel so the copy must have replaced the clipboard content.
+    QGuiApplication::clipboard()->setText(QStringLiteral("sentinel"));
+
+    const QPoint center =
+        card->mapToScene(QPointF(card->width() / 2.0, card->height() / 2.0)).toPoint();
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
+
+    QCOMPARE(QGuiApplication::clipboard()->text(), message);
+    QCOMPARE(notifications->property("count").toInt(), 1);
+}
+
+void AppControllerTest::errorNotificationsRightClickDismissesCard()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("RightBody")));
+    QCOMPARE(notifications->property("count").toInt(), 1);
+
+    QQuickWindow window;
+    window.resize(600, 400);
+    qobject_cast<QQuickItem *>(notifications.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > 0.0, 5000);
+
+    QQuickItem *rootItem = qobject_cast<QQuickItem *>(notifications.get());
+    QVERIFY(rootItem != nullptr);
+    const QList<QQuickItem *> cards =
+        findVisualChildrenByName(rootItem, QStringLiteral("errorNotificationCard"));
+    QCOMPARE(cards.size(), 1);
+    QQuickItem *card = cards.first();
+
+    QGuiApplication::clipboard()->clear();
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+
+    const QPoint center =
+        card->mapToScene(QPointF(card->width() / 2.0, card->height() / 2.0)).toPoint();
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier, center);
+
+    QCOMPARE(notifications->property("count").toInt(), 0);
+    QCOMPARE(dismissed.count(), 1);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("RightBody"));
+    // Right-click dismisses; it must not copy.
+    QCOMPARE(QGuiApplication::clipboard()->text(), QString());
+}
+
+void AppControllerTest::errorNotificationsCloseButtonDismissesCard()
+{
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> notifications = createErrorNotifications(&engine, &error);
+    QVERIFY2(notifications != nullptr, qPrintable(error));
+
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("First")));
+    QVERIFY(invokePushError(notifications.get(), QStringLiteral("Second")));
+    QCOMPARE(notifications->property("count").toInt(), 2);
+
+    QQuickWindow window;
+    window.resize(600, 400);
+    qobject_cast<QQuickItem *>(notifications.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTRY_VERIFY_WITH_TIMEOUT(notifications->property("height").toReal() > 0.0, 5000);
+
+    QQuickItem *rootItem = qobject_cast<QQuickItem *>(notifications.get());
+    QVERIFY(rootItem != nullptr);
+    const QList<QQuickItem *> cards =
+        findVisualChildrenByName(rootItem, QStringLiteral("errorNotificationCard"));
+    QCOMPARE(cards.size(), 2);
+    QQuickItem *secondCard = cards.last();
+    QCOMPARE(secondCard->property("message").toString(), QStringLiteral("Second"));
+    QQuickItem *closeArea =
+        secondCard->findChild<QQuickItem *>(QStringLiteral("errorNotificationClose"));
+    QVERIFY(closeArea != nullptr);
+
+    QGuiApplication::clipboard()->clear();
+    QSignalSpy dismissed(notifications.get(), SIGNAL(dismissed(QString)));
+    QVERIFY(dismissed.isValid());
+
+    const QPoint center =
+        closeArea->mapToScene(QPointF(closeArea->width() / 2.0, closeArea->height() / 2.0)).toPoint();
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, center);
+
+    QCOMPARE(notifications->property("count").toInt(), 1);
+    QCOMPARE(dismissed.count(), 1);
+    QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Second"));
+    // Close clicks are consumed by the close area, not the body copy area.
+    QCOMPARE(QGuiApplication::clipboard()->text(), QString());
 }
 
 QTEST_MAIN(AppControllerTest)

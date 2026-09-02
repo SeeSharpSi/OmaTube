@@ -53,6 +53,22 @@ Item {
 
     ListModel { id: notifications }
 
+    TextEdit {
+        id: clipboardHelper
+        visible: false
+        width: 0
+        height: 0
+        textFormat: TextEdit.PlainText
+
+        function copyToClipboard(text) {
+            clipboardHelper.text = text
+            clipboardHelper.selectAll()
+            clipboardHelper.copy()
+            clipboardHelper.clear()
+            clipboardHelper.deselect()
+        }
+    }
+
     Column {
         id: stack
         anchors.bottom: parent.bottom
@@ -67,6 +83,7 @@ Item {
                 id: card
                 required property int index
                 required property string message
+                objectName: "errorNotificationCard"
 
                 width: stack.width
                 height: cardText.implicitHeight + 18
@@ -99,8 +116,24 @@ Item {
                     elide: Text.ElideRight
                 }
 
+                MouseArea {
+                    id: cardBodyArea
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        if (mouse.button === Qt.RightButton)
+                            errorNotifications.dismiss(card.index)
+                        else
+                            clipboardHelper.copyToClipboard(card.message)
+                    }
+                }
+
                 Rectangle {
                     id: closeButton
+                    z: 1
                     anchors.top: parent.top
                     anchors.right: parent.right
                     width: 24
@@ -118,14 +151,16 @@ Item {
                         font.pixelSize: 16
                         opacity: cardHover.hovered ? 1.0 : 0.6
                     }
-                }
 
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: function(mouse) { mouse.accepted = true; errorNotifications.dismiss(card.index) }
+                    MouseArea {
+                        objectName: "errorNotificationClose"
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            mouse.accepted = true
+                            errorNotifications.dismiss(card.index)
+                        }
+                    }
                 }
 
                 HoverHandler {

@@ -209,19 +209,67 @@ ApplicationWindow {
             }
             Button {
                 id: refreshButton
-                width: 32
-                height: settingsButton.height
+                implicitWidth: settingsButton.height
+                implicitHeight: settingsButton.height
+                padding: 0
                 enabled: !App.refreshing
                 flat: true
                 onClicked: App.refresh()
-                contentItem: Text {
-                    text: App.refreshing ? root.spinnerFrames[root.spinnerFrame] : "\u21bb"
-                    color: !refreshButton.enabled ? root.mutedInk
-                        : refreshButton.hovered ? root.accent : root.ink
-                    font.family: "monospace"
-                    font.pixelSize: 16
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Item {
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 13
+                        height: 13
+                        visible: !App.refreshing
+                        antialiasing: true
+                        property color glyphColor: !refreshButton.enabled ? root.mutedInk
+                            : refreshButton.hovered ? root.accent : root.ink
+                        onGlyphColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = glyphColor
+                            ctx.fillStyle = glyphColor
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            var cx = width / 2
+                            var cy = height / 2
+                            var r = Math.min(width, height) / 2 - 1.5
+                            var start = -0.3 * Math.PI
+                            var end = 1.3 * Math.PI
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, start, end, false)
+                            ctx.stroke()
+                            var px = cx + r * Math.cos(start)
+                            var py = cy + r * Math.sin(start)
+                            var tip = r * 0.55
+                            var halfW = r * 0.38
+                            var tx = -Math.sin(start)
+                            var ty = Math.cos(start)
+                            var nx = Math.cos(start)
+                            var ny = Math.sin(start)
+                            ctx.beginPath()
+                            ctx.moveTo(px + tx * tip, py + ty * tip)
+                            ctx.lineTo(px + nx * halfW, py + ny * halfW)
+                            ctx.lineTo(px - nx * halfW, py - ny * halfW)
+                            ctx.closePath()
+                            ctx.fill()
+                        }
+                    }
+                    Text {
+                        visible: App.refreshing
+                        anchors.fill: parent
+                        text: root.spinnerFrames[root.spinnerFrame]
+                        color: !refreshButton.enabled ? root.mutedInk
+                            : refreshButton.hovered ? root.accent : root.ink
+                        font.family: "monospace"
+                        font.pixelSize: 16
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
                 background: Rectangle {
                     color: refreshButton.hovered ? root.softFill : "transparent"

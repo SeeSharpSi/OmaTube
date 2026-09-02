@@ -67,6 +67,19 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 800
 
+            WheelHandler {
+                target: null
+
+                onWheel: (wheel) => {
+                    const maxY = Math.max(0, historyList.contentHeight - historyList.height)
+                    const step = wheel.pixelDelta.y !== 0
+                        ? wheel.pixelDelta.y * 2
+                        : wheel.angleDelta.y / 120 * 120
+                    historyList.contentY = Math.max(0, Math.min(maxY, historyList.contentY - step))
+                    wheel.accepted = true
+                }
+            }
+
             delegate: Item {
                 id: historyDelegate
                 required property string videoId

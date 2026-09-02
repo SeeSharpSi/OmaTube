@@ -58,6 +58,19 @@ Item {
             contentHeight: historyContentColumn.implicitHeight
             boundsBehavior: Flickable.StopAtBounds
 
+            WheelHandler {
+                target: null
+
+                onWheel: (wheel) => {
+                    const maxY = Math.max(0, historyList.contentHeight - historyList.height)
+                    const step = wheel.pixelDelta.y !== 0
+                        ? wheel.pixelDelta.y * 2
+                        : wheel.angleDelta.y / 120 * 120
+                    historyList.contentY = Math.max(0, Math.min(maxY, historyList.contentY - step))
+                    wheel.accepted = true
+                }
+            }
+
             Column {
                 id: historyContentColumn
                 anchors.top: parent.top

@@ -421,6 +421,20 @@ ApplicationWindow {
 
             onMovementEnded: maybeLoadMore()
 
+            WheelHandler {
+                target: null
+
+                onWheel: (wheel) => {
+                    const maxY = Math.max(0, feedList.contentHeight - feedList.height)
+                    const step = wheel.pixelDelta.y !== 0
+                        ? wheel.pixelDelta.y * 2
+                        : wheel.angleDelta.y / 120 * 120
+                    feedList.contentY = Math.max(0, Math.min(maxY, feedList.contentY - step))
+                    wheel.accepted = true
+                    feedList.maybeLoadMore()
+                }
+            }
+
             footer: Item {
                 width: feedList.width
                 height: visible ? 52 : 0

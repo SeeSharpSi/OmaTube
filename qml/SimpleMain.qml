@@ -659,7 +659,7 @@ ApplicationWindow {
 
     SimpleSettingsDialog {
         id: settingsDialog
-        parent: root.contentItem
+        transientParent: root
     }
 
     Loader {

@@ -876,7 +876,7 @@ ApplicationWindow {
 
     SettingsDialog {
         id: settingsDialog
-        parent: root.contentItem
+        transientParent: root
     }
 
     Loader {

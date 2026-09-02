@@ -167,6 +167,9 @@ void YouTubeTest::parsesChannelReferences_data()
     QTest::newRow("handle") << QStringLiteral("@QtGroup")
                              << static_cast<int>(ChannelReferenceKind::Handle)
                              << QStringLiteral("@QtGroup");
+    QTest::newRow("bare-handle") << QStringLiteral("QtGroup")
+                                  << static_cast<int>(ChannelReferenceKind::Handle)
+                                  << QStringLiteral("@QtGroup");
     QTest::newRow("handle-url") << QStringLiteral("https://www.youtube.com/@QtGroup")
                                  << static_cast<int>(ChannelReferenceKind::Handle)
                                  << QStringLiteral("@QtGroup");
@@ -198,6 +201,9 @@ void YouTubeTest::rejectsInvalidChannelReference()
     QVERIFY(!YouTubeClient::parseChannelReference(
         QStringLiteral("https://youtube.com/watch?v=abc"), &error));
     QCOMPARE(error, QStringLiteral("Enter a channel page, not a video or playlist URL."));
+
+    QVERIFY(!YouTubeClient::parseChannelReference(QStringLiteral("Qt"), &error));
+    QCOMPARE(error, QStringLiteral("Enter a valid handle or UC channel ID."));
 }
 
 void YouTubeTest::parsesApiResponses()

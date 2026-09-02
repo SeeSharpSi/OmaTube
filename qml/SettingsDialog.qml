@@ -6,9 +6,10 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 import YtClient
 
-Dialog {
+ApplicationWindow {
     id: root
 
     readonly property var themeColors: App.themeColors
@@ -18,6 +19,8 @@ Dialog {
     readonly property color mutedInk: themeColors.dark_foreground
     readonly property color paper: Qt.rgba(themeColors.background.r,
         themeColors.background.g, themeColors.background.b, 0.78)
+    readonly property color popupColor: Qt.rgba(themeColors.background.r,
+        themeColors.background.g, themeColors.background.b, 1)
     readonly property color panel: Qt.rgba(themeColors.lighter_background.r,
         themeColors.lighter_background.g, themeColors.lighter_background.b, 0.92)
     readonly property color rule: Qt.tint(themeColors.muted,
@@ -62,24 +65,51 @@ Dialog {
         return 0
     }
 
-    modal: true
-    width: Math.min(parent ? parent.width - 32 : 900, 900)
-    height: Math.min(parent ? parent.height - 24 : 860, 860)
-    anchors.centerIn: parent
-    padding: 0
-    closePolicy: Popup.CloseOnEscape
+    flags: Qt.Dialog | Qt.FramelessWindowHint
+    modality: Qt.WindowModal
+    width: 900
+    height: 720
+    minimumWidth: 700
+    minimumHeight: 500
+    visible: false
+    title: qsTr("Settings")
+    color: root.panel
+    palette.window: root.panel
+    palette.windowText: root.ink
+    palette.base: root.paper
+    palette.alternateBase: root.softFill
+    palette.text: root.ink
+    palette.button: root.softFill
+    palette.buttonText: root.ink
+    palette.highlight: root.accent
+    palette.highlightedText: root.panel
+    palette.mid: root.rule
+    palette.placeholderText: root.mutedInk
+
+    function open() {
+        selectedCategoryIds = App.selectedCategoryId >= 0 ? [App.selectedCategoryId] : []
+        keyInput.clear()
+        rememberKey.checked = false
+        if (!visible && transientParent) {
+            x = transientParent.x + Math.round((transientParent.width - width) / 2)
+            y = transientParent.y + Math.round((transientParent.height - height) / 2)
+        }
+        visible = true
+        raise()
+        requestActivate()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        onActivated: root.close()
+    }
 
     function confirmDelete(action, id, name) {
         pendingAction = action
         pendingId = id
         pendingName = name
         confirmDialog.open()
-    }
-
-    onOpened: {
-        selectedCategoryIds = App.selectedCategoryId >= 0 ? [App.selectedCategoryId] : []
-        keyInput.clear()
-        rememberKey.checked = false
     }
 
     Connections {
@@ -90,16 +120,22 @@ Dialog {
         }
     }
 
-    Overlay.modal: Rectangle { color: "#76000000" }
-
-    background: Rectangle {
+    Rectangle {
+        anchors.fill: parent
         color: root.panel
         border.color: root.rule
         border.width: 1
     }
 
-    header: Rectangle {
+    FramelessResizeHelper { targetWindow: root }
+
+    Rectangle {
+        id: settingsHeader
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
         implicitHeight: 62
+        height: implicitHeight
         color: root.panel
 
         Rectangle {
@@ -108,6 +144,12 @@ Dialog {
             anchors.bottom: parent.bottom
             height: 1
             color: root.rule
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: 0
+            onPressed: root.startSystemMove()
         }
 
         Label {
@@ -175,7 +217,12 @@ Dialog {
         }
     }
 
-    contentItem: ColumnLayout {
+    ColumnLayout {
+        id: settingsContent
+        anchors.top: settingsHeader.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         spacing: 0
 
         TabBar {
@@ -368,7 +415,8 @@ Dialog {
                         TextField {
                             id: channelInput
                             Layout.fillWidth: true
-                            placeholderText: qsTr("@handle, channel URL, or UC channel ID")
+                            placeholderText: qsTr("Handle with or without @, channel URL, or UC channel ID")
+                            Layout.preferredHeight: 40
                             enabled: !App.addingChannel
                             selectByMouse: true
                             onAccepted: addChannelButton.clicked()
@@ -385,6 +433,7 @@ Dialog {
                             text: App.addingChannel ? qsTr("Adding...") : qsTr("Add")
                             enabled: channelInput.text.trim().length > 0 && !App.addingChannel
                             onClicked: App.addChannel(channelInput.text, root.selectedCategoryIds)
+                            Layout.preferredHeight: 40
 
                             PointingCursor {}
                         }
@@ -612,6 +661,7 @@ Dialog {
                             id: newCategoryInput
                             Layout.fillWidth: true
                             placeholderText: qsTr("New category")
+                            Layout.preferredHeight: 40
                             selectByMouse: true
                             onAccepted: {
                                 if (App.addCategory(text))
@@ -628,6 +678,7 @@ Dialog {
                         Button {
                             text: qsTr("Add")
                             enabled: newCategoryInput.text.trim().length > 0
+                            Layout.preferredHeight: 40
 
                             PointingCursor {}
 
@@ -727,49 +778,56 @@ Dialog {
                         wrapMode: Text.Wrap
                     }
 
-                    RowLayout {
+                    Rectangle {
                         Layout.fillWidth: true
-                        spacing: 10
+                        Layout.preferredHeight: 148
+                        color: root.popupColor
+                        border.color: root.rule
 
-                        Label {
-                            text: qsTr("Hide videos up to")
-                            color: root.ink
-                        }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 10
 
-                        SpinBox {
-                            id: shortVideoCutoff
-                            from: 0
-                            to: 60
-                            value: App.shortVideoCutoffMinutes
-                            editable: true
-                            onValueModified: App.setShortVideoCutoffMinutes(value)
+                            Label {
+                                text: qsTr("Cutoff")
+                                color: root.ink
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                            }
 
-                            PointingCursor {}
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
 
-                            background: Rectangle {
-                                color: root.paper
-                                border.color: shortVideoCutoff.activeFocus ? root.accent : root.rule
-                                border.width: 1
+                                Label { text: qsTr("Hide videos up to"); color: root.ink }
+
+                                SpinBox {
+                                    id: shortVideoCutoff
+                                    Layout.preferredWidth: 100
+                                    from: 0
+                                    to: 60
+                                    value: App.shortVideoCutoffMinutes
+                                    editable: true
+                                    onValueModified: App.setShortVideoCutoffMinutes(value)
+                                    PointingCursor {}
+                                }
+
+                                Label { text: qsTr("minutes"); color: root.ink }
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: shortVideoCutoff.value === 0
+                                    ? qsTr("Duration filtering is off.")
+                                    : qsTr("Videos %1 minutes or shorter are hidden from every feed.")
+                                          .arg(shortVideoCutoff.value)
+                                color: root.mutedInk
+                                font.pixelSize: 12
+                                wrapMode: Text.Wrap
                             }
                         }
-
-                        Label {
-                            text: qsTr("minutes")
-                            color: root.ink
-                        }
-
-                        Item { Layout.fillWidth: true }
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: shortVideoCutoff.value === 0
-                            ? qsTr("Duration filtering is off.")
-                            : qsTr("Videos %1 minutes or shorter are hidden from every feed.")
-                                  .arg(shortVideoCutoff.value)
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     Item { Layout.fillHeight: true }
@@ -867,7 +925,7 @@ Dialog {
                             PointingCursor {}
 
                             background: Rectangle {
-                                color: themeOption.highlighted ? root.softFill : "transparent"
+                                color: themeOption.highlighted ? root.softFill : root.popupColor
                             }
 
                             contentItem: RowLayout {
@@ -902,7 +960,7 @@ Dialog {
                             padding: 1
 
                             background: Rectangle {
-                                color: root.paper
+                                color: root.popupColor
                                 border.color: root.rule
                             }
 
@@ -1019,10 +1077,22 @@ Dialog {
                         Button {
                             text: qsTr("Clear current key")
                             visible: App.apiKeyConfigured
-                            flat: true
                             onClicked: App.clearApiKey()
 
                             PointingCursor {}
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: root.danger
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                color: parent.hovered ? root.errorFill : root.popupColor
+                                border.color: root.danger
+                                border.width: 1
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
@@ -1154,7 +1224,7 @@ Dialog {
                             PointingCursor {}
 
                             background: Rectangle {
-                                color: backendOption.highlighted ? root.softFill : "transparent"
+                                color: backendOption.highlighted ? root.softFill : root.popupColor
                             }
 
                             contentItem: RowLayout {
@@ -1189,7 +1259,7 @@ Dialog {
                             padding: 1
 
                             background: Rectangle {
-                                color: root.paper
+                                color: root.popupColor
                                 border.color: root.rule
                             }
 
@@ -1283,7 +1353,7 @@ Dialog {
                             PointingCursor {}
 
                             background: Rectangle {
-                                color: qualityOption.highlighted ? root.softFill : "transparent"
+                                color: qualityOption.highlighted ? root.softFill : root.popupColor
                             }
 
                             contentItem: RowLayout {
@@ -1318,7 +1388,7 @@ Dialog {
                             padding: 1
 
                             background: Rectangle {
-                                color: root.paper
+                                color: root.popupColor
                                 border.color: root.rule
                             }
 
@@ -1358,24 +1428,47 @@ Dialog {
 
             Label {
                 id: settingsError
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: errorClose.left
                 anchors.margins: 9
+                anchors.rightMargin: 33
                 text: App.errorMessage
                 color: root.danger
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }
 
-            TapHandler {
-                cursorShape: Qt.PointingHandCursor
-                onTapped: App.clearError()
+            Rectangle {
+                id: errorClose
+                anchors.top: parent.top
+                anchors.right: parent.right
+                width: 24
+                height: 24
+                color: root.errorFill
+                border.color: root.danger
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "x"
+                    color: root.danger
+                    font.family: root.chromeFont
+                    font.pixelSize: 16
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: App.clearError()
+                }
             }
         }
     }
 
     Dialog {
         id: confirmDialog
-        parent: Overlay.overlay
+        parent: root.contentItem
         anchors.centerIn: parent
         modal: true
         title: root.pendingAction === "category"

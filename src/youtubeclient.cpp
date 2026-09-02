@@ -579,7 +579,7 @@ std::optional<ChannelReference> YouTubeClient::parseChannelReference(
         if (host.startsWith(QStringLiteral("www.")))
             host.remove(0, 4);
         if (host != QStringLiteral("youtube.com") && host != QStringLiteral("m.youtube.com")) {
-            setError(error, QStringLiteral("Enter a YouTube channel URL, @handle, or channel ID."));
+            setError(error, QStringLiteral("Enter a YouTube channel URL, handle, or channel ID."));
             return std::nullopt;
         }
 
@@ -597,13 +597,15 @@ std::optional<ChannelReference> YouTubeClient::parseChannelReference(
     static const QRegularExpression channelIdExpression(
         QStringLiteral("^UC[A-Za-z0-9_-]{22}$"));
     static const QRegularExpression handleExpression(
-        QStringLiteral("^@[^\\s/@?#]{3,30}$"));
+        QStringLiteral("^@?([^\\s/@?#]{3,30})$"));
     if (channelIdExpression.match(candidate).hasMatch())
         return ChannelReference{ChannelReferenceKind::Id, candidate};
-    if (handleExpression.match(candidate).hasMatch())
-        return ChannelReference{ChannelReferenceKind::Handle, candidate};
+    const QRegularExpressionMatch handleMatch = handleExpression.match(candidate);
+    if (handleMatch.hasMatch())
+        return ChannelReference{ChannelReferenceKind::Handle,
+                                QStringLiteral("@").append(handleMatch.captured(1))};
 
-    setError(error, QStringLiteral("Enter a valid @handle or UC channel ID."));
+    setError(error, QStringLiteral("Enter a valid handle or UC channel ID."));
     return std::nullopt;
 }
 

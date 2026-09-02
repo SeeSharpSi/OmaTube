@@ -89,7 +89,7 @@ Item {
                     anchors.right: parent.right
                     anchors.topMargin: 9
                     anchors.leftMargin: 10
-                    anchors.rightMargin: 20
+                    anchors.rightMargin: 34
                     text: card.message
                     color: errorNotifications.textColor
                     font.family: "monospace"
@@ -99,15 +99,25 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                Text {
+                Rectangle {
+                    id: closeButton
                     anchors.top: parent.top
                     anchors.right: parent.right
-                    anchors.margins: 4
-                    text: "x"
-                    color: errorNotifications.textColor
-                    font.family: "monospace"
-                    font.pixelSize: 12
-                    opacity: cardHover.hovered ? 1.0 : 0.6
+                    width: 24
+                    height: 24
+                    radius: 0
+                    color: errorNotifications.cardBorder
+                    border.width: 1
+                    border.color: errorNotifications.cardAccent
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "x"
+                        color: errorNotifications.textColor
+                        font.family: "monospace"
+                        font.pixelSize: 16
+                        opacity: cardHover.hovered ? 1.0 : 0.6
+                    }
                 }
 
                 MouseArea {

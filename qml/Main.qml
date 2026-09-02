@@ -204,12 +204,25 @@ ApplicationWindow {
                 background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
             }
             Button {
-                text: App.refreshing ? root.spinnerFrames[root.spinnerFrame] : qsTr("REFRESH")
+                id: refreshButton
+                width: 32
+                height: 32
                 enabled: !App.refreshing
                 flat: true
                 onClicked: App.refresh()
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.ink; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
+                contentItem: Text {
+                    text: App.refreshing ? root.spinnerFrames[root.spinnerFrame] : "\u21bb"
+                    color: !refreshButton.enabled ? root.mutedInk
+                        : refreshButton.hovered ? root.accent : root.ink
+                    font.family: "monospace"
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    color: refreshButton.hovered ? root.softFill : root.panel
+                    border.color: root.rule
+                }
             }
         }
 

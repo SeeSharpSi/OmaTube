@@ -44,3 +44,6 @@ qrc_*.cpp
 
 # Release artifacts
 /dist/
+
+# I have my own config for this specially for myself 
+opencode.json

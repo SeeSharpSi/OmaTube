@@ -28,6 +28,16 @@ ApplicationWindow {
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    readonly property rect spinnerCellBounds: spinnerFontMetrics.tightBoundingRect("⠿")
+    readonly property int spinnerVerticalOffset: Math.round(
+        Math.ceil(spinnerFontMetrics.height) / 2
+        - (spinnerFontMetrics.ascent + spinnerCellBounds.y + spinnerCellBounds.height / 2))
+
+    FontMetrics {
+        id: spinnerFontMetrics
+        font.family: "monospace"
+        font.pixelSize: 16
+    }
 
     Keybinds {
         id: keybinds
@@ -261,7 +271,10 @@ ApplicationWindow {
                     }
                     Text {
                         visible: App.refreshing
-                        anchors.fill: parent
+                        anchors.centerIn: parent
+                        anchors.verticalCenterOffset: root.spinnerVerticalOffset
+                        width: parent.width
+                        height: parent.height
                         text: root.spinnerFrames[root.spinnerFrame]
                         color: !refreshButton.enabled ? root.mutedInk
                             : refreshButton.hovered ? root.accent : root.ink
@@ -822,6 +835,8 @@ ApplicationWindow {
             spacing: 7
 
             Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: root.spinnerVerticalOffset
                 text: root.spinnerFrames[root.spinnerFrame]
                 color: root.ink
                 font.family: "monospace"

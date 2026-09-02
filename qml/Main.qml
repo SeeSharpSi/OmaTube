@@ -199,6 +199,7 @@ ApplicationWindow {
                 PointingCursor {}
             }
             Button {
+                id: settingsButton
                 text: qsTr("SETTINGS")
                 flat: true
                 onClicked: settingsDialog.open()
@@ -209,7 +210,7 @@ ApplicationWindow {
             Button {
                 id: refreshButton
                 width: 32
-                height: 32
+                height: settingsButton.height
                 enabled: !App.refreshing
                 flat: true
                 onClicked: App.refresh()
@@ -223,7 +224,7 @@ ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    color: refreshButton.hovered ? root.softFill : root.panel
+                    color: refreshButton.hovered ? root.softFill : "transparent"
                     border.color: root.rule
                 }
                 PointingCursor {}

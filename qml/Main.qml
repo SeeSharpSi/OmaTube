@@ -724,6 +724,34 @@ ApplicationWindow {
             if (App.errorMessage === sourceMessage)
                 App.clearError()
         }
+        onCopied: copiedTimer.restart()
+    }
+
+    Rectangle {
+        id: copiedNotice
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 40
+        z: 40
+        visible: copiedTimer.running
+        color: root.panel
+        border.color: root.rule
+        width: copiedLabel.implicitWidth + 20
+        height: copiedLabel.implicitHeight + 10
+
+        Label {
+            id: copiedLabel
+            anchors.centerIn: parent
+            color: root.ink
+            font.family: "monospace"
+            font.pixelSize: 11
+            text: qsTr("Copied to clipboard")
+        }
+
+        Timer {
+            id: copiedTimer
+            interval: 1800
+        }
     }
 
     Rectangle {

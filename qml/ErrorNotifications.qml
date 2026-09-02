@@ -17,6 +17,7 @@ Item {
     readonly property int count: notifications.count
 
     signal dismissed(string sourceMessage)
+    signal copied(string sourceMessage)
 
     implicitWidth: parent ? Math.max(0, Math.min(400, parent.width - 36)) : 400
     implicitHeight: stack.implicitHeight
@@ -126,8 +127,10 @@ Item {
                         mouse.accepted = true
                         if (mouse.button === Qt.RightButton)
                             errorNotifications.dismiss(card.index)
-                        else
+                        else {
                             clipboardHelper.copyToClipboard(card.message)
+                            errorNotifications.copied(card.message)
+                        }
                     }
                 }
 

@@ -260,6 +260,17 @@ Item {
                             }
                         }
                     }
+                    Repeater {
+                        model: watchNextRepeater.count === 0 ? 0
+                            : (watchNextGrid.columns - (watchNextRepeater.count % watchNextGrid.columns))
+                                % watchNextGrid.columns
+                        delegate: Item {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: watchNextGrid.cardWidth
+                            Layout.preferredHeight: 0
+                            implicitHeight: 0
+                        }
+                    }
                 }
 
                 Item { width: 1; height: 18 }

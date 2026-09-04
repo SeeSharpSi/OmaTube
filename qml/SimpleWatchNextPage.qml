@@ -62,7 +62,7 @@ Item {
 
         Flickable {
             id: watchNextList
-            readonly property int columnCount: width >= 1040 ? 4 : width >= 860 ? 3 : 2
+            readonly property int columnCount: width >= 1040 ? 4 : width >= 780 ? 3 : 2
 
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -269,6 +269,17 @@ Item {
                                     }
                                 }
                             }
+                        }
+                    }
+                    Repeater {
+                        model: watchNextRepeater.count === 0 ? 0
+                            : (watchNextGrid.columns - (watchNextRepeater.count % watchNextGrid.columns))
+                                % watchNextGrid.columns
+                        delegate: Item {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: watchNextGrid.cardWidth
+                            Layout.preferredHeight: 0
+                            implicitHeight: 0
                         }
                     }
                 }

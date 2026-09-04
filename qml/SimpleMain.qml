@@ -26,6 +26,16 @@ ApplicationWindow {
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    readonly property rect spinnerCellBounds: spinnerFontMetrics.tightBoundingRect("⠿")
+    readonly property int spinnerVerticalOffset: Math.round(
+        Math.ceil(spinnerFontMetrics.height) / 2
+        - (spinnerFontMetrics.ascent + spinnerCellBounds.y + spinnerCellBounds.height / 2))
+
+    FontMetrics {
+        id: spinnerFontMetrics
+        font.family: "monospace"
+        font.pixelSize: 16
+    }
 
     Keybinds {
         id: keybinds
@@ -561,7 +571,7 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 18
-        anchors.bottomMargin: 18
+        anchors.bottomMargin: refreshPill.visible ? 52 : 18
         z: 30
         errorMessage: App.errorMessage
         cardFill: root.panel
@@ -604,15 +614,16 @@ ApplicationWindow {
     }
 
     Rectangle {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.leftMargin: 18
-        anchors.topMargin: 18
+        id: refreshPill
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 12
         z: 10
         width: refreshRow.implicitWidth + 16
         height: 32
         visible: App.refreshing && !App.playerOpen
-        color: root.paper
+        color: root.panel
         border.color: root.rule
 
         Row {
@@ -621,6 +632,8 @@ ApplicationWindow {
             spacing: 7
 
             Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: root.spinnerVerticalOffset
                 text: root.spinnerFrames[root.spinnerFrame]
                 color: root.ink
                 font.family: "monospace"
@@ -643,7 +656,7 @@ ApplicationWindow {
         anchors.bottomMargin: 14
         z: 10
         visible: !App.playerOpen && !root.historyOpen
-        color: root.paper
+        color: root.panel
         border.color: root.rule
         width: keybindsLabel.implicitWidth + 20
         height: keybindsLabel.implicitHeight + 12
@@ -652,8 +665,9 @@ ApplicationWindow {
             id: keybindsLabel
             anchors.centerIn: parent
             color: root.mutedInk
+            font.family: "monospace"
             font.pixelSize: 11
-            text: keybinds.footerText("feed")
+            text: keybinds.footerText("feed").split("\n").join("  /  ")
         }
     }
 

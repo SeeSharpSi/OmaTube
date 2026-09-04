@@ -178,7 +178,7 @@ Item {
         anchors.leftMargin: 18
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 14
-        color: root.paper
+        color: root.panel
         border.color: root.rule
         width: keybindsLabel.implicitWidth + 20
         height: keybindsLabel.implicitHeight + 12
@@ -187,8 +187,9 @@ Item {
             id: keybindsLabel
             anchors.centerIn: parent
             color: root.mutedInk
+            font.family: "monospace"
             font.pixelSize: 11
-            text: keybinds ? keybinds.footerText("history") : ""
+            text: keybinds ? keybinds.footerText("history").split("\n").join("  /  ") : ""
         }
     }
 }

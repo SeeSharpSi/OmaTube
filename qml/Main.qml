@@ -172,7 +172,6 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: 20
-        anchors.bottomMargin: 30
         width: Math.min(parent.width - 40, 1120)
         spacing: 14
         visible: !App.playerOpen
@@ -561,6 +560,7 @@ ApplicationWindow {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.topMargin: -14
                 clip: true
                 contentWidth: width
                 contentHeight: feedContentColumn.implicitHeight
@@ -594,6 +594,7 @@ ApplicationWindow {
                             (width - (columns - 1) * columnSpacing) / columns)
 
                         width: Math.max(0, parent.width - 12)
+                        x: Math.max(0, (parent.width - width) / 2)
                         columns: feedList.columnCount
                         columnSpacing: 12
                         rowSpacing: 12

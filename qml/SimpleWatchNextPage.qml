@@ -118,9 +118,22 @@ Item {
                             required property int position
 
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
                             Layout.preferredWidth: watchNextGrid.cardWidth
+                            Layout.preferredHeight: watchNextDelegate.implicitHeight
                             implicitHeight: clickArea.height + queueControls.height + 10
+
+                            HoverHandler {
+                                id: queueHover
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton
+                                onTapped: root.videoSelected(watchNextDelegate.videoId)
+                            }
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: App.removeFromWatchNext(watchNextDelegate.videoId)
+                            }
 
                             Rectangle {
                                 anchors.fill: parent
@@ -207,19 +220,6 @@ Item {
                                         }
 
                                         Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: watchNextDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, watchNextDelegate.watchProgressPercent)) / 100 }
-
-                                        HoverHandler {
-                                            id: queueHover
-                                            cursorShape: Qt.PointingHandCursor
-                                        }
-                                        TapHandler {
-                                            acceptedButtons: Qt.LeftButton
-                                            onTapped: root.videoSelected(watchNextDelegate.videoId)
-                                        }
-                                        TapHandler {
-                                            acceptedButtons: Qt.RightButton
-                                            onTapped: App.removeFromWatchNext(watchNextDelegate.videoId)
-                                        }
                                     }
 
                                     Row {

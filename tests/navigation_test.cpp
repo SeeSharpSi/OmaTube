@@ -167,6 +167,8 @@ void NavigationTest::fullUiNavigation()
 
     QQuickItem *feedVideo = firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
     QVERIFY(feedVideo != nullptr);
+    QTRY_VERIFY(feedVideo->width() > 0.0);
+    const qreal feedCardWidth = feedVideo->width();
     clickItem(feedVideo);
     QTRY_VERIFY(controller->playerOpen());
     QTRY_VERIFY(
@@ -216,6 +218,22 @@ void NavigationTest::fullUiNavigation()
                      .isEmpty());
     QTRY_VERIFY(!findVisualChildrenByName(watchNextPage, QStringLiteral("watchNextVideo_AUTO0000004"))
                      .isEmpty());
+    QQuickItem *queueFirst = nullptr;
+    QTRY_VERIFY((queueFirst = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideo_AUTO0000002")))
+                != nullptr);
+    QQuickItem *queueSecond = nullptr;
+    QTRY_VERIFY((queueSecond = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideo_AUTO0000004")))
+                != nullptr);
+    QTRY_VERIFY(queueFirst->width() > 0.0);
+    QTRY_VERIFY(queueSecond->width() > 0.0);
+    QTRY_VERIFY(qAbs(queueFirst->width() - feedCardWidth) <= 0.5);
+    QTRY_VERIFY(qAbs(queueSecond->width() - feedCardWidth) <= 0.5);
+    QTRY_VERIFY(
+        qAbs((queueSecond->x() - queueFirst->x()) - (queueFirst->width() + 12.0)) <= 0.5);
 
     QQuickItem *feedNavigation =
         firstVisualChild(rootItem, QStringLiteral("feedNavigationButton"));
@@ -342,6 +360,16 @@ void NavigationTest::simpleUiNavigation()
                      watchNextPage,
                      QStringLiteral("watchNextVideo_AUTO0000002")))
                 != nullptr);
+    QQuickItem *queueSecond = nullptr;
+    QTRY_VERIFY((queueSecond = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideo_AUTO0000004")))
+                != nullptr);
+    QTRY_VERIFY(queueRow->width() > 0.0);
+    QTRY_VERIFY(queueSecond->width() > 0.0);
+    QTRY_VERIFY(watchNextPage->width() > 0.0);
+    QTRY_VERIFY(qAbs((queueSecond->x() - queueRow->x()) - (queueRow->width() + 12.0)) <= 0.5);
+    QVERIFY(queueRow->width() < watchNextPage->width() / 2.0);
     clickItem(queueRow);
     QTRY_VERIFY(controller->playerOpen());
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("playerPage")).isEmpty());

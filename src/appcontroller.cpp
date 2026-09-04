@@ -562,8 +562,10 @@ bool AppController::addToWatchNext(const QString &videoId)
     if (m_repository.isInWatchNext(videoId, &error)) {
         if (!error.isEmpty())
             setErrorMessage(error);
-        else
+        else {
             setStatusMessage(QStringLiteral("Already in Watch Next."));
+            emit watchNextFeedback(QStringLiteral("Already in Watch Next"));
+        }
         return error.isEmpty();
     }
     if (!error.isEmpty()) {
@@ -576,6 +578,7 @@ bool AppController::addToWatchNext(const QString &videoId)
     }
     reloadWatchNext();
     setStatusMessage(QStringLiteral("Added to Watch Next."));
+    emit watchNextFeedback(QStringLiteral("Added to Watch Next"));
     return true;
 }
 
@@ -588,6 +591,7 @@ bool AppController::removeFromWatchNext(const QString &videoId)
     }
     reloadWatchNext();
     setStatusMessage(QStringLiteral("Removed from Watch Next."));
+    emit watchNextFeedback(QStringLiteral("Removed from Watch Next"));
     return true;
 }
 

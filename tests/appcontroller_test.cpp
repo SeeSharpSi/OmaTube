@@ -740,24 +740,37 @@ void AppControllerTest::watchNextLifecycleThroughController()
     QCOMPARE(queue->rowCount(), 0);
 
     QVERIFY(!controller->isInWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QSignalSpy feedback(controller.get(), &AppController::watchNextFeedback);
     QVERIFY(controller->addToWatchNext(QStringLiteral("dQw4w9WgXcQ")));
     QVERIFY(controller->isInWatchNext(QStringLiteral("dQw4w9WgXcQ")));
     QCOMPARE(queue->rowCount(), 1);
     QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
              QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.at(0).at(0).toString(), QStringLiteral("Added to Watch Next"));
 
-    // Re-adding is idempotent.
+    // Re-adding is idempotent but still emits feedback every time.
     QVERIFY(controller->addToWatchNext(QStringLiteral("dQw4w9WgXcQ")));
     QCOMPARE(queue->rowCount(), 1);
+    QCOMPARE(controller->statusMessage(), QStringLiteral("Already in Watch Next."));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.at(1).at(0).toString(), QStringLiteral("Already in Watch Next"));
+    QVERIFY(controller->addToWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QCOMPARE(queue->rowCount(), 1);
+    QCOMPARE(feedback.count(), 3);
+    QCOMPARE(feedback.at(2).at(0).toString(), QStringLiteral("Already in Watch Next"));
 
     QVERIFY(controller->addToWatchNext(QStringLiteral("AAAAAAAAAAA")));
     QCOMPARE(queue->rowCount(), 2);
+    QCOMPARE(feedback.count(), 4);
+    QCOMPARE(feedback.at(3).at(0).toString(), QStringLiteral("Added to Watch Next"));
     QVERIFY(controller->moveWatchNext(QStringLiteral("AAAAAAAAAAA"), 0));
     QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
              QStringLiteral("AAAAAAAAAAA"));
 
     QVERIFY(!controller->addToWatchNext(QStringLiteral("short")));
     QVERIFY(!controller->errorMessage().isEmpty());
+    QCOMPARE(feedback.count(), 4);
     controller->clearError();
 
     QVERIFY(controller->removeFromWatchNext(QStringLiteral("AAAAAAAAAAA")));
@@ -765,6 +778,8 @@ void AppControllerTest::watchNextLifecycleThroughController()
     QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
              QStringLiteral("dQw4w9WgXcQ"));
     QVERIFY(!controller->isInWatchNext(QStringLiteral("AAAAAAAAAAA")));
+    QCOMPARE(feedback.count(), 5);
+    QCOMPARE(feedback.at(4).at(0).toString(), QStringLiteral("Removed from Watch Next"));
 }
 
 void AppControllerTest::playbackVolumeDefaultsTo100()

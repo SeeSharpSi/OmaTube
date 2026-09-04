@@ -3,8 +3,10 @@
 #include "spaceholdhandler.h"
 
 #include <QCoreApplication>
+#include <QColor>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -77,6 +79,31 @@ void clickItem(QQuickItem *item)
         item->mapToScene(QPointF(item->width() / 2.0, item->height() / 2.0));
     const QPoint target = window->contentItem()->mapFromScene(sceneCenter).toPoint();
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, target);
+}
+
+// Same coordinate mapping as clickItem, but only moves the pointer so
+// HoverHandler hovered state can be asserted deterministically offscreen.
+void moveMouseToItem(QQuickItem *item)
+{
+    QVERIFY(item != nullptr);
+    QQuickWindow *window = item->window();
+    QVERIFY(window != nullptr);
+    const QPointF sceneCenter =
+        item->mapToScene(QPointF(item->width() / 2.0, item->height() / 2.0));
+    const QPoint target = window->contentItem()->mapFromScene(sceneCenter).toPoint();
+    QTest::mouseMove(window, target);
+}
+
+// Move to an explicit local point for cards where the hover area is only
+// the upper clickable region (full Watch Next queue controls sit below it).
+void moveMouseToItemPoint(QQuickItem *item, const QPointF &local)
+{
+    QVERIFY(item != nullptr);
+    QQuickWindow *window = item->window();
+    QVERIFY(window != nullptr);
+    const QPointF scenePoint = item->mapToScene(local);
+    const QPoint target = window->contentItem()->mapFromScene(scenePoint).toPoint();
+    QTest::mouseMove(window, target);
 }
 
 const QStringList settingsTabNames{
@@ -155,6 +182,27 @@ void NavigationTest::fullUiNavigation()
     QVERIFY(!refreshButton->isEnabled());
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("historyLoader")).isEmpty());
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("playerLoader")).isEmpty());
+    QQuickItem *feedbackNotice = nullptr;
+    QTRY_VERIFY((feedbackNotice = firstVisualChild(rootItem, QStringLiteral("feedbackNotice")))
+                != nullptr);
+    {
+        const QColor borderColor =
+            QQmlProperty::read(feedbackNotice, QStringLiteral("border.color")).value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
+    QVERIFY(!feedbackNotice->isVisible());
+    QQuickItem *feedbackLabel = nullptr;
+    QTRY_VERIFY((feedbackLabel = firstVisualChild(rootItem, QStringLiteral("feedbackLabel")))
+                != nullptr);
+    QVERIFY(controller->addToWatchNext(QStringLiteral("AUTO0000001")));
+    QTRY_VERIFY(feedbackNotice->isVisible());
+    QTRY_COMPARE(
+        feedbackLabel->property("text").toString(),
+        QStringLiteral("Added to Watch Next"));
 
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("categoryButton_1")).isEmpty());
@@ -169,6 +217,24 @@ void NavigationTest::fullUiNavigation()
     QVERIFY(feedVideo != nullptr);
     QTRY_VERIFY(feedVideo->width() > 0.0);
     const qreal feedCardWidth = feedVideo->width();
+    QQuickItem *feedOutline = nullptr;
+    QTRY_VERIFY((feedOutline = firstVisualChild(
+                     rootItem,
+                     QStringLiteral("feedVideoOutline_AUTO0000001")))
+                != nullptr);
+    QVERIFY(feedOutline->z() > 0.0);
+    moveMouseToItem(feedVideo);
+    QTRY_COMPARE(
+        QQmlProperty::read(feedOutline, QStringLiteral("border.width")).toInt(), 2);
+    {
+        const QColor borderColor =
+            QQmlProperty::read(feedOutline, QStringLiteral("border.color")).value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
     clickItem(feedVideo);
     QTRY_VERIFY(controller->playerOpen());
     QTRY_VERIFY(
@@ -206,6 +272,27 @@ void NavigationTest::fullUiNavigation()
     QVERIFY(historyPage != nullptr);
     QTRY_VERIFY(!findVisualChildrenByName(historyPage, QStringLiteral("historyVideo_AUTO0000001"))
                      .isEmpty());
+    QQuickItem *historyCard = firstVisualChild(
+        historyPage, QStringLiteral("historyVideo_AUTO0000001"));
+    QVERIFY(historyCard != nullptr);
+    QQuickItem *historyOutline = nullptr;
+    QTRY_VERIFY((historyOutline = firstVisualChild(
+                     historyPage,
+                     QStringLiteral("historyVideoOutline_AUTO0000001")))
+                != nullptr);
+    QVERIFY(historyOutline->z() > 0.0);
+    moveMouseToItem(historyCard);
+    QTRY_COMPARE(
+        QQmlProperty::read(historyOutline, QStringLiteral("border.width")).toInt(), 2);
+    {
+        const QColor borderColor =
+            QQmlProperty::read(historyOutline, QStringLiteral("border.color")).value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
 
     QQuickItem *watchNextNavigation =
         firstVisualChild(rootItem, QStringLiteral("watchNextNavigationButton"));
@@ -234,6 +321,26 @@ void NavigationTest::fullUiNavigation()
     QTRY_VERIFY(qAbs(queueSecond->width() - feedCardWidth) <= 0.5);
     QTRY_VERIFY(
         qAbs((queueSecond->x() - queueFirst->x()) - (queueFirst->width() + 12.0)) <= 0.5);
+    QQuickItem *queueOutline = nullptr;
+    QTRY_VERIFY((queueOutline = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideoOutline_AUTO0000002")))
+                != nullptr);
+    QVERIFY(queueOutline->z() > 0.0);
+    QTRY_VERIFY(queueOutline->height() > 10.0);
+    moveMouseToItemPoint(
+        queueOutline, QPointF(queueOutline->width() / 2.0, 10.0));
+    QTRY_COMPARE(
+        QQmlProperty::read(queueOutline, QStringLiteral("border.width")).toInt(), 2);
+    {
+        const QColor borderColor =
+            QQmlProperty::read(queueOutline, QStringLiteral("border.color")).value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
 
     QQuickItem *feedNavigation =
         firstVisualChild(rootItem, QStringLiteral("feedNavigationButton"));
@@ -325,6 +432,28 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("feedPage")).isEmpty());
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
+    QQuickItem *simpleFeedbackNotice = nullptr;
+    QTRY_VERIFY((simpleFeedbackNotice = firstVisualChild(rootItem, QStringLiteral("feedbackNotice")))
+                != nullptr);
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       simpleFeedbackNotice, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
+    QVERIFY(!simpleFeedbackNotice->isVisible());
+    QQuickItem *simpleFeedbackLabel = nullptr;
+    QTRY_VERIFY((simpleFeedbackLabel = firstVisualChild(rootItem, QStringLiteral("feedbackLabel")))
+                != nullptr);
+    QVERIFY(controller->addToWatchNext(QStringLiteral("AUTO0000002")));
+    QTRY_VERIFY(simpleFeedbackNotice->isVisible());
+    QTRY_COMPARE(
+        simpleFeedbackLabel->property("text").toString(),
+        QStringLiteral("Already in Watch Next"));
 
     QTest::keyClick(window, Qt::Key_H);
     QTRY_VERIFY(window->property("historyOpen").toBool());
@@ -372,6 +501,25 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(queueSecond->height() >= queueSecond->width() * 0.5625);
     QTRY_VERIFY(qAbs((queueSecond->x() - queueRow->x()) - (queueRow->width() + 12.0)) <= 0.5);
     QVERIFY(queueRow->width() < watchNextPage->width() / 2.0);
+    QQuickItem *simpleQueueOutline = nullptr;
+    QTRY_VERIFY((simpleQueueOutline = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideoOutline_AUTO0000002")))
+                != nullptr);
+    QVERIFY(simpleQueueOutline->z() > 0.0);
+    moveMouseToItem(queueRow);
+    QTRY_COMPARE(
+        QQmlProperty::read(simpleQueueOutline, QStringLiteral("border.width")).toInt(), 2);
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       simpleQueueOutline, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
     clickItem(queueRow);
     QTRY_VERIFY(controller->playerOpen());
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("playerPage")).isEmpty());

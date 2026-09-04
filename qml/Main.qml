@@ -82,7 +82,19 @@ ApplicationWindow {
         return Qt.formatDate(value, "MMM d, yyyy")
     }
 
+    function showFeedback(message) {
+        feedbackLabel.text = message
+        feedbackTimer.restart()
+    }
+
     Component.onCompleted: App.startupRefresh()
+
+    Connections {
+        target: App
+        function onWatchNextFeedback(message) {
+            root.showFeedback(message)
+        }
+    }
 
     Timer {
         interval: 80
@@ -696,8 +708,6 @@ ApplicationWindow {
                                 Rectangle {
                                     anchors.fill: parent
                                     color: root.glassPanel
-                                    border.color: feedHover.hovered ? root.accent : root.rule
-                                    border.width: feedHover.hovered ? 2 : 1
 
                                     Rectangle {
                                         anchors.top: parent.top
@@ -766,6 +776,15 @@ ApplicationWindow {
                                     }
 
                                     Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: feedDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, feedDelegate.watchProgressPercent)) / 100 }
+
+                                    Rectangle {
+                                        objectName: "feedVideoOutline_" + feedDelegate.videoId
+                                        anchors.fill: parent
+                                        z: 1
+                                        color: "transparent"
+                                        border.color: feedHover.hovered ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0) : root.rule
+                                        border.width: feedHover.hovered ? 2 : 1
+                                    }
                                 }
 
                                 HoverHandler {
@@ -884,23 +903,25 @@ ApplicationWindow {
             if (App.errorMessage === sourceMessage)
                 App.clearError()
         }
-        onCopied: copiedTimer.restart()
+        onCopied: root.showFeedback(qsTr("Copied to clipboard"))
     }
 
     Rectangle {
-        id: copiedNotice
+        id: feedbackNotice
+        objectName: "feedbackNotice"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
         z: 40
-        visible: copiedTimer.running
+        visible: feedbackTimer.running
         color: root.panel
-        border.color: root.rule
-        width: copiedLabel.implicitWidth + 20
-        height: copiedLabel.implicitHeight + 10
+        border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0)
+        width: feedbackLabel.implicitWidth + 20
+        height: feedbackLabel.implicitHeight + 10
 
         Label {
-            id: copiedLabel
+            id: feedbackLabel
+            objectName: "feedbackLabel"
             anchors.centerIn: parent
             color: root.ink
             font.family: "monospace"
@@ -909,7 +930,7 @@ ApplicationWindow {
         }
 
         Timer {
-            id: copiedTimer
+            id: feedbackTimer
             interval: 1800
         }
     }

@@ -78,6 +78,8 @@ Shared selectors, present in full and Simple UI:
 | `historyLoader` | none | Lazy history `Loader`, active when history is open |
 | `watchNextLoader` | none | Lazy Watch Next `Loader`, active when Watch Next is open |
 | `playerLoader` | none | Lazy player `Loader`, active when `playerOpen` is true |
+| `feedbackNotice` | none | Transient clipboard and Watch Next feedback popup |
+| `feedbackLabel` | none | Text inside `feedbackNotice` |
 | `historyPage` | none | Loaded history content |
 | `watchNextPage` | none | Loaded Watch Next content |
 | `playerPage` | none | Loaded `VideoPlayerPage` |
@@ -102,6 +104,9 @@ Dynamic selectors, created by Repeaters:
 | `feedVideo_<videoId>` | `Video <videoId> <title>` | Example: `feedVideo_AUTO0000001`, action calls `App.openVideo`, right-click calls `App.addToWatchNext` |
 | `historyVideo_<videoId>` | `History video <videoId> <title>` | Example: `historyVideo_AUTO0000001`, action selects video |
 | `watchNextVideo_<videoId>` | `Watch Next video <videoId> <title>` | Example: `watchNextVideo_AUTO0000002`, action selects video |
+| `feedVideoOutline_<videoId>` | none | Transparent topmost feed card border overlay, `z:1`, hover width 2 opaque accent |
+| `historyVideoOutline_<videoId>` | none | Transparent topmost history card border overlay, `z:1`, hover width 2 opaque accent |
+| `watchNextVideoOutline_<videoId>` | none | Transparent topmost Watch Next card border overlay, `z:1`, hover width 2 opaque accent |
 | `watchNextUp_<videoId>` | `Move up <videoId>` | Calls `App.moveWatchNext` one slot earlier |
 | `watchNextDown_<videoId>` | `Move down <videoId>` | Calls `App.moveWatchNext` one slot later |
 | `watchNextRemove_<videoId>` | `Remove from Watch Next <videoId>` | Calls `App.removeFromWatchNext` |

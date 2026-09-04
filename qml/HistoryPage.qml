@@ -114,8 +114,6 @@ Item {
                             Rectangle {
                                 anchors.fill: parent
                                 color: root.glassPanel
-                                border.color: historyHover.hovered ? root.accent : root.rule
-                                border.width: historyHover.hovered ? 2 : 1
 
                                 Rectangle {
                                     anchors.top: parent.top
@@ -184,6 +182,15 @@ Item {
                                 }
 
                                 Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; height: 3; color: root.neonYellow; visible: historyDelegate.watchProgressPercent >= 0; width: parent.width * Math.max(0, Math.min(100, historyDelegate.watchProgressPercent)) / 100 }
+
+                                Rectangle {
+                                    objectName: "historyVideoOutline_" + historyDelegate.videoId
+                                    anchors.fill: parent
+                                    z: 1
+                                    color: "transparent"
+                                    border.color: historyHover.hovered ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0) : root.rule
+                                    border.width: historyHover.hovered ? 2 : 1
+                                }
                             }
 
                             HoverHandler {

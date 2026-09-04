@@ -80,7 +80,19 @@ ApplicationWindow {
         return Qt.formatDate(value, "MMM d, yyyy")
     }
 
+    function showFeedback(message) {
+        feedbackLabel.text = message
+        feedbackTimer.restart()
+    }
+
     Component.onCompleted: App.startupRefresh()
+
+    Connections {
+        target: App
+        function onWatchNextFeedback(message) {
+            root.showFeedback(message)
+        }
+    }
 
     Timer {
         interval: 80
@@ -629,23 +641,25 @@ ApplicationWindow {
             if (App.errorMessage === sourceMessage)
                 App.clearError()
         }
-        onCopied: copiedTimer.restart()
+        onCopied: root.showFeedback(qsTr("Copied to clipboard"))
     }
 
     Rectangle {
-        id: copiedNotice
+        id: feedbackNotice
+        objectName: "feedbackNotice"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
         z: 40
-        visible: copiedTimer.running
+        visible: feedbackTimer.running
         color: root.panel
-        border.color: root.rule
-        width: copiedLabel.implicitWidth + 20
-        height: copiedLabel.implicitHeight + 10
+        border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0)
+        width: feedbackLabel.implicitWidth + 20
+        height: feedbackLabel.implicitHeight + 10
 
         Label {
-            id: copiedLabel
+            id: feedbackLabel
+            objectName: "feedbackLabel"
             anchors.centerIn: parent
             color: root.ink
             font.family: "monospace"
@@ -654,7 +668,7 @@ ApplicationWindow {
         }
 
         Timer {
-            id: copiedTimer
+            id: feedbackTimer
             interval: 1800
         }
     }

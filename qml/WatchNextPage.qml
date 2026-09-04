@@ -113,8 +113,6 @@ Item {
                             Rectangle {
                                 anchors.fill: parent
                                 color: root.glassPanel
-                                border.color: queueHover.hovered ? root.accent : root.rule
-                                border.width: queueHover.hovered ? 2 : 1
 
                                 Column {
                                     id: cardColumn
@@ -256,6 +254,16 @@ Item {
                                             PointingCursor {}
                                         }
                                     }
+
+                                }
+
+                                Rectangle {
+                                    objectName: "watchNextVideoOutline_" + watchNextDelegate.videoId
+                                    anchors.fill: parent
+                                    z: 1
+                                    color: "transparent"
+                                    border.color: queueHover.hovered ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0) : root.rule
+                                    border.width: queueHover.hovered ? 2 : 1
                                 }
                             }
                         }

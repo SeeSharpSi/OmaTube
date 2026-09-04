@@ -177,6 +177,7 @@ signals:
     void currentVideoMaximumHeightOverrideChanged();
     void currentVideoTitleChanged();
     void channelAdded(QString title);
+    void watchNextFeedback(const QString &message);
 
 private:
     explicit AppController(QString databasePath, QObject *parent = nullptr, bool automationMode = false);

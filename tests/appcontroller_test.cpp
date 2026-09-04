@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 #include "models/historymodel.h"
+#include "models/watchnextmodel.h"
 #include "playbacksettings.h"
 #include "repository.h"
 #include "spaceholdhandler.h"
@@ -48,6 +49,7 @@ private slots:
     void loadMoreHistoryAppendsCachedPages();
     void reloadsWatchHistoryIntoModel();
     void deletesWatchHistoryFromModel();
+    void watchNextLifecycleThroughController();
     void playbackVolumeDefaultsTo100();
     void playbackVolumeClampingAndPersistence();
     void simpleUiPersistence();
@@ -713,6 +715,58 @@ void AppControllerTest::deletesWatchHistoryFromModel()
     QCOMPARE(stats.value(QStringLiteral("watchCount")).toInt(), 2);
 }
 
+void AppControllerTest::watchNextLifecycleThroughController()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repository(databasePath);
+        QVERIFY2(repository.open(&error), qPrintable(error));
+        QVERIFY(repository.upsertChannel(
+            makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repository.upsertVideos(
+            {makeVideo(QStringLiteral("dQw4w9WgXcQ"), QStringLiteral("UCAlpha"), now),
+             makeVideo(QStringLiteral("AAAAAAAAAAA"), QStringLiteral("UCAlpha"), now)},
+            &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    WatchNextModel *queue = controller->watchNext();
+    QVERIFY(queue != nullptr);
+    QCOMPARE(queue->rowCount(), 0);
+
+    QVERIFY(!controller->isInWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QVERIFY(controller->addToWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QVERIFY(controller->isInWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QCOMPARE(queue->rowCount(), 1);
+    QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
+             QStringLiteral("dQw4w9WgXcQ"));
+
+    // Re-adding is idempotent.
+    QVERIFY(controller->addToWatchNext(QStringLiteral("dQw4w9WgXcQ")));
+    QCOMPARE(queue->rowCount(), 1);
+
+    QVERIFY(controller->addToWatchNext(QStringLiteral("AAAAAAAAAAA")));
+    QCOMPARE(queue->rowCount(), 2);
+    QVERIFY(controller->moveWatchNext(QStringLiteral("AAAAAAAAAAA"), 0));
+    QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
+             QStringLiteral("AAAAAAAAAAA"));
+
+    QVERIFY(!controller->addToWatchNext(QStringLiteral("short")));
+    QVERIFY(!controller->errorMessage().isEmpty());
+    controller->clearError();
+
+    QVERIFY(controller->removeFromWatchNext(QStringLiteral("AAAAAAAAAAA")));
+    QCOMPARE(queue->rowCount(), 1);
+    QCOMPARE(queue->data(queue->index(0), WatchNextModel::VideoIdRole).toString(),
+             QStringLiteral("dQw4w9WgXcQ"));
+    QVERIFY(!controller->isInWatchNext(QStringLiteral("AAAAAAAAAAA")));
+}
+
 void AppControllerTest::playbackVolumeDefaultsTo100()
 {
     std::unique_ptr<AppController> controller =
@@ -1235,7 +1289,7 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_RETURN_ARG(QVariant, feedVariant),
         Q_ARG(QVariant, QStringLiteral("feed")));
     QVERIFY2(feedOk, "QMetaObject::invokeMethod footerText(\"feed\") failed");
-    QCOMPARE(feedVariant.toString(), QStringLiteral("h: history\ns: config\nj/k: scroll\nr: refresh\nq: quit"));
+    QCOMPARE(feedVariant.toString(), QStringLiteral("h: history\nw: watch next\ns: config\nj/k: scroll\nr: refresh\nq: quit\nright-click: watch next"));
 
     QVariant historyVariant;
     const bool historyOk = QMetaObject::invokeMethod(
@@ -1244,7 +1298,16 @@ void AppControllerTest::keybindsFooterTextOrdering()
         Q_RETURN_ARG(QVariant, historyVariant),
         Q_ARG(QVariant, QStringLiteral("history")));
     QVERIFY2(historyOk, "QMetaObject::invokeMethod footerText(\"history\") failed");
-    QCOMPARE(historyVariant.toString(), QStringLiteral("h: history\ns: config\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
+    QCOMPARE(historyVariant.toString(), QStringLiteral("h: history\nw: watch next\ns: config\nj/k: scroll\nq: quit\nesc: feed\nright-click: delete"));
+
+    QVariant watchNextVariant;
+    const bool watchNextOk = QMetaObject::invokeMethod(
+        object.data(),
+        "footerText",
+        Q_RETURN_ARG(QVariant, watchNextVariant),
+        Q_ARG(QVariant, QStringLiteral("watchnext")));
+    QVERIFY2(watchNextOk, "QMetaObject::invokeMethod footerText(\"watchnext\") failed");
+    QCOMPARE(watchNextVariant.toString(), QStringLiteral("h: history\nw: watch next\ns: config\nj/k: scroll\nq: quit\nesc: feed\nright-click: remove"));
 }
 
 void AppControllerTest::spaceHoldShortPressEmitsTappedOnly()

@@ -146,6 +146,8 @@ void NavigationTest::fullUiNavigation()
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("historyNavigationButton")).isEmpty());
     QTRY_VERIFY(
+        !findVisualChildrenByName(rootItem, QStringLiteral("watchNextNavigationButton")).isEmpty());
+    QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("settingsNavigationButton")).isEmpty());
     QQuickItem *refreshButton = nullptr;
     QTRY_VERIFY((refreshButton = firstVisualChild(rootItem, QStringLiteral("refreshButton")))
@@ -202,6 +204,32 @@ void NavigationTest::fullUiNavigation()
     QVERIFY(historyPage != nullptr);
     QTRY_VERIFY(!findVisualChildrenByName(historyPage, QStringLiteral("historyVideo_AUTO0000001"))
                      .isEmpty());
+
+    QQuickItem *watchNextNavigation =
+        firstVisualChild(rootItem, QStringLiteral("watchNextNavigationButton"));
+    QVERIFY(watchNextNavigation != nullptr);
+    clickItem(watchNextNavigation);
+    QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("watchNextPage")).isEmpty());
+    QQuickItem *watchNextPage = firstVisualChild(rootItem, QStringLiteral("watchNextPage"));
+    QVERIFY(watchNextPage != nullptr);
+    QTRY_VERIFY(!findVisualChildrenByName(watchNextPage, QStringLiteral("watchNextVideo_AUTO0000002"))
+                     .isEmpty());
+    QTRY_VERIFY(!findVisualChildrenByName(watchNextPage, QStringLiteral("watchNextVideo_AUTO0000004"))
+                     .isEmpty());
+
+    QQuickItem *feedNavigation =
+        firstVisualChild(rootItem, QStringLiteral("feedNavigationButton"));
+    QVERIFY(feedNavigation != nullptr);
+    clickItem(feedNavigation);
+    QTRY_VERIFY(findVisualChildrenByName(rootItem, QStringLiteral("watchNextPage")).isEmpty());
+    // The category filter from the earlier step is still active; clear it
+    // before expecting the full feed again.
+    QQuickItem *allCategories = firstVisualChild(rootItem, QStringLiteral("categoryButton_2"));
+    QVERIFY(allCategories != nullptr);
+    clickItem(allCategories);
+    QTRY_VERIFY(controller->selectedCategoryId() == -1);
+    QTRY_VERIFY(
+        !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
 
     QQuickItem *settingsNavigation =
         firstVisualChild(rootItem, QStringLiteral("settingsNavigationButton"));
@@ -301,6 +329,29 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY((backButton = firstVisualChild(rootItem, QStringLiteral("playerBackButton")))
                 != nullptr);
     clickItem(backButton);
+    QTRY_VERIFY(!controller->playerOpen());
+
+    QTest::keyClick(window, Qt::Key_W);
+    QTRY_VERIFY(window->property("watchNextOpen").toBool());
+    QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("watchNextLoader")).isEmpty());
+    QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("watchNextPage")).isEmpty());
+    QQuickItem *watchNextPage = firstVisualChild(rootItem, QStringLiteral("watchNextPage"));
+    QVERIFY(watchNextPage != nullptr);
+    QQuickItem *queueRow = nullptr;
+    QTRY_VERIFY((queueRow = firstVisualChild(
+                     watchNextPage,
+                     QStringLiteral("watchNextVideo_AUTO0000002")))
+                != nullptr);
+    clickItem(queueRow);
+    QTRY_VERIFY(controller->playerOpen());
+    QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("playerPage")).isEmpty());
+    QTRY_VERIFY(
+        !findVisualChildrenByName(rootItem, QStringLiteral("automationPlayer")).isEmpty());
+
+    QQuickItem *queueBackButton = nullptr;
+    QTRY_VERIFY((queueBackButton = firstVisualChild(rootItem, QStringLiteral("playerBackButton")))
+                != nullptr);
+    clickItem(queueBackButton);
     QTRY_VERIFY(!controller->playerOpen());
 
     QTest::keyClick(window, Qt::Key_S);

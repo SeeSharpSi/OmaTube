@@ -30,6 +30,10 @@ public:
     // prune pass is not immediately undone by the next page load.
     static constexpr qint64 historyFetchDatabaseBytes = 9 * 1024 * 1024;
 
+    // Maximum committed Watch Next entries. Adding beyond this is
+    // rejected so the queue stays a deliberate commitment, not a pile.
+    static constexpr int watchNextMaxItems = 25;
+
     explicit Repository(QString databasePath = {});
     ~Repository();
 
@@ -124,6 +128,14 @@ public:
     // Removes every watch-history row for a video id, even when the video has
     // repeated history sessions. Watch progress and cached metadata remain.
     bool deleteWatchHistory(const QString &videoId, QString *error = nullptr);
+
+    // Committed Watch Next queue in manual order. Entries whose video or
+    // channel metadata is gone are omitted.
+    [[nodiscard]] QList<WatchNextEntry> watchNext(QString *error = nullptr) const;
+    [[nodiscard]] bool isInWatchNext(const QString &videoId, QString *error = nullptr) const;
+    bool addToWatchNext(const QString &videoId, QString *error = nullptr);
+    bool removeFromWatchNext(const QString &videoId, QString *error = nullptr);
+    bool moveWatchNext(const QString &videoId, int targetIndex, QString *error = nullptr);
 
 private:
     bool migrate(QString *error);

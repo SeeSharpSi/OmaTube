@@ -93,6 +93,24 @@ struct HistoryEntry
     bool operator==(const HistoryEntry &) const = default;
 };
 
+// One row of the committed Watch Next queue, joined to the video and
+// channel metadata that still exists. Rows whose video or channel has
+// been removed are omitted.
+struct WatchNextEntry
+{
+    QString videoId;
+    QString channelId;
+    QString channelTitle;
+    QString title;
+    QDateTime publishedAt;
+    // Percentage (0-100) the viewer reached. Negative when unknown.
+    int watchProgressPercent = -1;
+    int position = 0;
+    QDateTime addedAt;
+
+    bool operator==(const WatchNextEntry &) const = default;
+};
+
 struct LiveChannel
 {
     QString channelId;

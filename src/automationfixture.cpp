@@ -104,5 +104,10 @@ bool AutomationFixture::seed(const QString &databasePath, QString *error)
     if (!repository.applyWatchProgress(QStringLiteral("AUTO0000001"), 120, 120, true, error))
         return false;
 
+    if (!repository.addToWatchNext(QStringLiteral("AUTO0000002"), error))
+        return false;
+    if (!repository.addToWatchNext(QStringLiteral("AUTO0000004"), error))
+        return false;
+
     return true;
 }

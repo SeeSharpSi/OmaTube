@@ -59,6 +59,7 @@ Video 1` through `Automation Video 5`, published from fixed
 | Channels | `UCautomation01`, `UCautomation02` | `UCautomation01` in category 1, `UCautomation02` in category 2 |
 | Videos | `AUTO0000001` through `AUTO0000005` | 1 to 3 in `UCautomation01`, 4 to 5 in `UCautomation02` |
 | History | `AUTO0000001` | 120 watched seconds, last position 120 of 600, one session, 20% progress |
+| Watch Next | `AUTO0000002`, `AUTO0000004` | Committed queue in that order, seeded via `addToWatchNext` |
 | Live | none | All `isBroadcast false`, live model stays empty |
 
 ## 4. Selectors
@@ -75,8 +76,10 @@ Shared selectors, present in full and Simple UI:
 | `appWindow` | none | Root `ApplicationWindow` |
 | `feedPage` | none | Main feed container |
 | `historyLoader` | none | Lazy history `Loader`, active when history is open |
+| `watchNextLoader` | none | Lazy Watch Next `Loader`, active when Watch Next is open |
 | `playerLoader` | none | Lazy player `Loader`, active when `playerOpen` is true |
 | `historyPage` | none | Loaded history content |
+| `watchNextPage` | none | Loaded Watch Next content |
 | `playerPage` | none | Loaded `VideoPlayerPage` |
 | `playerBackendLoader` | none | Backend loader inside `playerPage` |
 | `automationPlayer` | none | Fake player, text is `Automation player <videoId>` |
@@ -96,8 +99,12 @@ Dynamic selectors, created by Repeaters:
 | Pattern | Accessible name pattern | Notes |
 |---|---|---|
 | `categoryButton_<id>` | `Category <id> <name>` | Example: `categoryButton_1` |
-| `feedVideo_<videoId>` | `Video <videoId> <title>` | Example: `feedVideo_AUTO0000001`, action calls `App.openVideo` |
+| `feedVideo_<videoId>` | `Video <videoId> <title>` | Example: `feedVideo_AUTO0000001`, action calls `App.openVideo`, right-click calls `App.addToWatchNext` |
 | `historyVideo_<videoId>` | `History video <videoId> <title>` | Example: `historyVideo_AUTO0000001`, action selects video |
+| `watchNextVideo_<videoId>` | `Watch Next video <videoId> <title>` | Example: `watchNextVideo_AUTO0000002`, action selects video |
+| `watchNextUp_<videoId>` | `Move up <videoId>` | Calls `App.moveWatchNext` one slot earlier |
+| `watchNextDown_<videoId>` | `Move down <videoId>` | Calls `App.moveWatchNext` one slot later |
+| `watchNextRemove_<videoId>` | `Remove from Watch Next <videoId>` | Calls `App.removeFromWatchNext` |
 | `liveVideo_<videoId>` | `Live video <videoId> <channel> <title>` | No fixture entry, expect absent |
 
 Full UI only selectors:
@@ -106,6 +113,7 @@ Full UI only selectors:
 |---|---|
 | `feedNavigationButton` | `Show feed` |
 | `historyNavigationButton` | `Show history` |
+| `watchNextNavigationButton` | `Show Watch Next` |
 | `settingsNavigationButton` | `Open settings` |
 | `refreshButton` | `Refresh feed`, disabled in automation |
 
@@ -113,11 +121,12 @@ Simple UI keyboard routes, no navigation buttons:
 
 | Key | Effect |
 |---|---|
-| `H` | Toggles `historyOpen`, reloads watch history |
+| `H` | Toggles `historyOpen`, reloads watch history, closes Watch Next |
+| `W` | Toggles `watchNextOpen`, reloads Watch Next, closes history |
 | `S` | Opens `settingsWindow` |
 | `R` | Shortcut is disabled in automation, so status stays unchanged |
-| `Escape` | Closes history, exits fullscreen, or closes player, in that order |
-| `j`, `k` | Scrolls feed or history by 120 pixels |
+| `Escape` | Closes history, then Watch Next, exits fullscreen, or closes player, in that order |
+| `j`, `k` | Scrolls feed, history, or Watch Next by 120 pixels |
 | `q` | Quits application |
 
 ## 5. Harness Rules
@@ -127,7 +136,7 @@ Simple UI keyboard routes, no navigation buttons:
 * Settings is a separate `QQuickWindow` named `settingsWindow`. Find it through engine root objects or top level windows, not under `appWindow`.
 * Map clicks to window coordinates. Take item center, call `mapToScene`, then map from scene through the target window content item before `QTest::mouseClick`.
 * `AppController::simpleUiChanged` replaces the root window. `src/main.cpp` loads the other visible QML root, copies window state, then deletes the old window on the next event loop turn. Reacquire window, root item, and all item pointers after the swap.
-* Never keep item or window pointers across Loader unload, model reset, or root swap. Reacquire after `historyOpen`, `playerOpen`, category, or Simple UI changes.
+* Never keep item or window pointers across Loader unload, model reset, or root swap. Reacquire after `historyOpen`, `watchNextOpen`, `playerOpen`, category, or Simple UI changes.
 
 ## 6. C++ Snippets
 
@@ -177,6 +186,18 @@ true, find `historyLoader`, then wait for its `historyPage` item and
 `historyVideo_AUTO0000001`. Click the history row, expect `playerOpen`
 true and `automationPlayer`, click `playerBackButton`, expect
 `playerOpen` false, then reacquire the root item before the next step.
+Watch Next in full UI: click `watchNextNavigationButton`, find
+`watchNextLoader`, then wait for its `watchNextPage` item to load. Expect
+`watchNextVideo_AUTO0000002` and `watchNextVideo_AUTO0000004` under
+`watchNextPage`, click `feedNavigationButton` to return to the feed.
+Watch Next in Simple UI: send `W`, expect window property
+`watchNextOpen` true, find `watchNextLoader`, then wait for its
+`watchNextPage` item and `watchNextVideo_AUTO0000002`. Click the queue
+row, expect `playerOpen` true and `automationPlayer`, click
+`playerBackButton`, expect `playerOpen` false, then reacquire the root
+item before the next step. Never keep item or window pointers across
+`historyOpen`, `watchNextOpen`, `playerOpen`, category, or Simple UI
+changes.
 Settings tabs in both UIs: open settings with the navigation button or
 `S`, find the separate `settingsWindow` and wait for exposure, use its
 content item as the new search root, expect `settingsTabs` and all six

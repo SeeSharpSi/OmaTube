@@ -26,6 +26,7 @@ ApplicationWindow {
     readonly property color glassPanel: Qt.rgba(
         panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
     property bool historyOpen: false
+    property bool watchNextOpen: false
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -107,10 +108,12 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: App.playerOpen || root.historyOpen
+        enabled: App.playerOpen || root.historyOpen || root.watchNextOpen
         onActivated: {
             if (root.historyOpen)
                 root.historyOpen = false
+            else if (root.watchNextOpen)
+                root.watchNextOpen = false
             else if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
@@ -129,6 +132,22 @@ ApplicationWindow {
             }
             App.reloadWatchHistory()
             root.historyOpen = true
+            root.watchNextOpen = false
+        }
+    }
+
+    Shortcut {
+        sequence: "W"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen && !App.refreshing
+        onActivated: {
+            if (root.watchNextOpen) {
+                root.watchNextOpen = false
+                return
+            }
+            App.reloadWatchNext()
+            root.watchNextOpen = true
+            root.historyOpen = false
         }
     }
 
@@ -148,6 +167,11 @@ ApplicationWindow {
                     historyLoader.item.scrollBy(120)
                 return
             }
+            if (root.watchNextOpen) {
+                if (watchNextLoader.item)
+                    watchNextLoader.item.scrollBy(120)
+                return
+            }
             const maxY = Math.max(0, feedList.contentHeight - feedList.height)
             feedList.contentY = Math.min(maxY, feedList.contentY + 120)
             feedList.maybeLoadMore()
@@ -162,6 +186,11 @@ ApplicationWindow {
             if (root.historyOpen) {
                 if (historyLoader.item)
                     historyLoader.item.scrollBy(-120)
+                return
+            }
+            if (root.watchNextOpen) {
+                if (watchNextLoader.item)
+                    watchNextLoader.item.scrollBy(-120)
                 return
             }
             feedList.contentY = Math.max(0, feedList.contentY - 120)
@@ -193,9 +222,12 @@ ApplicationWindow {
                 Accessible.role: Accessible.Button
                 text: qsTr("FEED")
                 flat: true
-                onClicked: root.historyOpen = false
-                contentItem: Text { text: parent.text; color: !root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: !root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: !root.historyOpen ? root.accent : root.rule }
+                onClicked: {
+                    root.historyOpen = false
+                    root.watchNextOpen = false
+                }
+                contentItem: Text { text: parent.text; color: (!root.historyOpen && !root.watchNextOpen) ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                background: Rectangle { color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : root.rule }
                 PointingCursor {}
             }
             Button {
@@ -208,10 +240,28 @@ ApplicationWindow {
                     if (!root.historyOpen) {
                         App.reloadWatchHistory()
                         root.historyOpen = true
+                        root.watchNextOpen = false
                     }
                 }
                 contentItem: Text { text: parent.text; color: root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.historyOpen ? root.accent : root.rule }
+                PointingCursor {}
+            }
+            Button {
+                objectName: "watchNextNavigationButton"
+                Accessible.name: "Show Watch Next"
+                Accessible.role: Accessible.Button
+                text: qsTr("WATCH NEXT")
+                flat: true
+                onClicked: {
+                    if (!root.watchNextOpen) {
+                        App.reloadWatchNext()
+                        root.watchNextOpen = true
+                        root.historyOpen = false
+                    }
+                }
+                contentItem: Text { text: parent.text; color: root.watchNextOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                background: Rectangle { color: root.watchNextOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.watchNextOpen ? root.accent : root.rule }
                 PointingCursor {}
             }
             Button {
@@ -308,7 +358,7 @@ ApplicationWindow {
             objectName: "feedPage"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !root.historyOpen
+            visible: !root.historyOpen && !root.watchNextOpen
             spacing: 14
 
             ColumnLayout {
@@ -723,6 +773,10 @@ ApplicationWindow {
                                     cursorShape: Qt.PointingHandCursor
                                 }
                                 TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
+                                TapHandler {
+                                    acceptedButtons: Qt.RightButton
+                                    onTapped: App.addToWatchNext(feedDelegate.videoId)
+                                }
                             }
                         }
                     }
@@ -791,6 +845,23 @@ ApplicationWindow {
             onLoaded: {
                 item.videoSelected.connect(function(videoId) {
                     root.historyOpen = false
+                    App.openVideo(videoId)
+                })
+            }
+        }
+
+        Loader {
+            id: watchNextLoader
+            objectName: "watchNextLoader"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            active: root.watchNextOpen
+            visible: root.watchNextOpen
+            source: "qrc:/qml/WatchNextPage.qml"
+
+            onLoaded: {
+                item.videoSelected.connect(function(videoId) {
+                    root.watchNextOpen = false
                     App.openVideo(videoId)
                 })
             }
@@ -897,7 +968,7 @@ ApplicationWindow {
             color: root.mutedInk
             font.family: "monospace"
             font.pixelSize: 11
-            text: keybinds.footerText(root.historyOpen ? "history" : "feed").split("\n").join("  /  ")
+            text: keybinds.footerText(root.historyOpen ? "history" : root.watchNextOpen ? "watchnext" : "feed").split("\n").join("  /  ")
         }
     }
 

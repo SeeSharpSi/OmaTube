@@ -960,6 +960,251 @@ bool Repository::deleteWatchHistory(const QString &videoId, QString *error)
     return true;
 }
 
+QList<WatchNextEntry> Repository::watchNext(QString *error) const
+{
+    QList<WatchNextEntry> result;
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT w.video_id, v.channel_id, c.title, v.title, v.published_at, "
+        "CASE WHEN wt.video_id IS NULL OR v.duration_seconds <= 0 THEN -1 "
+        "ELSE MIN(100, MAX(0, wt.last_position_seconds) * 100 / v.duration_seconds) END, "
+        "w.position, w.added_at "
+        "FROM watch_next w "
+        "JOIN videos v ON v.id = w.video_id "
+        "JOIN channels c ON c.id = v.channel_id "
+        "LEFT JOIN video_watch_time wt ON wt.video_id = w.video_id "
+        "ORDER BY w.position, w.added_at, w.video_id"));
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return result;
+    }
+    while (query.next()) {
+        result.append({
+            query.value(0).toString(),
+            query.value(1).toString(),
+            query.value(2).toString(),
+            query.value(3).toString(),
+            fromDatabaseTime(query.value(4).toString()),
+            query.value(5).toInt(),
+            query.value(6).toInt(),
+            fromDatabaseTime(query.value(7).toString()),
+        });
+    }
+    return result;
+}
+
+bool Repository::isInWatchNext(const QString &videoId, QString *error) const
+{
+    if (videoId.isEmpty()) {
+        setError(error, QStringLiteral("Video id is required to check Watch Next."));
+        return false;
+    }
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT 1 FROM watch_next WHERE video_id = ?"));
+    query.addBindValue(videoId);
+    if (!query.exec()) {
+        setError(error, queryError(query));
+        return false;
+    }
+    return query.next();
+}
+
+bool Repository::addToWatchNext(const QString &videoId, QString *error)
+{
+    if (videoId.isEmpty()) {
+        setError(error, QStringLiteral("Video id is required for Watch Next."));
+        return false;
+    }
+
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery existsQuery(m_database);
+    existsQuery.prepare(QStringLiteral("SELECT 1 FROM watch_next WHERE video_id = ?"));
+    existsQuery.addBindValue(videoId);
+    if (!existsQuery.exec()) {
+        m_database.rollback();
+        setError(error, queryError(existsQuery));
+        return false;
+    }
+    if (existsQuery.next()) {
+        m_database.commit();
+        return true;
+    }
+    existsQuery.finish();
+
+    QSqlQuery videoQuery(m_database);
+    videoQuery.prepare(QStringLiteral("SELECT 1 FROM videos WHERE id = ?"));
+    videoQuery.addBindValue(videoId);
+    if (!videoQuery.exec()) {
+        m_database.rollback();
+        setError(error, queryError(videoQuery));
+        return false;
+    }
+    if (!videoQuery.next()) {
+        m_database.rollback();
+        setError(error, QStringLiteral("Video is not in the local library."));
+        return false;
+    }
+    videoQuery.finish();
+
+    QSqlQuery countQuery(m_database);
+    if (!countQuery.exec(QStringLiteral("SELECT COUNT(*) FROM watch_next")) || !countQuery.next()) {
+        m_database.rollback();
+        setError(error, queryError(countQuery));
+        return false;
+    }
+    if (countQuery.value(0).toInt() >= watchNextMaxItems) {
+        m_database.rollback();
+        setError(
+            error,
+            QStringLiteral("Watch Next is full (%1). Remove something first.").arg(watchNextMaxItems));
+        return false;
+    }
+    countQuery.finish();
+
+    QSqlQuery positionQuery(m_database);
+    if (!positionQuery.exec(QStringLiteral("SELECT COALESCE(MAX(position) + 1, 0) FROM watch_next"))
+        || !positionQuery.next()) {
+        m_database.rollback();
+        setError(error, queryError(positionQuery));
+        return false;
+    }
+    const int position = positionQuery.value(0).toInt();
+    positionQuery.finish();
+
+    QSqlQuery insertQuery(m_database);
+    insertQuery.prepare(QStringLiteral(
+        "INSERT INTO watch_next(video_id, position, added_at) VALUES(?, ?, ?)"));
+    insertQuery.addBindValue(videoId);
+    insertQuery.addBindValue(position);
+    insertQuery.addBindValue(toDatabaseTime(QDateTime::currentDateTimeUtc()));
+    if (!insertQuery.exec()) {
+        m_database.rollback();
+        setError(error, queryError(insertQuery));
+        return false;
+    }
+
+    if (!m_database.commit()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+    return true;
+}
+
+bool Repository::removeFromWatchNext(const QString &videoId, QString *error)
+{
+    if (videoId.isEmpty()) {
+        setError(error, QStringLiteral("Video id is required for Watch Next."));
+        return false;
+    }
+
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery deleteQuery(m_database);
+    deleteQuery.prepare(QStringLiteral("DELETE FROM watch_next WHERE video_id = ?"));
+    deleteQuery.addBindValue(videoId);
+    if (!deleteQuery.exec()) {
+        m_database.rollback();
+        setError(error, queryError(deleteQuery));
+        return false;
+    }
+    deleteQuery.finish();
+
+    QSqlQuery orderQuery(m_database);
+    if (!orderQuery.exec(QStringLiteral("SELECT video_id FROM watch_next ORDER BY position, added_at, video_id"))) {
+        m_database.rollback();
+        setError(error, queryError(orderQuery));
+        return false;
+    }
+    QList<QString> ids;
+    while (orderQuery.next())
+        ids.append(orderQuery.value(0).toString());
+    orderQuery.finish();
+
+    QSqlQuery updateQuery(m_database);
+    updateQuery.prepare(QStringLiteral("UPDATE watch_next SET position = ? WHERE video_id = ?"));
+    for (int index = 0; index < ids.size(); ++index) {
+        updateQuery.bindValue(0, index);
+        updateQuery.bindValue(1, ids.at(index));
+        if (!updateQuery.exec()) {
+            m_database.rollback();
+            setError(error, queryError(updateQuery));
+            return false;
+        }
+    }
+
+    if (!m_database.commit()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+    return true;
+}
+
+bool Repository::moveWatchNext(const QString &videoId, int targetIndex, QString *error)
+{
+    QList<QString> ids;
+    QSqlQuery selectQuery(m_database);
+    if (!selectQuery.exec(QStringLiteral("SELECT video_id FROM watch_next ORDER BY position, added_at, video_id"))) {
+        setError(error, queryError(selectQuery));
+        return false;
+    }
+    while (selectQuery.next())
+        ids.append(selectQuery.value(0).toString());
+    if (selectQuery.lastError().isValid()) {
+        setError(error, queryError(selectQuery));
+        return false;
+    }
+    selectQuery.finish();
+
+    const int sourceIndex = ids.indexOf(videoId);
+    if (sourceIndex < 0) {
+        setError(error, QStringLiteral("Video is not in Watch Next."));
+        return false;
+    }
+    if (targetIndex < 0 || targetIndex >= ids.size()) {
+        setError(error, QStringLiteral("Target index is out of range."));
+        return false;
+    }
+    if (sourceIndex == targetIndex)
+        return true;
+
+    ids.move(sourceIndex, targetIndex);
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+
+    QSqlQuery updateQuery(m_database);
+    updateQuery.prepare(QStringLiteral("UPDATE watch_next SET position = ? WHERE video_id = ?"));
+    for (int index = 0; index < ids.size(); ++index) {
+        updateQuery.bindValue(0, index);
+        updateQuery.bindValue(1, ids.at(index));
+        if (!updateQuery.exec()) {
+            m_database.rollback();
+            setError(error, queryError(updateQuery));
+            return false;
+        }
+        if (updateQuery.numRowsAffected() != 1) {
+            m_database.rollback();
+            setError(error, QStringLiteral("Video is not in Watch Next."));
+            return false;
+        }
+    }
+    if (!m_database.commit()) {
+        const QString commitError = m_database.lastError().text();
+        m_database.rollback();
+        setError(error, commitError);
+        return false;
+    }
+    return true;
+}
+
 bool Repository::migrate(QString *error)
 {
     QSqlQuery versionQuery(m_database);
@@ -969,7 +1214,7 @@ bool Repository::migrate(QString *error)
     }
     const int version = versionQuery.value(0).toInt();
     versionQuery.finish();
-    constexpr int currentVersion = 5;
+    constexpr int currentVersion = 6;
     if (version == currentVersion)
         return true;
     if (version < 0 || version > currentVersion) {
@@ -996,6 +1241,14 @@ bool Repository::migrate(QString *error)
         "channel_id TEXT NOT NULL)");
     const QString historyDatetimeIndex = QStringLiteral(
         "CREATE INDEX history_datetime ON history(datetime DESC)");
+
+    const QString watchNextTable = QStringLiteral(
+        "CREATE TABLE watch_next("
+        "video_id TEXT PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE, "
+        "position INTEGER NOT NULL DEFAULT 0, "
+        "added_at TEXT NOT NULL DEFAULT '')");
+    const QString watchNextPositionIndex = QStringLiteral(
+        "CREATE INDEX watch_next_position ON watch_next(position)");
 
     QStringList statements;
     if (version == 0) {
@@ -1028,7 +1281,9 @@ bool Repository::migrate(QString *error)
             channelHistoryTable,
             historyTable,
             historyDatetimeIndex,
-            QStringLiteral("PRAGMA user_version = 5"),
+            watchNextTable,
+            watchNextPositionIndex,
+            QStringLiteral("PRAGMA user_version = 6"),
         };
     } else {
         if (version == 1) {
@@ -1045,9 +1300,15 @@ bool Repository::migrate(QString *error)
         }
         if (version <= 3)
             statements.append(channelHistoryTable);
-        statements.append(historyTable);
-        statements.append(historyDatetimeIndex);
-        statements.append(QStringLiteral("PRAGMA user_version = 5"));
+        if (version <= 4) {
+            statements.append(historyTable);
+            statements.append(historyDatetimeIndex);
+        }
+        if (version <= 5) {
+            statements.append(watchNextTable);
+            statements.append(watchNextPositionIndex);
+        }
+        statements.append(QStringLiteral("PRAGMA user_version = 6"));
     }
 
     QSqlQuery query(m_database);

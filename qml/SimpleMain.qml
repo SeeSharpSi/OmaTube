@@ -24,6 +24,7 @@ ApplicationWindow {
     readonly property color liveRed: themeColors.bright_red
     readonly property color neonYellow: themeColors.bright_yellow
     property bool historyOpen: false
+    property bool watchNextOpen: false
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -105,10 +106,12 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: App.playerOpen || root.historyOpen
+        enabled: App.playerOpen || root.historyOpen || root.watchNextOpen
         onActivated: {
             if (root.historyOpen)
                 root.historyOpen = false
+            else if (root.watchNextOpen)
+                root.watchNextOpen = false
             else if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
@@ -127,6 +130,22 @@ ApplicationWindow {
             }
             App.reloadWatchHistory()
             root.historyOpen = true
+            root.watchNextOpen = false
+        }
+    }
+
+    Shortcut {
+        sequence: "W"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen && !App.refreshing
+        onActivated: {
+            if (root.watchNextOpen) {
+                root.watchNextOpen = false
+                return
+            }
+            App.reloadWatchNext()
+            root.watchNextOpen = true
+            root.historyOpen = false
         }
     }
 
@@ -146,6 +165,11 @@ ApplicationWindow {
                     historyLoader.item.scrollBy(120)
                 return
             }
+            if (root.watchNextOpen) {
+                if (watchNextLoader.item)
+                    watchNextLoader.item.scrollBy(120)
+                return
+            }
             const maxY = Math.max(0, feedList.contentHeight - feedList.height)
             feedList.contentY = Math.min(maxY, feedList.contentY + 120)
             feedList.maybeLoadMore()
@@ -162,6 +186,11 @@ ApplicationWindow {
                     historyLoader.item.scrollBy(-120)
                 return
             }
+            if (root.watchNextOpen) {
+                if (watchNextLoader.item)
+                    watchNextLoader.item.scrollBy(-120)
+                return
+            }
             feedList.contentY = Math.max(0, feedList.contentY - 120)
         }
     }
@@ -174,7 +203,7 @@ ApplicationWindow {
         anchors.topMargin: 28
         width: Math.min(parent.width - 56, 820)
         spacing: 18
-        visible: !App.playerOpen && !root.historyOpen
+        visible: !App.playerOpen && !root.historyOpen && !root.watchNextOpen
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -549,6 +578,10 @@ ApplicationWindow {
                     cursorShape: Qt.PointingHandCursor
                 }
                 TapHandler { onTapped: App.openVideo(feedDelegate.videoId) }
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: App.addToWatchNext(feedDelegate.videoId)
+                }
             }
 
             Column {
@@ -668,7 +701,7 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 14
         z: 10
-        visible: !App.playerOpen && !root.historyOpen
+        visible: !App.playerOpen && !root.historyOpen && !root.watchNextOpen
         color: root.panel
         border.color: root.rule
         width: keybindsLabel.implicitWidth + 20
@@ -701,6 +734,23 @@ ApplicationWindow {
             item.keybinds = keybinds
             item.videoSelected.connect(function(videoId) {
                 root.historyOpen = false
+                App.openVideo(videoId)
+            })
+        }
+    }
+
+    Loader {
+        id: watchNextLoader
+        objectName: "watchNextLoader"
+        anchors.fill: parent
+        z: 15
+        active: root.watchNextOpen
+        source: "qrc:/qml/SimpleWatchNextPage.qml"
+
+        onLoaded: {
+            item.keybinds = keybinds
+            item.videoSelected.connect(function(videoId) {
+                root.watchNextOpen = false
                 App.openVideo(videoId)
             })
         }

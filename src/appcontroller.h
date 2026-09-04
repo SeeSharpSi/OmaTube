@@ -5,6 +5,7 @@
 #include "models/feedmodel.h"
 #include "models/historymodel.h"
 #include "models/livechannelmodel.h"
+#include "models/watchnextmodel.h"
 #include "pointerwatch.h"
 #include "refreshservice.h"
 #include "repository.h"
@@ -33,6 +34,7 @@ class AppController final : public QObject
     Q_PROPERTY(ChannelModel *channels READ channels CONSTANT)
     Q_PROPERTY(FeedModel *feed READ feed CONSTANT)
     Q_PROPERTY(HistoryModel *watchHistory READ watchHistory CONSTANT)
+    Q_PROPERTY(WatchNextModel *watchNext READ watchNext CONSTANT)
     Q_PROPERTY(LiveChannelModel *liveChannels READ liveChannels CONSTANT)
     Q_PROPERTY(bool refreshing READ refreshing NOTIFY refreshingChanged)
     Q_PROPERTY(bool historyLoading READ historyLoading NOTIFY historyLoadingChanged)
@@ -80,6 +82,7 @@ public:
     [[nodiscard]] ChannelModel *channels();
     [[nodiscard]] FeedModel *feed();
     [[nodiscard]] HistoryModel *watchHistory();
+    [[nodiscard]] WatchNextModel *watchNext();
     [[nodiscard]] LiveChannelModel *liveChannels();
     [[nodiscard]] bool refreshing() const;
     [[nodiscard]] bool historyLoading() const;
@@ -115,6 +118,11 @@ public:
     Q_INVOKABLE void loadMoreHistory();
     Q_INVOKABLE void reloadWatchHistory();
     Q_INVOKABLE bool deleteWatchHistory(const QString &videoId);
+    Q_INVOKABLE void reloadWatchNext();
+    Q_INVOKABLE bool addToWatchNext(const QString &videoId);
+    Q_INVOKABLE bool removeFromWatchNext(const QString &videoId);
+    Q_INVOKABLE bool moveWatchNext(const QString &videoId, int targetIndex);
+    Q_INVOKABLE bool isInWatchNext(const QString &videoId);
     Q_INVOKABLE void selectCategory(qint64 categoryId);
     Q_INVOKABLE bool addCategory(const QString &name);
     Q_INVOKABLE bool renameCategory(qint64 categoryId, const QString &name);
@@ -205,6 +213,7 @@ private:
     ChannelModel m_channels;
     FeedModel m_feed;
     HistoryModel m_watchHistory;
+    WatchNextModel m_watchNext;
     LiveChannelModel m_liveChannels;
     bool m_initialized = false;
     bool m_startupRefreshRequested = false;

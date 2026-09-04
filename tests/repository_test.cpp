@@ -1,6 +1,7 @@
 #include "models/categorymodel.h"
 #include "models/feedmodel.h"
 #include "models/historymodel.h"
+#include "models/watchnextmodel.h"
 #include "repository.h"
 
 #include <QSignalSpy>
@@ -21,6 +22,10 @@ private slots:
     void migratesVersionTwoDatabase();
     void migratesVersionThreeDatabase();
     void migratesVersionFourDatabase();
+    void migratesVersionFiveDatabase();
+    void watchNextAddRemoveAndCap();
+    void watchNextMoveReorders();
+    void watchNextDropsWithChannelRemoval();
     void categoryLifecycle();
     void categoryMembershipFiltersChannels();
     void importChannelsUpsertsFullMetadataByStableId();
@@ -40,6 +45,7 @@ private slots:
     void deleteWatchHistoryRemovesOnlyHistory();
     void modelsExposeExpectedRoles();
     void historyModelExposesExpectedRoles();
+    void watchNextModelExposesExpectedRoles();
 };
 
 namespace {
@@ -337,7 +343,7 @@ void RepositoryTest::migratesVersionFourDatabase()
         QVERIFY2(validation.exec(QStringLiteral("PRAGMA user_version")),
                  qPrintable(validation.lastError().text()));
         QVERIFY(validation.next());
-        QCOMPARE(validation.value(0).toInt(), 5);
+        QCOMPARE(validation.value(0).toInt(), 6);
 
         QVERIFY2(validation.exec(QStringLiteral("PRAGMA table_info(history)")),
                  qPrintable(validation.lastError().text()));
@@ -378,6 +384,228 @@ void RepositoryTest::migratesVersionFourDatabase()
         validationDatabase.close();
     }
     QSqlDatabase::removeDatabase(validationConnectionName);
+}
+
+void RepositoryTest::migratesVersionFiveDatabase()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    const QString connectionName = QStringLiteral("version-five-fixture");
+    {
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE categories("
+                      "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE channels("
+                      "id TEXT PRIMARY KEY, original_input TEXT NOT NULL, handle TEXT, title TEXT NOT NULL, "
+                      "avatar_url TEXT, uploads_playlist_id TEXT NOT NULL, metadata_fetched_at TEXT NOT NULL)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE category_channels("
+                      "category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE, "
+                      "channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "PRIMARY KEY(category_id, channel_id))")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE videos("
+                      "id TEXT PRIMARY KEY, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE, "
+                      "title TEXT NOT NULL, published_at TEXT NOT NULL, is_broadcast INTEGER NOT NULL, "
+                      "broadcast_state TEXT NOT NULL, fetched_at TEXT NOT NULL, "
+                      "duration_seconds INTEGER NOT NULL DEFAULT -1)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE video_watch_time("
+                      "video_id TEXT PRIMARY KEY, watched_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_position_seconds INTEGER NOT NULL DEFAULT 0, "
+                      "last_watched_at TEXT NOT NULL DEFAULT '', "
+                      "watch_count INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE channel_history("
+                      "channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE, "
+                      "next_page_token TEXT NOT NULL DEFAULT '', "
+                      "history_complete INTEGER NOT NULL DEFAULT 0)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE TABLE history("
+                      "id INTEGER PRIMARY KEY, datetime TEXT NOT NULL, "
+                      "video_id TEXT NOT NULL, channel_id TEXT NOT NULL)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY2(query.exec(QStringLiteral(
+                      "CREATE INDEX history_datetime ON history(datetime DESC)")),
+                  qPrintable(query.lastError().text()));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO channels VALUES("
+            "'UCAlpha', '@input', '@handle', 'Alpha', '', 'UUAlpha', "
+            "'2026-08-25T12:00:00.000Z')")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO videos VALUES("
+            "'regular', 'UCAlpha', 'Regular', '2026-08-25T12:00:00.000Z', 0, 'none', "
+            "'2026-08-25T12:00:00.000Z', 600)")));
+        QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 5")));
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    Repository repository(databasePath);
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(repository.watchNext(&error).isEmpty());
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY2(repository.addToWatchNext(QStringLiteral("regular"), &error), qPrintable(error));
+    QCOMPARE(repository.watchNext(&error).size(), 1);
+    QCOMPARE(repository.watchNext(&error).first().videoId, QStringLiteral("regular"));
+    QCOMPARE(repository.watchNext(&error).first().channelTitle, QStringLiteral("Alpha"));
+
+    const QString validationConnectionName = QStringLiteral("version-five-validation");
+    {
+        QSqlDatabase validationDatabase =
+            QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), validationConnectionName);
+        validationDatabase.setDatabaseName(databasePath);
+        QVERIFY(validationDatabase.open());
+        QSqlQuery validation(validationDatabase);
+        QVERIFY2(validation.exec(QStringLiteral("PRAGMA user_version")),
+                 qPrintable(validation.lastError().text()));
+        QVERIFY(validation.next());
+        QCOMPARE(validation.value(0).toInt(), 6);
+        validationDatabase.close();
+    }
+    QSqlDatabase::removeDatabase(validationConnectionName);
+}
+
+void RepositoryTest::watchNextAddRemoveAndCap()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+
+    // Unknown videos cannot join the queue.
+    QVERIFY(!repository.addToWatchNext(QStringLiteral("missing"), &error));
+    QCOMPARE(error, QStringLiteral("Video is not in the local library."));
+    error.clear();
+    QVERIFY(!repository.addToWatchNext(QString(), &error));
+    QVERIFY(!error.isEmpty());
+    error.clear();
+
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QList<Video> videos;
+    for (int index = 0; index < Repository::watchNextMaxItems + 1; ++index) {
+        videos.append(makeVideo(
+            QStringLiteral("vid-%1").arg(index, 3, 10, QLatin1Char('0')),
+            alpha.id,
+            now.addSecs(-index)));
+    }
+    QVERIFY(repository.upsertVideos(videos, &error));
+
+    for (int index = 0; index < Repository::watchNextMaxItems; ++index) {
+        const QString id = QStringLiteral("vid-%1").arg(index, 3, 10, QLatin1Char('0'));
+        QVERIFY2(repository.addToWatchNext(id, &error), qPrintable(error));
+    }
+    // Adding twice is idempotent and does not consume a second slot.
+    QVERIFY2(
+        repository.addToWatchNext(QStringLiteral("vid-000"), &error), qPrintable(error));
+    QCOMPARE(repository.watchNext(&error).size(), Repository::watchNextMaxItems);
+
+    const QString overflowId = QStringLiteral("vid-%1").arg(
+        Repository::watchNextMaxItems, 3, 10, QLatin1Char('0'));
+    QVERIFY(!repository.addToWatchNext(overflowId, &error));
+    QVERIFY(error.contains(QStringLiteral("Watch Next is full")));
+    error.clear();
+
+    QVERIFY(repository.isInWatchNext(QStringLiteral("vid-000"), &error));
+    QVERIFY(!repository.isInWatchNext(overflowId, &error));
+
+    // Progress joins the queue rows like the feed.
+    QVERIFY(repository.applyWatchProgress(
+        QStringLiteral("vid-000"), 300, 300, false, &error));
+    const QList<WatchNextEntry> entries = repository.watchNext(&error);
+    QCOMPARE(entries.size(), Repository::watchNextMaxItems);
+    QCOMPARE(entries.first().videoId, QStringLiteral("vid-000"));
+    QCOMPARE(entries.first().watchProgressPercent, 50);
+    QCOMPARE(entries.first().position, 0);
+
+    QVERIFY(repository.removeFromWatchNext(QStringLiteral("vid-000"), &error));
+    QCOMPARE(repository.watchNext(&error).size(), Repository::watchNextMaxItems - 1);
+    QVERIFY(!repository.isInWatchNext(QStringLiteral("vid-000"), &error));
+    // Positions stay dense after removal.
+    const QList<WatchNextEntry> afterRemove = repository.watchNext(&error);
+    for (int index = 0; index < afterRemove.size(); ++index)
+        QCOMPARE(afterRemove.at(index).position, index);
+    // A freed slot accepts the previously rejected video.
+    QVERIFY2(repository.addToWatchNext(overflowId, &error), qPrintable(error));
+    QCOMPARE(repository.watchNext(&error).size(), Repository::watchNextMaxItems);
+}
+
+void RepositoryTest::watchNextMoveReorders()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos({
+        makeVideo(QStringLiteral("vid-a"), alpha.id, now),
+        makeVideo(QStringLiteral("vid-b"), alpha.id, now.addSecs(-60)),
+        makeVideo(QStringLiteral("vid-c"), alpha.id, now.addSecs(-120)),
+    }, &error));
+    QVERIFY(repository.addToWatchNext(QStringLiteral("vid-a"), &error));
+    QVERIFY(repository.addToWatchNext(QStringLiteral("vid-b"), &error));
+    QVERIFY(repository.addToWatchNext(QStringLiteral("vid-c"), &error));
+
+    QVERIFY(repository.moveWatchNext(QStringLiteral("vid-c"), 0, &error));
+    QList<WatchNextEntry> entries = repository.watchNext(&error);
+    QCOMPARE(entries.size(), 3);
+    QCOMPARE(entries.at(0).videoId, QStringLiteral("vid-c"));
+    QCOMPARE(entries.at(1).videoId, QStringLiteral("vid-a"));
+    QCOMPARE(entries.at(2).videoId, QStringLiteral("vid-b"));
+
+    // Moving to the same index is a no-op success.
+    QVERIFY(repository.moveWatchNext(QStringLiteral("vid-c"), 0, &error));
+    // Unknown videos and out-of-range targets are rejected.
+    QVERIFY(!repository.moveWatchNext(QStringLiteral("missing"), 0, &error));
+    QCOMPARE(error, QStringLiteral("Video is not in Watch Next."));
+    error.clear();
+    QVERIFY(!repository.moveWatchNext(QStringLiteral("vid-a"), -1, &error));
+    QCOMPARE(error, QStringLiteral("Target index is out of range."));
+    error.clear();
+    QVERIFY(!repository.moveWatchNext(QStringLiteral("vid-a"), 3, &error));
+    QCOMPARE(error, QStringLiteral("Target index is out of range."));
+    error.clear();
+    QCOMPARE(repository.watchNext(&error).at(1).videoId, QStringLiteral("vid-a"));
+}
+
+void RepositoryTest::watchNextDropsWithChannelRemoval()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel alpha = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    const Channel beta = makeChannel(QStringLiteral("UCBeta"), QStringLiteral("Beta"));
+    QVERIFY(repository.upsertChannel(alpha, &error));
+    QVERIFY(repository.upsertChannel(beta, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVERIFY(repository.upsertVideos({
+        makeVideo(QStringLiteral("vid-a"), alpha.id, now),
+        makeVideo(QStringLiteral("vid-b"), beta.id, now),
+    }, &error));
+    QVERIFY(repository.addToWatchNext(QStringLiteral("vid-a"), &error));
+    QVERIFY(repository.addToWatchNext(QStringLiteral("vid-b"), &error));
+    QCOMPARE(repository.watchNext(&error).size(), 2);
+
+    QVERIFY(repository.removeChannel(alpha.id, &error));
+    const QList<WatchNextEntry> entries = repository.watchNext(&error);
+    QCOMPARE(entries.size(), 1);
+    QCOMPARE(entries.first().videoId, QStringLiteral("vid-b"));
 }
 
 void RepositoryTest::categoryLifecycle()
@@ -1005,6 +1233,43 @@ void RepositoryTest::historyModelExposesExpectedRoles()
              watchedAt);
     QCOMPARE(historyModel.data(historyModel.index(0), HistoryModel::WatchProgressPercentRole).toInt(),
              40);
+}
+
+void RepositoryTest::watchNextModelExposesExpectedRoles()
+{
+    WatchNextModel watchNextModel;
+    QSignalSpy reset(&watchNextModel, &QAbstractItemModel::modelReset);
+    const QDateTime publishedAt = QDateTime::currentDateTimeUtc();
+    const QDateTime addedAt = QDateTime::currentDateTimeUtc();
+    watchNextModel.setEntries({
+        {
+            QStringLiteral("vid-a"),
+            QStringLiteral("UCAlpha"),
+            QStringLiteral("Alpha"),
+            QStringLiteral("Video A"),
+            publishedAt,
+            40,
+            0,
+            addedAt,
+        },
+    });
+    QCOMPARE(reset.count(), 1);
+    QCOMPARE(watchNextModel.rowCount(), 1);
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::VideoIdRole).toString(),
+             QStringLiteral("vid-a"));
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::ChannelIdRole).toString(),
+             QStringLiteral("UCAlpha"));
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::ChannelTitleRole).toString(),
+             QStringLiteral("Alpha"));
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::TitleRole).toString(),
+             QStringLiteral("Video A"));
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::PublishedAtRole).toDateTime(),
+             publishedAt);
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::WatchProgressPercentRole).toInt(),
+             40);
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::PositionRole).toInt(), 0);
+    QCOMPARE(watchNextModel.data(watchNextModel.index(0), WatchNextModel::AddedAtRole).toDateTime(),
+             addedAt);
 }
 
 QTEST_GUILESS_MAIN(RepositoryTest)

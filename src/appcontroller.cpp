@@ -158,6 +158,7 @@ AppController::AppController(QString databasePath, QObject *parent, bool automat
     , m_channels(this)
     , m_feed(this)
     , m_watchHistory(this)
+    , m_watchNext(this)
     , m_liveChannels(this)
 {
     Q_ASSERT(!s_instance);
@@ -173,7 +174,10 @@ AppController::AppController(QString databasePath, QObject *parent, bool automat
             this, &AppController::refreshingChanged);
     connect(&m_refreshService, &RefreshService::progressTextChanged,
             this, &AppController::progressTextChanged);
-    connect(&m_refreshService, &RefreshService::feedChanged, this, &AppController::reloadFeed);
+    connect(&m_refreshService, &RefreshService::feedChanged, this, [this]() {
+        reloadFeed();
+        reloadWatchNext();
+    });
     connect(
         &m_refreshService,
         &RefreshService::liveChannelsChanged,
@@ -201,6 +205,7 @@ AppController::AppController(QString databasePath, QObject *parent, bool automat
             const QString &liveError) {
             m_liveChannels.setLiveChannels(std::move(live));
             reloadFeed();
+            reloadWatchNext();
             m_lastRefreshedAt = QDateTime::currentDateTime();
             emit lastRefreshedAtChanged();
 
@@ -279,6 +284,7 @@ bool AppController::initialize(QString *error)
     reloadCategories();
     reloadChannels();
     reloadFeed();
+    reloadWatchNext();
     m_initialized = true;
     return true;
 }
@@ -301,6 +307,11 @@ FeedModel *AppController::feed()
 HistoryModel *AppController::watchHistory()
 {
     return &m_watchHistory;
+}
+
+WatchNextModel *AppController::watchNext()
+{
+    return &m_watchNext;
 }
 
 LiveChannelModel *AppController::liveChannels()
@@ -530,6 +541,76 @@ bool AppController::deleteWatchHistory(const QString &videoId)
     return true;
 }
 
+void AppController::reloadWatchNext()
+{
+    QString error;
+    const QList<WatchNextEntry> entries = m_repository.watchNext(&error);
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return;
+    }
+    m_watchNext.setEntries(entries);
+}
+
+bool AppController::addToWatchNext(const QString &videoId)
+{
+    if (!isValidVideoId(videoId)) {
+        setErrorMessage(QStringLiteral("Video URL is invalid."));
+        return false;
+    }
+    QString error;
+    if (m_repository.isInWatchNext(videoId, &error)) {
+        if (!error.isEmpty())
+            setErrorMessage(error);
+        else
+            setStatusMessage(QStringLiteral("Already in Watch Next."));
+        return error.isEmpty();
+    }
+    if (!error.isEmpty()) {
+        setErrorMessage(error);
+        return false;
+    }
+    if (!m_repository.addToWatchNext(videoId, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    reloadWatchNext();
+    setStatusMessage(QStringLiteral("Added to Watch Next."));
+    return true;
+}
+
+bool AppController::removeFromWatchNext(const QString &videoId)
+{
+    QString error;
+    if (!m_repository.removeFromWatchNext(videoId, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    reloadWatchNext();
+    setStatusMessage(QStringLiteral("Removed from Watch Next."));
+    return true;
+}
+
+bool AppController::moveWatchNext(const QString &videoId, int targetIndex)
+{
+    QString error;
+    if (!m_repository.moveWatchNext(videoId, targetIndex, &error)) {
+        setErrorMessage(error);
+        return false;
+    }
+    reloadWatchNext();
+    return true;
+}
+
+bool AppController::isInWatchNext(const QString &videoId)
+{
+    QString error;
+    const bool present = m_repository.isInWatchNext(videoId, &error);
+    if (!error.isEmpty())
+        setErrorMessage(error);
+    return present;
+}
+
 void AppController::selectCategory(qint64 categoryId)
 {
     const qint64 unselectedId = m_selectedCategoryId == categoryId ? -1 : categoryId;
@@ -636,6 +717,7 @@ bool AppController::removeChannel(const QString &channelId)
     }
     reloadChannels();
     reloadFeed();
+    reloadWatchNext();
     setStatusMessage(QStringLiteral("Channel and its cached videos deleted."));
     return true;
 }
@@ -1029,6 +1111,7 @@ void AppController::closePlayer()
     flushWatchProgress();
     m_watchFlushTimer.stop();
     reloadFeed();
+    reloadWatchNext();
     m_playerOpen = false;
     emit playerOpenChanged();
 }

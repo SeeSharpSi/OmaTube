@@ -9,6 +9,7 @@ import YtClient
 
 Item {
     id: root
+    objectName: "historyPage"
 
     signal videoSelected(string videoId)
 
@@ -93,6 +94,10 @@ Item {
 
                         delegate: Item {
                             id: historyDelegate
+                            objectName: "historyVideo_" + historyDelegate.videoId
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "History video " + historyDelegate.videoId + " " + historyDelegate.title
+                            Accessible.onPressAction: root.videoSelected(historyDelegate.videoId)
                             required property string videoId
                             required property string channelTitle
                             required property string title
@@ -135,7 +140,7 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     height: width * 0.5625
-                                    source: "https://i.ytimg.com/vi/" + historyDelegate.videoId + "/hqdefault.jpg"
+                                    source: App.automationMode ? "" : "https://i.ytimg.com/vi/" + historyDelegate.videoId + "/hqdefault.jpg"
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                 }

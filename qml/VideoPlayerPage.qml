@@ -3,6 +3,7 @@ import YtClient
 
 Item {
     id: root
+    objectName: "playerPage"
 
     property var hostWindow
     property string videoId: ""
@@ -27,12 +28,15 @@ Item {
 
     Loader {
         id: backendLoader
+        objectName: "playerBackendLoader"
         anchors.fill: parent
-        source: (App.videoBackend === "mpv" && App.mpvAvailable)
-            ? "qrc:/qml/MpvPlayer.qml"
-            : ((Qt.platform.os === "osx" || Qt.platform.os === "macos")
-                ? "qrc:/qml/MacVideoPlayer.qml"
-                : "qrc:/qml/WebEnginePlayer.qml")
+        source: App.automationMode
+            ? "qrc:/qml/AutomationPlayer.qml"
+            : ((App.videoBackend === "mpv" && App.mpvAvailable)
+                ? "qrc:/qml/MpvPlayer.qml"
+                : ((Qt.platform.os === "osx" || Qt.platform.os === "macos")
+                    ? "qrc:/qml/MacVideoPlayer.qml"
+                    : "qrc:/qml/WebEnginePlayer.qml"))
 
         onLoaded: {
             item.hostWindow = Qt.binding(function() { return root.hostWindow })

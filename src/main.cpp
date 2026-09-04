@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "automationfixture.h"
 #include "spaceholdhandler.h"
 
 #ifdef OMA_HAS_MPV
@@ -13,6 +14,8 @@
 #include <QPointer>
 #include <QQuickWindow>
 #include <QQuickStyle>
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QSGRendererInterface>
@@ -60,19 +63,55 @@ int main(int argc, char *argv[])
                        "\":memory:\" for an in-memory database."),
         QStringLiteral("path"));
     parser.addOption(databaseOption);
+    QCommandLineOption automationOption(
+        QStringLiteral("automation"),
+        QStringLiteral("Deterministic agent navigation mode: use a temporary "
+                       "disposable database and settings, seed a fixed fixture, "
+                       "and disable network refresh."));
+    parser.addOption(automationOption);
     parser.process(app);
 
     const bool smokeTest = parser.isSet(smokeOption);
+    const bool automation = parser.isSet(automationOption);
+    if (automation && parser.isSet(databaseOption)) {
+        qCritical("--automation cannot be combined with --database: refusing to risk a user database.");
+        return EXIT_FAILURE;
+    }
     if (parser.isSet(verboseOption)) {
         QLoggingCategory::setFilterRules(QStringLiteral("omatube.*.debug=true"));
         qInfo("Verbose logging enabled for omatube.* categories");
     }
 #ifdef OMA_HAS_MPV
-    if (!smokeTest)
+    if (!smokeTest && !automation)
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 #endif
+    std::unique_ptr<QTemporaryDir> automationDataDir;
+    std::unique_ptr<QTemporaryDir> automationSettingsDir;
+    QString databasePath = parser.value(databaseOption);
+    if (automation) {
+        automationDataDir = std::make_unique<QTemporaryDir>();
+        automationSettingsDir = std::make_unique<QTemporaryDir>();
+        if (!automationDataDir->isValid() || !automationSettingsDir->isValid()) {
+            qCritical("Could not create temporary directories for automation mode.");
+            return EXIT_FAILURE;
+        }
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(
+            QSettings::IniFormat,
+            QSettings::UserScope,
+            automationSettingsDir->path());
+        databasePath = automationDataDir->filePath(QStringLiteral("automation.sqlite3"));
+        QString fixtureError;
+        if (!AutomationFixture::seed(databasePath, &fixtureError)) {
+            qCritical("Could not seed automation database: %s", qPrintable(fixtureError));
+            return EXIT_FAILURE;
+        }
+    } else if (smokeTest) {
+        databasePath = QStringLiteral(":memory:");
+    }
     std::unique_ptr<AppController> controller = AppController::createApplication(
-        smokeTest ? QStringLiteral(":memory:") : parser.value(databaseOption));
+        databasePath,
+        automation);
     QString initializationError;
     if (!controller->initialize(&initializationError)) {
         qCritical("Could not initialize application: %s", qPrintable(initializationError));

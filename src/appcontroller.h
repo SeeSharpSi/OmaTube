@@ -64,11 +64,14 @@ class AppController final : public QObject
     Q_PROPERTY(int currentVideoMaximumHeightOverride READ currentVideoMaximumHeightOverride NOTIFY
                    currentVideoMaximumHeightOverrideChanged)
     Q_PROPERTY(QString currentVideoTitle READ currentVideoTitle NOTIFY currentVideoTitleChanged)
+    Q_PROPERTY(bool automationMode READ automationMode CONSTANT)
 
 public:
     ~AppController() override;
 
-    static std::unique_ptr<AppController> createApplication(QString databasePath = {});
+    static std::unique_ptr<AppController> createApplication(
+        QString databasePath = {},
+        bool automationMode = false);
     static AppController *create(QQmlEngine *qmlEngine, QJSEngine *jsEngine);
 
     bool initialize(QString *error = nullptr);
@@ -105,6 +108,7 @@ public:
     [[nodiscard]] int currentVideoMaximumHeight() const;
     [[nodiscard]] int currentVideoMaximumHeightOverride() const;
     [[nodiscard]] QString currentVideoTitle() const;
+    [[nodiscard]] bool automationMode() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -167,7 +171,7 @@ signals:
     void channelAdded(QString title);
 
 private:
-    explicit AppController(QString databasePath, QObject *parent = nullptr);
+    explicit AppController(QString databasePath, QObject *parent = nullptr, bool automationMode = false);
 
     void reloadCategories();
     void reloadChannels();
@@ -192,6 +196,7 @@ private:
 
     static constexpr int feedPageSize = 50;
 
+    bool m_automationMode = false;
     ThemeManager m_themeManager;
     Repository m_repository;
     YouTubeClient m_youTubeClient;

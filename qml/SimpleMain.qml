@@ -10,6 +10,7 @@ import YtClient
 
 ApplicationWindow {
     id: root
+    objectName: "appWindow"
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
@@ -90,7 +91,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "R"
         context: Qt.WindowShortcut
-        enabled: !settingsDialog.visible && !App.playerOpen && !App.refreshing
+        enabled: !settingsDialog.visible && !App.playerOpen && !App.refreshing && !App.automationMode
         onActivated: App.refresh()
     }
 
@@ -166,6 +167,7 @@ ApplicationWindow {
     }
 
     ColumnLayout {
+        objectName: "feedPage"
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
@@ -199,6 +201,10 @@ ApplicationWindow {
 
                 delegate: Item {
                     id: liveDelegate
+                    objectName: "liveVideo_" + liveDelegate.videoId
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Live video " + liveDelegate.videoId + " " + liveDelegate.channelTitle + " " + liveDelegate.videoTitle
+                    Accessible.onPressAction: App.openVideo(liveDelegate.videoId)
                     required property string channelTitle
                     required property string videoId
                     required property string videoTitle
@@ -315,6 +321,9 @@ ApplicationWindow {
 
                     delegate: Button {
                         id: categoryButton
+                        objectName: "categoryButton_" + categoryButton.categoryId
+                        Accessible.name: "Category " + categoryButton.categoryId + " " + categoryButton.name
+                        Accessible.role: Accessible.Button
                         required property var categoryId
                         required property string name
                         required property int index
@@ -468,6 +477,10 @@ ApplicationWindow {
 
             delegate: Item {
                 id: feedDelegate
+                objectName: "feedVideo_" + feedDelegate.videoId
+                Accessible.role: Accessible.Button
+                Accessible.name: "Video " + feedDelegate.videoId + " " + feedDelegate.title
+                Accessible.onPressAction: App.openVideo(feedDelegate.videoId)
                 required property string videoId
                 required property string channelTitle
                 required property string title
@@ -678,6 +691,7 @@ ApplicationWindow {
 
     Loader {
         id: historyLoader
+        objectName: "historyLoader"
         anchors.fill: parent
         z: 15
         active: root.historyOpen
@@ -694,6 +708,7 @@ ApplicationWindow {
 
     Loader {
         id: playerLoader
+        objectName: "playerLoader"
         anchors.fill: parent
         z: 20
         active: App.playerOpen

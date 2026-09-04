@@ -147,8 +147,9 @@ bool jsonString(
 
 AppController *AppController::s_instance = nullptr;
 
-AppController::AppController(QString databasePath, QObject *parent)
+AppController::AppController(QString databasePath, QObject *parent, bool automationMode)
     : QObject(parent)
+    , m_automationMode(automationMode)
     , m_themeManager(this)
     , m_repository(std::move(databasePath))
     , m_youTubeClient(this)
@@ -224,9 +225,12 @@ AppController::~AppController()
     s_instance = nullptr;
 }
 
-std::unique_ptr<AppController> AppController::createApplication(QString databasePath)
+std::unique_ptr<AppController> AppController::createApplication(
+    QString databasePath,
+    bool automationMode)
 {
-    return std::unique_ptr<AppController>(new AppController(std::move(databasePath)));
+    return std::unique_ptr<AppController>(
+        new AppController(std::move(databasePath), nullptr, automationMode));
 }
 
 AppController *AppController::create(QQmlEngine *, QJSEngine *)
@@ -244,9 +248,14 @@ bool AppController::initialize(QString *error)
         return false;
 
     QSettings settings;
-    const QString environmentKey = qEnvironmentVariable("YT_CLIENT_API_KEY").trimmed();
-    const QString storedKey = settings.value(QString::fromLatin1(apiKeySetting)).toString().trimmed();
-    m_youTubeClient.setApiKey(environmentKey.isEmpty() ? storedKey : environmentKey);
+    if (m_automationMode) {
+        m_youTubeClient.setApiKey({});
+    } else {
+        const QString environmentKey = qEnvironmentVariable("YT_CLIENT_API_KEY").trimmed();
+        const QString storedKey =
+            settings.value(QString::fromLatin1(apiKeySetting)).toString().trimmed();
+        m_youTubeClient.setApiKey(environmentKey.isEmpty() ? storedKey : environmentKey);
+    }
     m_shortVideoCutoffMinutes = qBound(
         0,
         settings.value(
@@ -439,11 +448,18 @@ QString AppController::currentVideoTitle() const
     return m_currentVideoTitle;
 }
 
+bool AppController::automationMode() const
+{
+    return m_automationMode;
+}
+
 void AppController::startupRefresh()
 {
     if (m_startupRefreshRequested)
         return;
     m_startupRefreshRequested = true;
+    if (m_automationMode)
+        return;
     refresh();
 }
 
@@ -451,6 +467,10 @@ void AppController::refresh()
 {
     if (!m_initialized || refreshing() || m_historyLoading)
         return;
+    if (m_automationMode) {
+        setStatusMessage(QStringLiteral("Automation mode: refresh is disabled."));
+        return;
+    }
     setErrorMessage({});
     setStatusMessage(QStringLiteral("Refreshing..."));
     m_refreshService.refresh();
@@ -480,6 +500,8 @@ void AppController::loadMoreHistory()
         return;
     }
 
+    if (m_automationMode)
+        return;
     // Local cache exhausted; deepen remote history for the active scope.
     setHistoryLoading(true);
     m_refreshService.loadOlder(feedCategoryScope());
@@ -572,6 +594,10 @@ bool AppController::moveCategory(qint64 categoryId, int targetIndex)
 
 void AppController::addChannel(const QString &input, const QVariantList &categoryIds)
 {
+    if (m_automationMode) {
+        setErrorMessage(QStringLiteral("Automation mode: adding channels is disabled."));
+        return;
+    }
     if (m_addingChannel)
         return;
     m_addingChannel = true;
@@ -1230,7 +1256,7 @@ void AppController::refreshHistoryHasMore()
     } else if (!error.isEmpty()) {
         setErrorMessage(error);
         return;
-    } else if (m_startupRefreshRequested && m_youTubeClient.canFetchHistory()
+    } else if (!m_automationMode && m_startupRefreshRequested && m_youTubeClient.canFetchHistory()
                && m_repository.canFetchMoreHistory()) {
         hasMore = m_repository.historyIncomplete(feedCategoryScope(), &error);
         if (!error.isEmpty()) {

@@ -10,6 +10,7 @@ import YtClient
 
 ApplicationWindow {
     id: root
+    objectName: "appWindow"
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
@@ -92,7 +93,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "R"
         context: Qt.WindowShortcut
-        enabled: !settingsDialog.visible && !App.playerOpen && !App.refreshing
+        enabled: !settingsDialog.visible && !App.playerOpen && !App.refreshing && !App.automationMode
         onActivated: App.refresh()
     }
 
@@ -187,6 +188,9 @@ ApplicationWindow {
             }
             Item { Layout.fillWidth: true }
             Button {
+                objectName: "feedNavigationButton"
+                Accessible.name: "Show feed"
+                Accessible.role: Accessible.Button
                 text: qsTr("FEED")
                 flat: true
                 onClicked: root.historyOpen = false
@@ -195,6 +199,9 @@ ApplicationWindow {
                 PointingCursor {}
             }
             Button {
+                objectName: "historyNavigationButton"
+                Accessible.name: "Show history"
+                Accessible.role: Accessible.Button
                 text: qsTr("HISTORY")
                 flat: true
                 onClicked: {
@@ -209,6 +216,9 @@ ApplicationWindow {
             }
             Button {
                 id: settingsButton
+                objectName: "settingsNavigationButton"
+                Accessible.name: "Open settings"
+                Accessible.role: Accessible.Button
                 text: qsTr("CONFIG")
                 flat: true
                 onClicked: settingsDialog.open()
@@ -218,10 +228,13 @@ ApplicationWindow {
             }
             Button {
                 id: refreshButton
+                objectName: "refreshButton"
+                Accessible.name: "Refresh feed"
+                Accessible.role: Accessible.Button
                 implicitWidth: settingsButton.height
                 implicitHeight: settingsButton.height
                 padding: 0
-                enabled: !App.refreshing
+                enabled: !App.refreshing && !App.automationMode
                 flat: true
                 onClicked: App.refresh()
                 contentItem: Item {
@@ -292,6 +305,7 @@ ApplicationWindow {
         }
 
         ColumnLayout {
+            objectName: "feedPage"
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: !root.historyOpen
@@ -322,6 +336,10 @@ ApplicationWindow {
 
                     delegate: Item {
                         id: liveDelegate
+                        objectName: "liveVideo_" + liveDelegate.videoId
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Live video " + liveDelegate.videoId + " " + liveDelegate.channelTitle + " " + liveDelegate.videoTitle
+                        Accessible.onPressAction: App.openVideo(liveDelegate.videoId)
                         required property string channelTitle
                         required property string videoId
                         required property string videoTitle
@@ -350,7 +368,7 @@ ApplicationWindow {
                                     id: avatarImage
                                     anchors.fill: parent
                                     anchors.margins: 2
-                                    source: liveDelegate.avatarUrl
+                                    source: App.automationMode ? "" : liveDelegate.avatarUrl
                                     visible: status === Image.Ready
                                     fillMode: Image.PreserveAspectCrop
                                 }
@@ -449,6 +467,9 @@ ApplicationWindow {
 
                         delegate: Button {
                             id: categoryButton
+                            objectName: "categoryButton_" + categoryButton.categoryId
+                            Accessible.name: "Category " + categoryButton.categoryId + " " + categoryButton.name
+                            Accessible.role: Accessible.Button
                             required property var categoryId
                             required property string name
                             required property int index
@@ -605,6 +626,10 @@ ApplicationWindow {
 
                             delegate: Item {
                                 id: feedDelegate
+                                objectName: "feedVideo_" + feedDelegate.videoId
+                                Accessible.role: Accessible.Button
+                                Accessible.name: "Video " + feedDelegate.videoId + " " + feedDelegate.title
+                                Accessible.onPressAction: App.openVideo(feedDelegate.videoId)
                                 required property string videoId
                                 required property string channelTitle
                                 required property string title
@@ -647,7 +672,7 @@ ApplicationWindow {
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         height: width * 0.5625
-                                        source: "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
+                                        source: App.automationMode ? "" : "https://i.ytimg.com/vi/" + feedDelegate.videoId + "/hqdefault.jpg"
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
                                     }
@@ -756,6 +781,7 @@ ApplicationWindow {
 
         Loader {
             id: historyLoader
+            objectName: "historyLoader"
             Layout.fillWidth: true
             Layout.fillHeight: true
             active: root.historyOpen
@@ -882,6 +908,7 @@ ApplicationWindow {
 
     Loader {
         id: playerLoader
+        objectName: "playerLoader"
         anchors.fill: parent
         z: 20
         active: App.playerOpen

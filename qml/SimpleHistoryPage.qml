@@ -9,6 +9,7 @@ import YtClient
 
 Item {
     id: root
+    objectName: "historyPage"
 
     signal videoSelected(string videoId)
 
@@ -82,6 +83,10 @@ Item {
 
             delegate: Item {
                 id: historyDelegate
+                objectName: "historyVideo_" + historyDelegate.videoId
+                Accessible.role: Accessible.Button
+                Accessible.name: "History video " + historyDelegate.videoId + " " + historyDelegate.title
+                Accessible.onPressAction: root.videoSelected(historyDelegate.videoId)
                 required property string videoId
                 required property string channelTitle
                 required property string title

@@ -95,6 +95,35 @@ Useful diagnostics:
 alternate SQLite path and is useful for isolated testing. Run
 `./build/yt-client --help` for all options.
 
+Automation mode exists for scripted UI harnesses:
+
+```sh
+./build/yt-client --automation
+QT_QPA_PLATFORM=offscreen ./build/yt-client --automation --quit-after-startup
+```
+
+`--automation` uses a disposable temporary SQLite database and settings
+store, seeds a fixed fixture (categories 1-2, videos AUTO0000001-AUTO0000005,
+watch history for AUTO0000001), disables startup and manual network refresh,
+disables channel adds, and swaps the player backend for a fake that never
+loads media. It never writes user state and cannot be combined with
+`--database`.
+
+External harnesses can drive either UI through shared stable `objectName`
+selectors: `appWindow`, `feedPage`, `historyLoader`, `playerLoader`,
+`historyPage`, `settingsWindow`, `settingsCloseButton`, `settingsTabs`
+(`settingsChannelsTab`, `settingsCategoriesTab`, `settingsFeedTab`,
+`settingsAppearanceTab`, `settingsApiTab`, `settingsPlaybackTab`),
+`playerPage`, `playerBackendLoader`, `automationPlayer`, `playerBackButton`,
+`categoryButton_<id>`, `feedVideo_<videoId>`, `liveVideo_<videoId>`,
+`historyVideo_<videoId>`. Full UI also exposes `feedNavigationButton`,
+`historyNavigationButton`, `settingsNavigationButton`, and `refreshButton`;
+Simple UI uses `H` and `S` shortcuts for history and settings. Repeater
+delegates are JS-owned, so locate them by walking the visual `QQuickItem` tree
+instead of `QObject::findChild`.
+Drag-to-reorder, file dialogs, and fullscreen behavior stay outside the
+navigation suite (`tests/navigation_test.cpp`, run via `./bin/test`).
+
 Build output uses Qt installation selected by `qmake6` or `qmake`. Producing signed, self-contained distribution packages is intentionally separate from source builds because Qt runtime deployment and signing differ between Linux distributions and macOS release channels.
 
 ## Metadata Sources

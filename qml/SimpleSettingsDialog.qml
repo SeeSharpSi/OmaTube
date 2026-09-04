@@ -11,6 +11,7 @@ import YtClient
 
 ApplicationWindow {
     id: root
+    objectName: "settingsWindow"
 
     readonly property var themeColors: App.themeColors
     readonly property var themeIds: ["default", "rose-pine", "nord", "omarchy"]
@@ -158,6 +159,9 @@ ApplicationWindow {
         }
 
         ToolButton {
+            objectName: "settingsCloseButton"
+            Accessible.name: "Close settings"
+            Accessible.role: Accessible.Button
             anchors.right: parent.right
             anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
@@ -204,6 +208,7 @@ ApplicationWindow {
 
         TabBar {
             id: tabs
+            objectName: "settingsTabs"
             Layout.fillWidth: true
             Layout.preferredHeight: 48
             spacing: 0
@@ -222,6 +227,9 @@ ApplicationWindow {
 
             TabButton {
                 id: channelsTab
+                objectName: "settingsChannelsTab"
+                Accessible.name: "Settings channels tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Channels")
@@ -242,6 +250,9 @@ ApplicationWindow {
 
             TabButton {
                 id: categoriesTab
+                objectName: "settingsCategoriesTab"
+                Accessible.name: "Settings categories tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Categories")
@@ -262,6 +273,9 @@ ApplicationWindow {
 
             TabButton {
                 id: feedTab
+                objectName: "settingsFeedTab"
+                Accessible.name: "Settings feed tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Feed")
@@ -282,6 +296,9 @@ ApplicationWindow {
 
             TabButton {
                 id: appearanceTab
+                objectName: "settingsAppearanceTab"
+                Accessible.name: "Settings appearance tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Appearance")
@@ -302,6 +319,9 @@ ApplicationWindow {
 
             TabButton {
                 id: apiTab
+                objectName: "settingsApiTab"
+                Accessible.name: "Settings data API tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Data API")
@@ -322,6 +342,9 @@ ApplicationWindow {
 
             TabButton {
                 id: playbackTab
+                objectName: "settingsPlaybackTab"
+                Accessible.name: "Settings playback tab"
+                Accessible.role: Accessible.Button
                 height: tabs.height
                 implicitHeight: tabs.height
                 text: qsTr("Playback")

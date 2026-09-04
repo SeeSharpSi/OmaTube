@@ -13,10 +13,12 @@ include($$PROJECT_ROOT/ytclient_core.pri)
 
 HEADERS += \
     $$PROJECT_ROOT/src/appcontroller.h \
+    $$PROJECT_ROOT/src/automationfixture.h \
     $$PROJECT_ROOT/src/spaceholdhandler.h \
     $$PROJECT_ROOT/src/thememanager.h
 SOURCES += \
     $$PROJECT_ROOT/src/appcontroller.cpp \
+    $$PROJECT_ROOT/src/automationfixture.cpp \
     $$PROJECT_ROOT/src/main.cpp \
     $$PROJECT_ROOT/src/spaceholdhandler.cpp \
     $$PROJECT_ROOT/src/thememanager.cpp

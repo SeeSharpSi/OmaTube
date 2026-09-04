@@ -31,6 +31,9 @@ private slots:
     void normalizesBackendAndHeight();
     void formatsHeightSelector();
     void defaultsToIframeAndAutoHeight();
+    void automationModeDefaultsToFalse();
+    void automationModeSuppressesNetworkRefresh();
+    void automationModeAddChannelIsDisabled();
     void persistsMaximumHeightAcrossInstances();
     void rejectsInvalidHeightAndBackend();
     void rejectsUnavailableMpvBackend();
@@ -229,6 +232,54 @@ void AppControllerTest::defaultsToIframeAndAutoHeight()
     QVERIFY2(controller->initialize(&error), qPrintable(error));
     QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
     QCOMPARE(controller->maximumVideoHeight(), 0);
+}
+
+void AppControllerTest::automationModeDefaultsToFalse()
+{
+    QString error;
+    {
+        std::unique_ptr<AppController> normal =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(normal->initialize(&error), qPrintable(error));
+        QVERIFY(!normal->automationMode());
+    }
+
+    std::unique_ptr<AppController> automated =
+        AppController::createApplication(QStringLiteral(":memory:"), true);
+    QVERIFY2(automated->initialize(&error), qPrintable(error));
+    QVERIFY(automated->automationMode());
+}
+
+void AppControllerTest::automationModeSuppressesNetworkRefresh()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"), true);
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QVERIFY(controller->automationMode());
+
+    controller->startupRefresh();
+    controller->refresh();
+    QVERIFY(!controller->refreshing());
+    QVERIFY(!controller->historyLoading());
+    QCOMPARE(controller->statusMessage(), QStringLiteral("Automation mode: refresh is disabled."));
+
+    controller->loadMoreHistory();
+    QVERIFY(!controller->historyLoading());
+    QVERIFY(!controller->refreshing());
+}
+
+void AppControllerTest::automationModeAddChannelIsDisabled()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"), true);
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+    controller->addChannel(QStringLiteral("https://youtube.com/@someone"), {});
+    QVERIFY(!controller->addingChannel());
+    QCOMPARE(controller->errorMessage(), QStringLiteral("Automation mode: adding channels is disabled."));
+    QCOMPARE(controller->channels()->rowCount(), 0);
 }
 
 void AppControllerTest::persistsMaximumHeightAcrossInstances()

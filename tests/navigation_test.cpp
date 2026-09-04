@@ -368,6 +368,8 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(queueRow->width() > 0.0);
     QTRY_VERIFY(queueSecond->width() > 0.0);
     QTRY_VERIFY(watchNextPage->width() > 0.0);
+    QTRY_VERIFY(queueRow->height() >= queueRow->width() * 0.5625);
+    QTRY_VERIFY(queueSecond->height() >= queueSecond->width() * 0.5625);
     QTRY_VERIFY(qAbs((queueSecond->x() - queueRow->x()) - (queueRow->width() + 12.0)) <= 0.5);
     QVERIFY(queueRow->width() < watchNextPage->width() / 2.0);
     clickItem(queueRow);

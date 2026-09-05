@@ -157,7 +157,7 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.leftMargin: 24
             anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("OMA / CONFIG")
+            text: qsTr("Config")
             color: root.ink
             font.family: root.chromeFont
             font.pixelSize: 17

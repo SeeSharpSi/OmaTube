@@ -243,23 +243,7 @@ ApplicationWindow {
                 PointingCursor {}
             }
             Button {
-                objectName: "historyNavigationButton"
-                Accessible.name: "Show history"
-                Accessible.role: Accessible.Button
-                text: qsTr("HISTORY")
-                flat: true
-                onClicked: {
-                    if (!root.historyOpen) {
-                        App.reloadWatchHistory()
-                        root.historyOpen = true
-                        root.watchNextOpen = false
-                    }
-                }
-                contentItem: Text { text: parent.text; color: root.historyOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
-                background: Rectangle { color: root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.historyOpen ? root.accent : root.rule }
-                PointingCursor {}
-            }
-            Button {
+                id: watchNextButton
                 objectName: "watchNextNavigationButton"
                 Accessible.name: "Show Watch Next"
                 Accessible.role: Accessible.Button
@@ -277,14 +261,112 @@ ApplicationWindow {
                 PointingCursor {}
             }
             Button {
+                id: historyButton
+                objectName: "historyNavigationButton"
+                Accessible.name: "Show history"
+                Accessible.role: Accessible.Button
+                implicitWidth: watchNextButton.height
+                implicitHeight: watchNextButton.height
+                padding: 0
+                flat: true
+                onClicked: {
+                    if (!root.historyOpen) {
+                        App.reloadWatchHistory()
+                        root.historyOpen = true
+                        root.watchNextOpen = false
+                    }
+                }
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("History")
+                contentItem: Item {
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 15
+                        height: 15
+                        antialiasing: true
+                        property color glyphColor: root.historyOpen ? root.panel : historyButton.hovered ? root.accent : root.mutedInk
+                        onGlyphColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = glyphColor
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            var cx = width / 2
+                            var cy = height / 2
+                            var r = Math.min(width, height) / 2 - 1.5
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, 0, 2 * Math.PI, false)
+                            ctx.stroke()
+                            ctx.beginPath()
+                            ctx.moveTo(cx, cy)
+                            ctx.lineTo(cx, cy - r * 0.55)
+                            ctx.moveTo(cx, cy)
+                            ctx.lineTo(cx + r * 0.4, cy + r * 0.25)
+                            ctx.stroke()
+                        }
+                    }
+                }
+                background: Rectangle { color: root.historyOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.historyOpen ? root.accent : root.rule }
+                PointingCursor {}
+            }
+            Button {
                 id: settingsButton
                 objectName: "settingsNavigationButton"
                 Accessible.name: "Open settings"
                 Accessible.role: Accessible.Button
-                text: qsTr("CONFIG")
+                implicitWidth: watchNextButton.height
+                implicitHeight: watchNextButton.height
+                padding: 0
                 flat: true
                 onClicked: settingsDialog.open()
-                contentItem: Text { text: parent.text; color: parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Config")
+                contentItem: Item {
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 15
+                        height: 15
+                        antialiasing: true
+                        property color glyphColor: settingsButton.hovered ? root.accent : root.mutedInk
+                        onGlyphColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = glyphColor
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            var cx = width / 2
+                            var cy = height / 2
+                            var rOuter = Math.min(width, height) / 2 - 1
+                            var rRoot = rOuter - 2.5
+                            var teeth = 8
+                            var steps = teeth * 4
+                            ctx.beginPath()
+                            for (var k = 0; k <= steps; ++k) {
+                                var angle = k * 2 * Math.PI / steps
+                                var radius = (k % 4 === 1 || k % 4 === 2) ? rOuter : rRoot
+                                var px = cx + radius * Math.cos(angle)
+                                var py = cy + radius * Math.sin(angle)
+                                if (k === 0)
+                                    ctx.moveTo(px, py)
+                                else
+                                    ctx.lineTo(px, py)
+                            }
+                            ctx.closePath()
+                            ctx.stroke()
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, 2.2, 0, 2 * Math.PI, false)
+                            ctx.stroke()
+                        }
+                    }
+                }
                 background: Rectangle { color: parent.hovered ? root.softFill : "transparent"; border.color: root.rule }
                 PointingCursor {}
             }
@@ -293,8 +375,8 @@ ApplicationWindow {
                 objectName: "refreshButton"
                 Accessible.name: "Refresh feed"
                 Accessible.role: Accessible.Button
-                implicitWidth: settingsButton.height
-                implicitHeight: settingsButton.height
+                implicitWidth: watchNextButton.height
+                implicitHeight: watchNextButton.height
                 padding: 0
                 enabled: !App.refreshing && !App.automationMode
                 flat: true

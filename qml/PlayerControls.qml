@@ -397,6 +397,36 @@ Item {
                 }
             }
 
+            ToolButton {
+                id: liveButton
+                objectName: "liveButton"
+                text: qsTr("Live")
+                flat: true
+                focusPolicy: Qt.NoFocus
+                visible: App.currentVideoIsLive
+                Accessible.name: qsTr("Go to live")
+                Accessible.role: Accessible.Button
+                onClicked: if (root.player) root.player.seek(root.durationS)
+
+                PointingCursor {}
+                background: Rectangle {
+                    color: liveButton.hovered
+                        ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
+                        : "transparent"
+                    border.color: liveButton.hovered ? root.accent : root.rule
+                    border.width: 1
+                }
+
+                contentItem: Text {
+                    text: parent.text.toUpperCase()
+                    color: root.chromeInk
+                    font.pixelSize: 12
+                    font.family: "monospace"
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
             Text {
                 text: root.formatTime(root.shownPosition)
                 color: root.chromeInk

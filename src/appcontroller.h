@@ -66,6 +66,7 @@ class AppController final : public QObject
     Q_PROPERTY(int currentVideoMaximumHeightOverride READ currentVideoMaximumHeightOverride NOTIFY
                    currentVideoMaximumHeightOverrideChanged)
     Q_PROPERTY(QString currentVideoTitle READ currentVideoTitle NOTIFY currentVideoTitleChanged)
+    Q_PROPERTY(bool currentVideoIsLive READ currentVideoIsLive NOTIFY currentVideoIsLiveChanged)
     Q_PROPERTY(bool automationMode READ automationMode CONSTANT)
 
 public:
@@ -111,6 +112,7 @@ public:
     [[nodiscard]] int currentVideoMaximumHeight() const;
     [[nodiscard]] int currentVideoMaximumHeightOverride() const;
     [[nodiscard]] QString currentVideoTitle() const;
+    [[nodiscard]] bool currentVideoIsLive() const;
     [[nodiscard]] bool automationMode() const;
 
     Q_INVOKABLE void startupRefresh();
@@ -176,6 +178,7 @@ signals:
     void currentVideoMaximumHeightChanged();
     void currentVideoMaximumHeightOverrideChanged();
     void currentVideoTitleChanged();
+    void currentVideoIsLiveChanged();
     void channelAdded(QString title);
     void watchNextFeedback(const QString &message);
 
@@ -201,7 +204,7 @@ private:
     static bool isValidVideoId(const QString &videoId);
     static QString perVideoHeightKey(const QString &videoId);
     void updateCurrentVideoMaximumHeightForOpen(const QString &videoId);
-    void updateCurrentVideoTitleForOpen(const QString &videoId);
+    void updateCurrentVideoMetadataForOpen(const QString &videoId);
 
     static constexpr int feedPageSize = 50;
 
@@ -238,6 +241,7 @@ private:
     int m_currentVideoMaximumHeight = 0;
     int m_currentVideoMaximumHeightOverride = -1;
     QString m_currentVideoTitle;
+    bool m_currentVideoIsLive = false;
     WatchTracker m_watchTracker;
     QTimer m_watchFlushTimer;
 

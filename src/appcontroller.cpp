@@ -281,6 +281,7 @@ bool AppController::initialize(QString *error)
     m_currentVideoMaximumHeight = m_maximumVideoHeight;
     m_currentVideoMaximumHeightOverride = -1;
     m_currentVideoTitle.clear();
+    m_currentVideoIsLive = false;
     reloadCategories();
     reloadChannels();
     reloadFeed();
@@ -457,6 +458,11 @@ int AppController::currentVideoMaximumHeightOverride() const
 QString AppController::currentVideoTitle() const
 {
     return m_currentVideoTitle;
+}
+
+bool AppController::currentVideoIsLive() const
+{
+    return m_currentVideoIsLive;
 }
 
 bool AppController::automationMode() const
@@ -1094,11 +1100,11 @@ void AppController::openVideo(const QString &videoId)
     // The player can already exist when switching videos, so it must not load
     // with the previous video's resume position.
     resolveStartPosition(videoId);
+    updateCurrentVideoMetadataForOpen(videoId);
     if (m_currentVideoId != videoId) {
         m_currentVideoId = videoId;
         emit currentVideoIdChanged();
     }
-    updateCurrentVideoTitleForOpen(videoId);
     updateCurrentVideoMaximumHeightForOpen(videoId);
     m_watchFlushTimer.start();
     if (!m_playerOpen) {
@@ -1476,9 +1482,10 @@ void AppController::updateCurrentVideoMaximumHeightForOpen(const QString &videoI
         emit currentVideoMaximumHeightChanged();
 }
 
-void AppController::updateCurrentVideoTitleForOpen(const QString &videoId)
+void AppController::updateCurrentVideoMetadataForOpen(const QString &videoId)
 {
     QString title;
+    bool isLive = m_liveChannels.containsVideoId(videoId);
     QString error;
     const std::optional<Video> video = m_repository.video(videoId, &error);
     if (!error.isEmpty()) {
@@ -1486,11 +1493,16 @@ void AppController::updateCurrentVideoTitleForOpen(const QString &videoId)
         title.clear();
     } else if (video) {
         title = video->title;
+        isLive = isLive || video->broadcastState == QStringLiteral("live");
     } else {
         title.clear();
     }
-    if (m_currentVideoTitle == title)
-        return;
-    m_currentVideoTitle = title;
-    emit currentVideoTitleChanged();
+    if (m_currentVideoTitle != title) {
+        m_currentVideoTitle = title;
+        emit currentVideoTitleChanged();
+    }
+    if (m_currentVideoIsLive != isLive) {
+        m_currentVideoIsLive = isLive;
+        emit currentVideoIsLiveChanged();
+    }
 }

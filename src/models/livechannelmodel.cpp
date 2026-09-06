@@ -54,3 +54,12 @@ void LiveChannelModel::setLiveChannels(QList<LiveChannel> channels)
     m_channels = std::move(channels);
     endResetModel();
 }
+
+bool LiveChannelModel::containsVideoId(const QString &videoId) const
+{
+    for (const LiveChannel &channel : m_channels) {
+        if (channel.videoId == videoId)
+            return true;
+    }
+    return false;
+}

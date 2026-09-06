@@ -26,6 +26,7 @@ public:
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
     void setLiveChannels(QList<LiveChannel> channels);
+    [[nodiscard]] bool containsVideoId(const QString &videoId) const;
 
 private:
     QList<LiveChannel> m_channels;

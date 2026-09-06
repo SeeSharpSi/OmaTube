@@ -21,6 +21,36 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtQml/qqml.h>
+
+class FakePlayer final : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool paused READ paused CONSTANT)
+    Q_PROPERTY(double position READ position CONSTANT)
+    Q_PROPERTY(double duration READ duration CONSTANT)
+    Q_PROPERTY(bool loading READ loading CONSTANT)
+    Q_PROPERTY(bool ended READ ended CONSTANT)
+    Q_PROPERTY(QString errorMessage READ errorMessage CONSTANT)
+    Q_PROPERTY(bool muted READ muted CONSTANT)
+    Q_PROPERTY(int volume READ volume CONSTANT)
+
+public:
+    bool paused() const { return false; }
+    double position() const { return 120.0; }
+    double duration() const { return 600.0; }
+    bool loading() const { return false; }
+    bool ended() const { return false; }
+    QString errorMessage() const { return {}; }
+    bool muted() const { return false; }
+    int volume() const { return 100; }
+    double lastSeek() const { return m_lastSeek; }
+
+    Q_INVOKABLE void seek(double seconds) { m_lastSeek = seconds; }
+
+private:
+    double m_lastSeek = -1.0;
+};
 
 class AppControllerTest final : public QObject
 {
@@ -59,6 +89,7 @@ private slots:
     void perVideoHeightGlobalChangeRespectsOverride();
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
+    void liveButtonVisibilityAndSeek();
     void movesCategoriesAndPersists();
     void exportsAndImportsChannels();
     void exportsAndImportsCategories();
@@ -185,6 +216,7 @@ void AppControllerTest::initTestCase()
         QSettings::IniFormat,
         QSettings::UserScope,
         m_settingsDirectory.path());
+    qmlRegisterSingletonType<AppController>("YtClient", 1, 0, "App", &AppController::create);
 }
 
 void AppControllerTest::init()
@@ -1057,6 +1089,82 @@ void AppControllerTest::currentVideoTitleClearsForUnknownVideo()
     controller->openVideo(QStringLiteral("BBBBBBBBBBB"));
     QCOMPARE(controller->currentVideoTitle(), QString());
     QCOMPARE(titleChanged.count(), 1);
+}
+
+void AppControllerTest::liveButtonVisibilityAndSeek()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("yt-client.sqlite3"));
+    QString error;
+    {
+        Repository repo(databasePath);
+        QVERIFY2(repo.open(&error), qPrintable(error));
+        QVERIFY(repo.upsertChannel(
+            makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha")), &error));
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        QVERIFY(repo.upsertVideos(
+            {makeVideo(QStringLiteral("dQw4w9WgXcQ"), QStringLiteral("UCAlpha"), now)},
+            &error));
+        Video upcoming = makeVideo(
+            QStringLiteral("BBBBBBBBBBB"), QStringLiteral("UCAlpha"), now, true, -1);
+        upcoming.broadcastState = QStringLiteral("upcoming");
+        QVERIFY(repo.upsertVideos({upcoming}, &error));
+    }
+
+    std::unique_ptr<AppController> controller = AppController::createApplication(databasePath);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->liveChannels()->setLiveChannels(
+        {LiveChannel{QStringLiteral("UCAlpha"),
+                     QStringLiteral("Alpha"),
+                     {},
+                     QStringLiteral("CCCCCCCCCCC"),
+                     QStringLiteral("Live C")}});
+    QVERIFY(!controller->currentVideoIsLive());
+    QSignalSpy isLiveChanged(controller.get(), &AppController::currentVideoIsLiveChanged);
+
+    const QList<QUrl> controlSources{
+        QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml")),
+        QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml")),
+    };
+    for (const QUrl &source : controlSources) {
+        FakePlayer player;
+        QQuickWindow hostWindow;
+        QQmlEngine engine;
+        QQmlComponent component(&engine, source);
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> controls(component.createWithInitialProperties({
+            {QStringLiteral("player"), QVariant::fromValue(static_cast<QObject *>(&player))},
+            {QStringLiteral("hostWindow"),
+             QVariant::fromValue(static_cast<QObject *>(&hostWindow))},
+        }));
+        QVERIFY2(controls != nullptr, qPrintable(component.errorString()));
+
+        QQuickItem *controlsItem = qobject_cast<QQuickItem *>(controls.data());
+        QVERIFY(controlsItem != nullptr);
+        QQuickItem *liveButton = nullptr;
+        QTRY_VERIFY((liveButton = findVisualChildrenByName(
+                         controlsItem, QStringLiteral("liveButton"))
+                                      .value(0))
+                    != nullptr);
+
+        controller->openVideo(QStringLiteral("dQw4w9WgXcQ"));
+        QVERIFY(!controller->currentVideoIsLive());
+        QTRY_VERIFY(!liveButton->property("visible").toBool());
+        isLiveChanged.clear();
+
+        controller->openVideo(QStringLiteral("CCCCCCCCCCC"));
+        QVERIFY(controller->currentVideoIsLive());
+        QCOMPARE(isLiveChanged.count(), 1);
+        QTRY_VERIFY(liveButton->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(liveButton, "clicked"));
+        QCOMPARE(player.lastSeek(), player.duration());
+
+        controller->openVideo(QStringLiteral("BBBBBBBBBBB"));
+        QVERIFY(!controller->currentVideoIsLive());
+        QCOMPARE(isLiveChanged.count(), 2);
+        QTRY_VERIFY(!liveButton->property("visible").toBool());
+    }
 }
 
 void AppControllerTest::movesCategoriesAndPersists()

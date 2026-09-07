@@ -36,10 +36,14 @@ class FakePlayer final : public QObject
     Q_PROPERTY(int volume READ volume CONSTANT)
 
 public:
+    explicit FakePlayer(bool loading = false)
+        : m_loading(loading)
+    {
+    }
     bool paused() const { return false; }
     double position() const { return 120.0; }
     double duration() const { return 600.0; }
-    bool loading() const { return false; }
+    bool loading() const { return m_loading; }
     bool ended() const { return false; }
     QString errorMessage() const { return {}; }
     bool muted() const { return false; }
@@ -49,6 +53,7 @@ public:
     Q_INVOKABLE void seek(double seconds) { m_lastSeek = seconds; }
 
 private:
+    bool m_loading = false;
     double m_lastSeek = -1.0;
 };
 
@@ -90,6 +95,8 @@ private slots:
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
     void liveButtonVisibilityAndSeek();
+    void videoLoadingOverlayIsCenteredSquare_data();
+    void videoLoadingOverlayIsCenteredSquare();
     void movesCategoriesAndPersists();
     void exportsAndImportsChannels();
     void exportsAndImportsCategories();
@@ -1165,6 +1172,65 @@ void AppControllerTest::liveButtonVisibilityAndSeek()
         QCOMPARE(isLiveChanged.count(), 2);
         QTRY_VERIFY(!liveButton->property("visible").toBool());
     }
+}
+
+void AppControllerTest::videoLoadingOverlayIsCenteredSquare_data()
+{
+    QTest::addColumn<QUrl>("source");
+    QTest::newRow("normal") << QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml"));
+    QTest::newRow("simple") << QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml"));
+}
+
+void AppControllerTest::videoLoadingOverlayIsCenteredSquare()
+{
+    QFETCH(QUrl, source);
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+    FakePlayer player(true);
+    QQuickWindow hostWindow;
+    QQmlEngine engine;
+    QQmlComponent component(&engine, source);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> controls(component.createWithInitialProperties({
+        {QStringLiteral("player"), QVariant::fromValue(static_cast<QObject *>(&player))},
+        {QStringLiteral("hostWindow"), QVariant::fromValue(static_cast<QObject *>(&hostWindow))},
+    }));
+    QVERIFY2(controls != nullptr, qPrintable(component.errorString()));
+
+    QQuickItem *controlsItem = qobject_cast<QQuickItem *>(controls.data());
+    QVERIFY(controlsItem != nullptr);
+    controlsItem->setWidth(1000);
+    controlsItem->setHeight(800);
+
+    QQuickItem *frame = nullptr;
+    QQuickItem *spinner = nullptr;
+    QTRY_VERIFY((frame = findVisualChildrenByName(
+                     controlsItem, QStringLiteral("videoLoadingFrame"))
+                                  .value(0))
+                != nullptr);
+    QTRY_VERIFY((spinner = findVisualChildrenByName(
+                     controlsItem, QStringLiteral("videoLoadingSpinner"))
+                                  .value(0))
+                != nullptr);
+
+    QCOMPARE(controls->property("overlayMode").toString(), QStringLiteral("loading"));
+    QTRY_VERIFY(frame->isVisible());
+    QTRY_VERIFY(spinner->isVisible());
+    QTRY_VERIFY(frame->width() > 0.0 && frame->height() > 0.0);
+    QCOMPARE(frame->width(), frame->height());
+
+    const QPointF frameCenter =
+        frame->mapToItem(controlsItem, QPointF(frame->width() / 2.0, frame->height() / 2.0));
+    QVERIFY(qAbs(frameCenter.x() - 500.0) < 1.0);
+    QVERIFY(qAbs(frameCenter.y() - 400.0) < 1.0);
+
+    const QPointF spinnerCenter = spinner->mapToItem(
+        controlsItem, QPointF(spinner->width() / 2.0, spinner->height() / 2.0));
+    QVERIFY(qAbs(spinnerCenter.x() - 500.0) < 1.0);
+    QVERIFY(qAbs(spinnerCenter.y() - 400.0) < 1.0);
 }
 
 void AppControllerTest::movesCategoriesAndPersists()

@@ -19,6 +19,7 @@ Item {
     readonly property color rule: App.themeColors.muted
     readonly property color softFill: App.themeColors.selection
     readonly property color danger: App.themeColors.red
+    readonly property color chromeInk: "#ffffff"
 
     readonly property bool isFullscreen: hostWindow
         ? hostWindow.visibility === Window.FullScreen : false
@@ -248,14 +249,28 @@ Item {
         z: 1
         visible: root.chromeVisible && root.overlayMode !== "none"
 
+        Rectangle {
+            objectName: "videoLoadingFrame"
+            anchors.centerIn: parent
+            width: height
+            height: overlayColumn.implicitHeight + 32
+            visible: root.overlayMode === "loading"
+            color: Qt.rgba(0.02, 0.02, 0.02, 0.88)
+            border.color: root.accent
+            border.width: 1
+        }
+
         ColumnLayout {
+            id: overlayColumn
             anchors.centerIn: parent
             spacing: 16
 
             Text {
+                objectName: "videoLoadingSpinner"
+                Layout.alignment: Qt.AlignHCenter
                 text: root.spinnerFrames[root.spinnerFrame]
                 visible: root.overlayMode === "loading"
-                color: root.paper
+                color: root.chromeInk
                 font.pixelSize: 34
                 font.family: "monospace"
                 horizontalAlignment: Text.AlignHCenter

@@ -271,8 +271,9 @@ Item {
         visible: root.chromeVisible && root.overlayMode !== "none"
 
         Rectangle {
+            objectName: "videoLoadingFrame"
             anchors.centerIn: parent
-            width: Math.min(parent.width - 32, 520)
+            width: root.overlayMode === "loading" ? height : Math.min(parent.width - 32, 520)
             height: overlayColumn.implicitHeight + 32
             color: Qt.rgba(0.02, 0.02, 0.02, 0.88)
             border.color: root.overlayMode === "error" ? root.danger : root.accent
@@ -286,6 +287,8 @@ Item {
             spacing: 12
 
             Text {
+                objectName: "videoLoadingSpinner"
+                Layout.alignment: Qt.AlignHCenter
                 text: root.spinnerFrames[root.spinnerFrame]
                 visible: root.overlayMode === "loading"
                 color: root.chromeInk

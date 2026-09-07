@@ -51,7 +51,7 @@ ApplicationWindow {
     title: App.playerOpen && App.currentVideoTitle.length > 0
         ? App.currentVideoTitle + " - OmaTube"
         : qsTr("OmaTube")
-    color: paper
+    color: Qt.rgba(paper.r, paper.g, paper.b, 0.88)
     palette.window: paper
     palette.windowText: ink
     palette.base: panel

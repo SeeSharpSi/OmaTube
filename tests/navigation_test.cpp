@@ -432,6 +432,30 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("feedPage")).isEmpty());
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
+    QQuickItem *simpleFeedVideo =
+        firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
+    QVERIFY(simpleFeedVideo != nullptr);
+    QTRY_VERIFY(simpleFeedVideo->width() > 0.0);
+    QQuickItem *simpleFeedOutline = nullptr;
+    QTRY_VERIFY((simpleFeedOutline = firstVisualChild(
+                     rootItem,
+                     QStringLiteral("feedVideoOutline_AUTO0000001")))
+                != nullptr);
+    QVERIFY(simpleFeedOutline->z() > 0.0);
+    QTRY_COMPARE(
+        QQmlProperty::read(simpleFeedOutline, QStringLiteral("border.width")).toInt(), 0);
+    moveMouseToItem(simpleFeedVideo);
+    QTRY_COMPARE(
+        QQmlProperty::read(simpleFeedOutline, QStringLiteral("border.width")).toInt(), 2);
+    {
+        const QColor borderColor =
+            QQmlProperty::read(simpleFeedOutline, QStringLiteral("border.color")).value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
     QQuickItem *simpleFeedbackNotice = nullptr;
     QTRY_VERIFY((simpleFeedbackNotice = firstVisualChild(rootItem, QStringLiteral("feedbackNotice")))
                 != nullptr);

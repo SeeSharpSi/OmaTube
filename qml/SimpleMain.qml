@@ -585,6 +585,15 @@ ApplicationWindow {
                     color: feedHover.hovered ? root.softFill : "transparent"
                 }
 
+                Rectangle {
+                    objectName: "feedVideoOutline_" + feedDelegate.videoId
+                    anchors.fill: parent
+                    z: 1
+                    color: "transparent"
+                    border.color: feedHover.hovered ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 1.0) : root.rule
+                    border.width: feedHover.hovered ? 2 : 0
+                }
+
                 HoverHandler {
                     id: feedHover
                     cursorShape: Qt.PointingHandCursor

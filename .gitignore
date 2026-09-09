@@ -21,6 +21,7 @@ qrc_*.cpp
 *.exe
 *.app/
 *.dSYM/
+__pycache__/
 
 # IDE and editor state
 .idea/

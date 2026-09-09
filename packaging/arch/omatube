@@ -1,0 +1,38 @@
+#!/bin/sh
+# OmaTube private-runtime launcher.
+# Installed as /opt/omatube/omatube, symlinked from /usr/bin/omatube.
+# Scopes every variable to this process; touches no user files.
+set -eu
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$SELF")"
+APP="$ROOT/bin/omatube"
+
+# Replace host Qt plugin paths and theme selection for this private runtime.
+unset QT_PLUGIN_PATH
+unset QML2_IMPORT_PATH
+unset QML_IMPORT_PATH
+unset QT_QPA_PLATFORMTHEME
+unset QT_QPA_PLATFORM_PLUGIN_PATH
+
+# Private helpers first: QStandardPaths::findExecutable and the mpv
+# ytdl hook both resolve yt-dlp/deno through PATH.
+PATH="$ROOT/bin:${PATH:-/usr/bin:/bin}"
+export PATH
+
+# Relative RPATHs already point ELFs at $ROOT/lib; export the library
+# path as well so dlopen-only deps (audio, TLS) resolve deterministically.
+LD_LIBRARY_PATH="$ROOT/lib"
+export LD_LIBRARY_PATH
+
+export QT_PLUGIN_PATH="$ROOT/plugins"
+export QML2_IMPORT_PATH="$ROOT/qml"
+export QML_IMPORT_PATH="$ROOT/qml"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$ROOT/plugins/platforms"
+export QTWEBENGINEPROCESS_PATH="$ROOT/libexec/QtWebEngineProcess"
+export QTWEBENGINE_RESOURCES_PATH="$ROOT/share/qt6/resources"
+export QTWEBENGINE_LOCALES_PATH="$ROOT/share/qt6/translations/qtwebengine_locales"
+export SPA_PLUGIN_DIR="$ROOT/lib/spa-0.2"
+export PIPEWIRE_MODULE_DIR="$ROOT/lib/pipewire-0.3"
+
+exec "$APP" "$@"

@@ -1,0 +1,30 @@
+# Internal recipe invoked by bin/package-arch, not a standalone AUR recipe.
+pkgname=omatube
+pkgver=${OMA_VERSION:?Run bin/package-arch}
+pkgrel=1
+pkgdesc='YouTube feed client with bundled Qt and embedded playback'
+arch=('x86_64')
+url='https://git.skrittle.net/andor/OmaTube'
+license=('GPL-3.0-or-later' 'LicenseRef-Bundled-Third-Party')
+depends=("glibc>=${OMA_GLIBC_MIN:?Run bin/package-arch}" 'bash' 'coreutils'
+         'libglvnd' 'vulkan-icd-loader' 'ca-certificates')
+options=('!strip' '!debug')
+source=()
+
+package() {
+    python3 "$startdir/bundle.py" audit "$OMA_PKGROOT" || return 1
+    cp -a "$OMA_PKGROOT"/. "$pkgdir"/
+    install -d "$pkgdir/usr/bin" "$pkgdir/usr/share/applications" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps" \
+        "$pkgdir/usr/share/licenses/omatube"
+    ln -s /opt/omatube/omatube "$pkgdir/usr/bin/omatube"
+    install -m644 "$startdir/omatube.desktop" \
+        "$pkgdir/usr/share/applications/omatube.desktop"
+    install -m644 "$startdir/omatube.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/omatube.svg"
+    install -m644 "$OMA_PKGROOT/opt/omatube/licenses/omatube/LICENSE" \
+        "$pkgdir/usr/share/licenses/omatube/LICENSE"
+    install -m644 "$OMA_PKGROOT/opt/omatube/licenses/omatube/THIRD_PARTY_NOTICES.md" \
+        "$pkgdir/usr/share/licenses/omatube/LicenseRef-Bundled-Third-Party"
+    python3 "$startdir/bundle.py" audit "$pkgdir"
+}

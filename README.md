@@ -19,7 +19,34 @@ a YouTube Data API v3 key to use the documented metadata backend instead.
 - SQLite storage under Qt's platform application-data location
 - macOS and Linux builds from one qmake project
 
-## Requirements
+## Install on Omarchy
+
+Download the bundled x86_64 Arch package from a published release, then
+install it with Omarchy's existing package manager. For version 0.1.0:
+
+```sh
+sha256sum -c omatube-0.1.0-1-x86_64.pkg.tar.zst.sha256
+sudo pacman -U ./omatube-0.1.0-1-x86_64.pkg.tar.zst
+```
+
+Launch **OmaTube** from the application launcher or run `omatube`.
+Qt, Qt WebEngine, libmpv, media libraries, yt-dlp with Python, and Deno
+are included under `/opt/omatube`. No separate application runtime,
+AppImage manager, Flatpak installation, or source build is required.
+The package still uses the system's glibc, graphics drivers/dispatch,
+certificate store, shell, and core utilities. Use an up-to-date Omarchy
+installation meeting the package's recorded glibc minimum.
+
+Install a newer package with the same `pacman -U` command. Local package
+installation does not configure an update repository. Remove it with
+`sudo pacman -R omatube`; personal subscriptions and settings are retained.
+Normal launches can contact YouTube. Checksums detect corruption; verify
+release signatures as well when provided by the publisher.
+
+For maintainers, see [RELEASING.md](RELEASING.md). Package availability
+depends on publishing a release; the build command alone does not upload it.
+
+## Source Requirements
 
 - C++20 compiler
 - qmake and Make
@@ -30,7 +57,8 @@ a YouTube Data API v3 key to use the documented metadata backend instead.
 
 The official embedded player remains available when libmpv is absent. qmake detects libmpv through `pkg-config`; the Playback settings expose mpv only in builds where it was found.
 
-On Omarchy, Qt, libmpv, and yt-dlp are already installed with the default desktop toolchain. No package installation is required.
+Some dependencies may already be installed on Omarchy. Source builds must
+still check the requirements below; bundled-package users do not need them.
 
 On Arch Linux:
 
@@ -113,7 +141,10 @@ screenshot script and exits after the last event; `--automation-ui
 full|simple` selects the initial UI. See `AUTOMATION.md` for the event
 schema, selector table, and runnable examples.
 
-Build output uses Qt installation selected by `qmake6` or `qmake`. Producing signed, self-contained distribution packages is intentionally separate from source builds because Qt runtime deployment and signing differ between Linux distributions and macOS release channels.
+Build output uses the Qt installation selected by `qmake6` or `qmake`.
+`./bin/package-arch` separately builds the bundled Linux release package
+into `dist/`. Signing and publishing are explicit maintainer steps described
+in [RELEASING.md](RELEASING.md); macOS packaging is not covered by that script.
 
 ## Metadata Sources
 

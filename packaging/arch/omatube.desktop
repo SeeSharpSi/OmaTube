@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=OmaTube
+Exec=omatube
+Icon=omatube
+Terminal=false
+Categories=AudioVideo;Video;

@@ -6,6 +6,8 @@
 - Use `./bin/build`; it selects `qmake6` before `qmake`, configures and builds into `build/`, and does not clean existing output.
 - `yt-client.pro` detects libmpv through `pkg-config`. When unavailable, the app builds with only the official player; when available, it defines `OMA_HAS_MPV`, links libmpv, and packages the native backend.
 - Use `./bin/test` for full verification. It rebuilds the app, builds and runs all six QtTest suites with `QT_QPA_PLATFORM=offscreen`, then runs regular in-memory and seeded automation startup smoke checks.
+- On Linux, `./bin/test` also runs `tests/packaging_test.py` using Python 3.11+ standard-library unittest. These offline builder tests cover runtime dependency auditing, manifests, and the private launcher; Python is bundled through standalone yt-dlp for end users, not a package dependency.
+- Use `./bin/package-arch` for the bundled x86_64 Arch release. See `RELEASING.md` for builder dependencies, host ABI limits, private runtime layout, and license/source requirements. Never install a test package on the user's system; extract it and use automation mode instead.
 - CI runs `./bin/build` then `./bin/test` with Qt 6.8.3 on Ubuntu 24.04 and macOS 14. No separate lint, formatter, typecheck, or codegen task exists.
 - To rebuild and run one QtTest function, use this pattern; replace project, binary, and function together:
 

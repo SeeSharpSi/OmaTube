@@ -28,6 +28,9 @@ build_and_run() (
 )
 
 "$ROOT/bin/build"
+if [ "$(uname -s)" = "Linux" ]; then
+    PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/tests/packaging_test.py"
+fi
 build_and_run appcontroller_tests "$ROOT/tests/appcontroller_tests.pro"
 build_and_run repository_tests "$ROOT/tests/repository_tests.pro"
 build_and_run youtube_tests "$ROOT/tests/youtube_tests.pro"

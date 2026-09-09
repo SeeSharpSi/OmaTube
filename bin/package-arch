@@ -1,0 +1,78 @@
+#!/usr/bin/env sh
+# Build the single bundled Arch package (.pkg.tar.zst) with a private
+# runtime under /opt/omatube. Usable from any cwd. Never installs anything
+# and never touches user data; refuses root and missing mpv.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+BUILD_ARCH="$ROOT/build-arch"
+APP_BUILD="$BUILD_ARCH/app-build"
+PKGROOT="$BUILD_ARCH/pkgroot"
+CACHE="$BUILD_ARCH/cache"
+META="$BUILD_ARCH/meta"
+DIST="$ROOT/dist"
+PKGDIR_ARCH="$ROOT/packaging/arch"
+
+die() { echo "package-arch: $*" >&2; exit 1; }
+
+[ "$(id -u)" != "0" ] || die "refusing to run as root"
+[ "$(uname -s)" = "Linux" ] || die "Arch Linux required"
+[ "$(uname -m)" = "x86_64" ] || die "x86_64 required"
+if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case " ${ID-} ${ID_LIKE-} " in
+        *" arch "*|*" archlinux "*) ;;
+        *) die "Arch Linux required (ID=${ID-unknown})" ;;
+    esac
+fi
+
+for t in python3 makepkg pacman patchelf qmake6 make readelf pkg-config ldd fakeroot zstd; do
+    command -v "$t" >/dev/null 2>&1 || die "missing builder tool: $t (not installing automatically)"
+done
+pkg-config --exists mpv || die "libmpv development files required (both players must build)"
+
+VERSION="$(sed -n 's/^VERSION *= *//p' "$ROOT/yt-client.pro" | tr -d ' ')"
+[ -n "$VERSION" ] || die "could not derive VERSION from yt-client.pro"
+case "$VERSION" in *[!0-9.]*|'') die "invalid project version: $VERSION" ;; esac
+
+# Clean, separate build directory; existing bin/build is untouched.
+rm -rf "$APP_BUILD"
+mkdir -p "$APP_BUILD" "$CACHE" "$META" "$DIST" "$BUILD_ARCH/makepkg" "$BUILD_ARCH/recipe"
+rm -rf "$PKGROOT"
+mkdir -p "$PKGROOT"
+
+JOBS="${JOBS:-$(nproc 2>/dev/null || echo 1)}"
+cd "$APP_BUILD"
+qmake6 "$ROOT/yt-client.pro"
+make -j"$JOBS"
+
+APP_BIN="$APP_BUILD/yt-client"
+[ -x "$APP_BIN" ] || die "build did not produce $APP_BIN"
+readelf -d "$APP_BIN" | grep -q "libmpv" || die "built app lacks mpv linkage"
+
+python3 "$PKGDIR_ARCH/bundle.py" bundle \
+    --app "$APP_BIN" \
+    --out "$PKGROOT" \
+    --cache "$CACHE" \
+    --runtime "$PKGDIR_ARCH/runtime.json" \
+    --meta "$META" \
+    --version "$VERSION" \
+    --root "$ROOT"
+
+GLIBC_MIN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibc_min"])' "$META/manifest.json")"
+
+cp "$PKGDIR_ARCH/PKGBUILD" "$PKGDIR_ARCH/bundle.py" \
+   "$PKGDIR_ARCH/omatube.desktop" "$PKGDIR_ARCH/omatube.svg" "$BUILD_ARCH/recipe/"
+cd "$BUILD_ARCH/recipe"
+export OMA_PKGROOT="$PKGROOT" OMA_VERSION="$VERSION" OMA_GLIBC_MIN="$GLIBC_MIN"
+export BUILDDIR="$BUILD_ARCH/makepkg" PKGDEST="$DIST" PKGEXT='.pkg.tar.zst'
+makepkg -f
+
+PKGFILE="$(makepkg --packagelist)"
+[ -f "$PKGFILE" ] || die "no package produced in $DIST"
+cp "$META/manifest.json" "$PKGFILE.manifest.json"
+cp "$META/builder-packages.txt" "$PKGFILE.builder-packages.txt"
+cd "$DIST"
+sha256sum "$(basename "$PKGFILE")" > "$PKGFILE.sha256"
+echo "packaged $PKGFILE"

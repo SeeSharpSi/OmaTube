@@ -1,0 +1,34 @@
+{
+  "helpers": [
+    {
+      "name": "yt-dlp",
+      "version": "2026.08.19",
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux",
+      "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+    },
+    {
+      "name": "deno",
+      "version": "v2.9.6",
+      "url": "https://github.com/denoland/deno/releases/download/v2.9.6/deno-x86_64-unknown-linux-gnu.zip",
+      "sha256": "394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2",
+      "entry": "deno"
+    }
+  ],
+  "licenses": [
+    {
+      "name": "yt-dlp",
+      "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.08.19/LICENSE",
+      "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+    },
+    {
+      "name": "yt-dlp-third-party",
+      "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.08.19/THIRD_PARTY_LICENSES.txt",
+      "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
+    },
+    {
+      "name": "deno",
+      "url": "https://raw.githubusercontent.com/denoland/deno/v2.9.6/LICENSE.md",
+      "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"
+    }
+  ]
+}

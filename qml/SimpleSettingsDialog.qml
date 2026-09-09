@@ -81,6 +81,8 @@ ApplicationWindow {
     palette.highlightedText: root.panel
     palette.mid: root.rule
     palette.placeholderText: root.mutedInk
+    palette.toolTipBase: root.paper
+    palette.toolTipText: root.ink
 
     function open() {
         selectedCategoryIds = App.selectedCategoryId >= 0 ? [App.selectedCategoryId] : []

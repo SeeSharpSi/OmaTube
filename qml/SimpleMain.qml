@@ -65,6 +65,8 @@ ApplicationWindow {
     palette.highlightedText: panel
     palette.mid: rule
     palette.placeholderText: mutedInk
+    palette.toolTipBase: panel
+    palette.toolTipText: ink
 
     function relativeTime(value) {
         const seconds = Math.max(0, Math.floor((Date.now() - value.getTime()) / 1000))

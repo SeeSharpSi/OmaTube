@@ -146,6 +146,11 @@ int keylessPageStart(const QString &pageToken)
     const int start = match.captured(1).toInt(&valid);
     return valid ? qMax(1, start) : 1;
 }
+
+bool isMissingStreamsTab(const QString &error)
+{
+    return error.contains(QStringLiteral("does not have a streams tab"), Qt::CaseInsensitive);
+}
 }
 
 YouTubeClient::YouTubeClient(QObject *parent)
@@ -292,6 +297,10 @@ void YouTubeClient::fetchLiveChannel(const Channel &channel, LiveCallback callba
             true,
             [channel, callback = std::move(callback)](QByteArray json, QString error) {
                 if (!error.isEmpty()) {
+                    if (isMissingStreamsTab(error)) {
+                        callback(std::nullopt, QString{});
+                        return;
+                    }
                     callback(std::nullopt, std::move(error));
                     return;
                 }

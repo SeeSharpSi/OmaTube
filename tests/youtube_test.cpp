@@ -3,9 +3,14 @@
 #include "youtubefeed.h"
 #include "youtubeclient.h"
 
+#include <QDir>
+#include <QEventLoop>
+#include <QFile>
 #include <QHash>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 struct FakeUploadPage
 {
@@ -154,6 +159,7 @@ private slots:
     void ignoresMalformedFeedEntries();
     void rejectsInvalidFeedXml();
     void parsesYtDlpResponses();
+    void fetchLiveChannelTreatsMissingStreamsTabAsNoLive();
 };
 
 namespace {
@@ -863,6 +869,65 @@ void YouTubeTest::parsesYtDlpResponses()
         YouTubeClient::parseYtDlpLive(liveJson, *channel, &error);
     QVERIFY2(live.has_value(), qPrintable(error));
     QCOMPARE(live->videoId, QStringLiteral("live-now"));
+}
+
+void YouTubeTest::fetchLiveChannelTreatsMissingStreamsTabAsNoLive()
+{
+    QTemporaryDir fakeBin;
+    QVERIFY(fakeBin.isValid());
+    const QString scriptPath = fakeBin.filePath(QStringLiteral("yt-dlp"));
+    QFile script(scriptPath);
+    QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Text));
+    const QByteArray scriptContent =
+        "#!/bin/sh\n"
+        "echo 'ERROR: [YoutubeTab] UC1234567890123456789012: "
+        "This channel does not have a streams tab' >&2\n"
+        "exit 1\n";
+    QCOMPARE(script.write(scriptContent), scriptContent.size());
+    script.close();
+    QVERIFY(script.setPermissions(
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+        | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+        | QFileDevice::ReadOther | QFileDevice::ExeOther));
+
+    const QByteArray oldPath = qgetenv("PATH");
+    const QByteArray newPath =
+        QDir::toNativeSeparators(fakeBin.path()).toUtf8() + ":" + oldPath;
+    QVERIFY(qputenv("PATH", newPath));
+
+    YouTubeClient client;
+    QVERIFY(!client.hasApiKey());
+    const Channel channel = makeChannel(
+        QStringLiteral("UC1234567890123456789012"), QStringLiteral("Qt"));
+
+    bool finished = false;
+    std::optional<LiveChannel> live = LiveChannel{
+        channel.id,
+        channel.title,
+        channel.avatarUrl,
+        QStringLiteral("sentinel"),
+        QStringLiteral("sentinel"),
+    };
+    QString liveError = QStringLiteral("unset");
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    client.fetchLiveChannel(
+        channel,
+        [&](std::optional<LiveChannel> result, QString error) {
+            live = std::move(result);
+            liveError = std::move(error);
+            finished = true;
+            loop.quit();
+        });
+    timeout.start(10000);
+    loop.exec();
+
+    QVERIFY(qputenv("PATH", oldPath));
+    QVERIFY2(finished, "fetchLiveChannel callback did not complete");
+    QVERIFY(!live.has_value());
+    QVERIFY2(liveError.isEmpty(), qPrintable(liveError));
 }
 
 QTEST_GUILESS_MAIN(YouTubeTest)

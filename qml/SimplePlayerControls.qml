@@ -219,7 +219,7 @@ Item {
                         Text {
                             Layout.fillWidth: true
                             text: qualityOption.modelData.label
-                            color: qualitySelector.currentIndex === qualityOption.index ? root.ink : root.mutedInk
+                            color: root.ink
                             font.pixelSize: 12
                             elide: Text.ElideRight
                         }

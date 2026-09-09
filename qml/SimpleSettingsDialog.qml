@@ -1234,8 +1234,7 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     text: qualityOption.modelData.label
-                                    color: qualitySelector.currentValue === qualityOption.modelData.value
-                                        ? root.ink : root.mutedInk
+                                    color: root.ink
                                     font.pixelSize: 13
                                     font.weight: qualitySelector.currentValue === qualityOption.modelData.value
                                         ? Font.DemiBold : Font.Normal

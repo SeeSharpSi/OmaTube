@@ -1,57 +1,190 @@
 # OmaTube Automation Guide
 
 This guide is for coding agents that drive the OmaTube UI. It defines
-the only safe launch mode, the fixed fixture, the stable selectors,
-and the harness patterns used by `tests/navigation_test.cpp`.
+the safe launch modes, the timed JSON CLI, the fixed fixture, and the
+stable selectors. Agents navigate with JSON sequences only. Do not add
+C++ harness code or edit QtTest sources to navigate the UI.
 
-## 1. Safe Launch Mode
+## 1. Safe Launch Modes
 
-Always build first, then launch with automation mode:
-
-```sh
-./bin/build
-./build/yt-client --automation
-```
-
-A normal launch opens `yt-client.sqlite3` under Qt `AppDataLocation`,
-reads user `QSettings`, and can start a network refresh that consumes
-YouTube quota. Do not use a normal launch for agent testing.
-`--automation` uses a temporary SQLite database and temporary settings
-path, seeds a fixed fixture, disables startup and manual refresh and
-channel resolution, sets image sources to empty so no media or image
-requests occur, and loads a fake player that never loads media. It never
-writes user state.
-`--automation` rejects `--database` and exits nonzero with
-`--automation cannot be combined with --database: refusing to risk a user database.`
-This protects a user database from fixture seeding.
-
-## 2. Quick Commands
+Build first, then use one of the automation modes:
 
 ```sh
 ./bin/build
 ./build/yt-client --automation
+./build/yt-client --automation-sequence /tmp/sil-48.json
+./build/yt-client --automation-sequence /tmp/sil-48.json --automation-ui simple
+./build/yt-client --automation --automation-ui simple
 QT_QPA_PLATFORM=offscreen ./build/yt-client --automation --quit-after-startup
-./bin/test
-QMAKE="$(command -v qmake6 || command -v qmake)"
-mkdir -p build-tests/navigation_tests
-(cd build-tests/navigation_tests && "$QMAKE" ../../tests/navigation_tests.pro && make -j"$(nproc 2>/dev/null || echo 1)" && QT_QPA_PLATFORM=offscreen ./navigation_tests fullUiNavigation)
-QT_QPA_PLATFORM=offscreen ./build-tests/navigation_tests/navigation_tests simpleUiNavigation
 ```
 
-The first two commands build and launch the interactive automation app.
-The offscreen command is a smoke check that opens no video. `./bin/test`
-rebuilds the app, runs all five QtTest suites offscreen, then runs a
-normal smoke launch and an automation smoke launch. The remaining
-commands build and run one navigation test function at a time.
+All automation modes use a disposable temporary SQLite database and a
+temporary settings path, seed the fixed fixture below, disable startup
+and manual refresh and channel resolution, set image sources to empty
+so no media or image requests occur, load a fake player that never
+loads media, and ignore saved settings and `YT_CLIENT_API_KEY`. They
+never write user state. A normal launch without these flags opens the
+user database, reads user settings, and can consume YouTube quota, so
+do not use a normal launch for agent testing.
 
-## 3. Automation Fixture
+Flag rules:
 
-Seeded by `src/automationfixture.cpp` on every automation launch.
-Category IDs 1 and 2 are valid only on a fresh database because they
-come from sequential `addCategory` calls. Titles are `Automation
-Video 1` through `Automation Video 5`, published from fixed
-`2026-01-01T12:00:00Z` in descending one-minute intervals, duration
-600 seconds, empty avatar URLs.
+* `--automation` is interactive automation. It opens the app and waits
+  for manual input.
+* `--automation-sequence <path>` runs a timed JSON sequence and exits
+  after the last action or capture. It implies `--automation`.
+* `--automation-ui full|simple` selects the initial UI. Default is
+  `full`. It may be used with `--automation-sequence` or with plain
+  `--automation`. It requires an automation mode and is rejected
+  otherwise.
+* `--database` is forbidden in any automation mode. The launch exits
+  nonzero before creating windows. This protects a user database from
+  fixture seeding.
+* `--automation-sequence` forbids `--quit-after-startup`.
+* `--automation --quit-after-startup` is retained as a startup smoke
+  check. It opens no video.
+
+The sequence input file is caller-owned and is never deleted by the
+app. It may be any readable path; a temporary `/tmp` JSON file is
+recommended.
+
+## 2. Sequence Runner
+
+The sequence file is a JSON array of events. Example:
+
+```json
+[
+  {"type": "click", "target": "historyNavigationButton", "atMs": 500},
+  {"type": "screenshot", "filename": "sil-48-history.png", "atMs": 1200}
+]
+```
+
+Validation and timing:
+
+* The whole file is structurally validated before any event runs.
+  Unknown fields are rejected.
+* `atMs` is required on every event. It must be a nonnegative integer
+  not larger than 2147483647. Events must be sorted in nondecreasing
+  `atMs` order. Ties preserve array order. Diagnostics use zero-based
+  event indices.
+* Startup waits for the first window to become ready, up to 5 seconds.
+  When ready, the timeline zero starts. An empty array `[]` opens the
+  fixture, waits for startup ready, then exits success.
+* Later times are best-effort absolute milliseconds from timeline zero.
+  They are not added relative delays. Expensive rendering can make an
+  event late; order is still preserved.
+* Timed actions do not auto-wait for missing UI. A click or key event
+  against a missing, hidden, disabled, or ambiguous target fails with
+  an event index and time diagnostic and exits nonzero. Agents must add
+  explicit delays for Loader swaps, root swaps, and rendering. Do not
+  assume a fixed render duration; allow generous gaps after navigation,
+  history, Watch Next, player, settings, and Simple UI changes.
+* The script exits after the last action or capture. Any failure,
+  including an early quit before the rest of the sequence could run,
+  exits nonzero.
+
+## 3. Events
+
+There are four event types: `key_press`, `key_release`, `click`, and
+`screenshot`.
+
+### 3.1 Key press and release
+
+```json
+[
+  {"type": "key_press", "key": "H", "atMs": 200},
+  {"type": "key_release", "key": "H", "atMs": 300}
+]
+```
+
+* `key` is required and case-insensitive. Single characters accept
+  letters, digits, and printable ASCII: `A` and `a` both type lowercase
+  `a` without Shift. Named keys are `Escape`, `Space`, `Return`,
+  `Enter`, `Tab`, `Backspace`, `Delete`, `Left`, `Right`, `Up`, `Down`,
+  `F1` through `F35`, `Ctrl` (also `Control`), `Shift`, `Alt`, and
+  `Meta`; `Insert`, `Home`, `End`, `PageUp`, and `PageDown` are also
+  accepted.
+* Keys are logical Qt key events, not physical positions, layouts,
+  scancodes, or compositor shortcuts. Hold Shift with separate
+  press/release events for uppercase letters and US shifted punctuation
+  (`Shift` plus `1` types `!`). There are no chords and no `modifiers`
+  field. Shift-hold example, types `H`:
+
+```json
+[
+  {"type": "key_press", "key": "Shift", "atMs": 500},
+  {"type": "key_press", "key": "h", "atMs": 550},
+  {"type": "key_release", "key": "h", "atMs": 600},
+  {"type": "key_release", "key": "Shift", "atMs": 650}
+]
+```
+* There is no implicit autorepeat. Each press needs its release.
+* A duplicate press without release, or a release without a matching
+  press, is invalid. Keys still held at the end of the run are released
+  during completion or failure handling.
+* Optional `window` selects `appWindow` or `settingsWindow`. Default is
+  the active visible OmaTube window: the modal settings window when
+  open, otherwise the main window. A release is delivered to the
+  original press recipient, even if settings focus changed windows in
+  between.
+
+### 3.2 Click
+
+```json
+[
+  {"type": "click", "target": "settingsAppearanceTab", "window": "settingsWindow", "button": "left", "atMs": 1000}
+]
+```
+
+* Target is either `target` with an `objectName`, or numeric logical
+  window-local `x` and `y` coordinates. The two forms are exclusive.
+* `target` clicks the item center. The target must be visible, enabled,
+  onscreen, and unique at runtime. There is no automatic scrolling and
+  no direct QML method activation.
+* Optional `window` selects `appWindow` or `settingsWindow`. Default is
+  the active visible window as for keys. A click cannot pass through
+  the modal settings window to the main window.
+* Optional `button` is `left`, `middle`, or `right`. Default is `left`.
+* Targets are re-resolved at runtime after Loader and root swaps, so a
+  recorded pointer is never reused. There is no drag or wheel event.
+
+### 3.3 Screenshot
+
+```json
+[
+  {"type": "screenshot", "filename": "sil-48-settings.png", "window": "settingsWindow", "atMs": 1400}
+]
+```
+
+* `filename` is required and must be a PNG basename written directly to
+  `/tmp`, for example `sil-48-settings.png`. The `.png` extension check
+  is case-insensitive but lowercase is recommended. Directories,
+  traversal, symlinks, and overwrites are rejected. Files are created
+  with `QFile::NewOnly` semantics and filenames must be unique per run.
+  The runner refuses to overwrite, so callers must choose UNUSED names
+  across reruns, not just within one sequence.
+* Optional `window` selects `appWindow` or `settingsWindow`. Default is
+  the active visible window.
+* Screenshots capture the chosen Qt Quick window contents only. They do
+  not capture other windows, the desktop, the cursor, Hyprland
+  compositor blur, or window decorations. Device pixel ratio may scale
+  the image beyond logical coordinates.
+* The runner prints each capture path. In `--automation-sequence` mode
+  all log output goes explicitly to stderr, so no `QT_FORCE_STDERR_LOGGING`
+  is needed.
+* Screenshots are app-local. There are no `grim` or desktop
+  dependencies and no compositor shortcuts. The app links the QtTest
+  module for this runner. A screenshot may target `appWindow` explicitly
+  while the modal settings window is open; input events still cannot
+  bypass the modal.
+
+## 4. Automation Fixture
+
+Seeded on every automation launch. Category IDs 1 and 2 are valid only
+on a fresh database because they come from sequential `addCategory`
+calls. Titles are `Automation Video 1` through `Automation Video 5`,
+published from fixed `2026-01-01T12:00:00Z` in descending one-minute
+intervals, duration 600 seconds, empty avatar URLs.
 
 | Entity | IDs | Mapping and notes |
 |---|---|---|
@@ -62,12 +195,15 @@ Video 1` through `Automation Video 5`, published from fixed
 | Watch Next | `AUTO0000002`, `AUTO0000004` | Committed queue in that order, seeded via `addToWatchNext` |
 | Live | none | All `isBroadcast false`, live model stays empty |
 
-## 4. Selectors
+Network access and real playback stay disabled in automation. The fake
+player never loads media. There is no live fixture, so live cards are
+absent by design.
 
-Use `objectName` when walking the Qt or QML item tree. Use
-`Accessible.name`, `Accessible.role`, and `Accessible.onPressAction`
-only for accessibility aware harnesses. Both systems are stable but
-serve different harnesses.
+## 5. Selectors
+
+Use `objectName` values as `target` names in click events or as window
+names. `Accessible.name` values are informational for accessibility
+checks.
 
 Shared selectors, present in full and Simple UI:
 
@@ -95,21 +231,22 @@ Shared selectors, present in full and Simple UI:
 | `settingsApiTab` | `Settings data API tab` | Tab index 4 |
 | `settingsPlaybackTab` | `Settings playback tab` | Tab index 5 |
 | `settingsCloseButton` | `Close settings` | Hides settings window |
+| `simpleUiCheckBox` | none | Checkbox labeled `Use simple UI` in the appearance tab of both UIs |
 
 Dynamic selectors, created by Repeaters:
 
 | Pattern | Accessible name pattern | Notes |
 |---|---|---|
 | `categoryButton_<id>` | `Category <id> <name>` | Example: `categoryButton_1` |
-| `feedVideo_<videoId>` | `Video <videoId> <title>` | Example: `feedVideo_AUTO0000001`, action calls `App.openVideo`, right-click calls `App.addToWatchNext` |
-| `historyVideo_<videoId>` | `History video <videoId> <title>` | Example: `historyVideo_AUTO0000001`, action selects video |
-| `watchNextVideo_<videoId>` | `Watch Next video <videoId> <title>` | Example: `watchNextVideo_AUTO0000002`, action selects video |
-| `feedVideoOutline_<videoId>` | none | Transparent topmost feed card border overlay, `z:1`, hover width 2 opaque accent |
-| `historyVideoOutline_<videoId>` | none | Transparent topmost history card border overlay, `z:1`, hover width 2 opaque accent |
-| `watchNextVideoOutline_<videoId>` | none | Transparent topmost Watch Next card border overlay, `z:1`, hover width 2 opaque accent |
-| `watchNextUp_<videoId>` | `Move up <videoId>` | Calls `App.moveWatchNext` one slot earlier |
-| `watchNextDown_<videoId>` | `Move down <videoId>` | Calls `App.moveWatchNext` one slot later |
-| `watchNextRemove_<videoId>` | `Remove from Watch Next <videoId>` | Calls `App.removeFromWatchNext` |
+| `feedVideo_<videoId>` | `Video <videoId> <title>` | Example: `feedVideo_AUTO0000001`, opens the player |
+| `historyVideo_<videoId>` | `History video <videoId> <title>` | Example: `historyVideo_AUTO0000001`, selects video |
+| `watchNextVideo_<videoId>` | `Watch Next video <videoId> <title>` | Example: `watchNextVideo_AUTO0000002`, selects video |
+| `feedVideoOutline_<videoId>` | none | Transparent topmost feed card border overlay, `z:1` |
+| `historyVideoOutline_<videoId>` | none | Transparent topmost history card border overlay, `z:1` |
+| `watchNextVideoOutline_<videoId>` | none | Transparent topmost Watch Next card border overlay, `z:1` |
+| `watchNextUp_<videoId>` | `Move up <videoId>` | Moves queue entry one slot earlier |
+| `watchNextDown_<videoId>` | `Move down <videoId>` | Moves queue entry one slot later |
+| `watchNextRemove_<videoId>` | `Remove from Watch Next <videoId>` | Removes queue entry |
 | `liveVideo_<videoId>` | `Live video <videoId> <channel> <title>` | No fixture entry, expect absent |
 
 Full UI only selectors:
@@ -134,109 +271,116 @@ Simple UI keyboard routes, no navigation buttons:
 | `j`, `k` | Scrolls feed, history, or Watch Next by 120 pixels |
 | `q` | Quits application |
 
-## 5. Harness Rules
+`simpleUiCheckBox` causes a root window replacement when toggled. The
+old `appWindow` is destroyed and a new one is created, so every cached
+target becomes invalid. After clicking the checkbox, allow an explicit
+delay and then use fresh lookups against the new root. Do not reuse
+earlier targets across the swap.
 
-* Repeater delegates are JS owned. `QObject::findChild` cannot see them. Walk `QQuickItem::childItems` recursively from the window content item.
-* `historyLoader`, `playerLoader`, and `playerBackendLoader` are lazy. Use `QTRY_VERIFY` or `QTRY_COMPARE` or an equivalent condition wait after every action. Never use a fixed sleep as proof of absence.
-* Settings is a separate `QQuickWindow` named `settingsWindow`. Find it through engine root objects or top level windows, not under `appWindow`.
-* Map clicks to window coordinates. Take item center, call `mapToScene`, then map from scene through the target window content item before `QTest::mouseClick`.
-* `AppController::simpleUiChanged` replaces the root window. `src/main.cpp` loads the other visible QML root, copies window state, then deletes the old window on the next event loop turn. Reacquire window, root item, and all item pointers after the swap.
-* Never keep item or window pointers across Loader unload, model reset, or root swap. Reacquire after `historyOpen`, `watchNextOpen`, `playerOpen`, category, or Simple UI changes.
+## 6. Runnable Examples
 
-## 6. C++ Snippets
+Save each example as a `/tmp` JSON file and run it with
+`./build/yt-client --automation-sequence <file>`, adding
+`--automation-ui simple` for the Simple UI variants.
 
-Recursive lookup, adapted from `tests/navigation_test.cpp`:
-```cpp
-QList<QQuickItem *> findVisualChildrenByName(QQuickItem *parent, const QString &name)
-{
-    QList<QQuickItem *> matches;
-    if (!parent)
-        return matches;
-    if (parent->objectName() == name)
-        matches.append(parent);
-    for (QQuickItem *child : parent->childItems())
-        matches.append(findVisualChildrenByName(child, name));
-    return matches;
-}
-```
-Coordinate mapping for clicks:
-```cpp
-void clickItem(QQuickItem *item)
-{
-    QVERIFY(item != nullptr);
-    QQuickWindow *window = item->window();
-    QVERIFY(window != nullptr);
-    const QPointF sceneCenter =
-        item->mapToScene(QPointF(item->width() / 2.0, item->height() / 2.0));
-    const QPoint target = window->contentItem()->mapFromScene(sceneCenter).toPoint();
-    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, target);
-}
+Feed to player and back (full UI):
+
+```json
+[
+  {"type": "click", "target": "feedVideo_AUTO0000001", "atMs": 500},
+  {"type": "screenshot", "filename": "sil-48-player.png", "atMs": 1500},
+  {"type": "click", "target": "playerBackButton", "atMs": 2000},
+  {"type": "screenshot", "filename": "sil-48-feed.png", "atMs": 3000}
+]
 ```
 
-## 7. Route Recipes
+Category filter (full UI):
 
-Feed to player and back: wait for `feedVideo_AUTO0000001`, click it,
-expect `playerOpen` true plus `playerPage`, `playerBackendLoader`, and
-`automationPlayer`, click `playerBackButton`, expect `playerOpen` false.
-Category filter in full UI: click `categoryButton_2`, expect
-`selectedCategoryId == 2`, expect `feedVideo_AUTO0000004` and
-`feedVideo_AUTO0000005` present, expect `feedVideo_AUTO0000001` through
-`feedVideo_AUTO0000003` absent with a condition wait, click
-`categoryButton_2` again to clear the filter if needed.
-History in full UI: click `historyNavigationButton`, find
-`historyLoader`, then wait for its `historyPage` item to load. Expect
-`historyVideo_AUTO0000001` under `historyPage`.
-History in Simple UI: send `H`, expect window property `historyOpen`
-true, find `historyLoader`, then wait for its `historyPage` item and
-`historyVideo_AUTO0000001`. Click the history row, expect `playerOpen`
-true and `automationPlayer`, click `playerBackButton`, expect
-`playerOpen` false, then reacquire the root item before the next step.
-Watch Next in full UI: click `watchNextNavigationButton`, find
-`watchNextLoader`, then wait for its `watchNextPage` item to load. Expect
-`watchNextVideo_AUTO0000002` and `watchNextVideo_AUTO0000004` under
-`watchNextPage`, click `feedNavigationButton` to return to the feed.
-Watch Next in Simple UI: send `W`, expect window property
-`watchNextOpen` true, find `watchNextLoader`, then wait for its
-`watchNextPage` item and `watchNextVideo_AUTO0000002`. Click the queue
-row, expect `playerOpen` true and `automationPlayer`, click
-`playerBackButton`, expect `playerOpen` false, then reacquire the root
-item before the next step. Never keep item or window pointers across
-`historyOpen`, `watchNextOpen`, `playerOpen`, category, or Simple UI
-changes.
-Settings tabs in both UIs: open settings with the navigation button or
-`S`, find the separate `settingsWindow` and wait for exposure, use its
-content item as the new search root, expect `settingsTabs` and all six
-tabs above, click each tab and expect `currentIndex` 0 through 5,
-close with `settingsCloseButton` or `Escape`, expect hidden.
-The executable full UI test clicks all six tabs. The Simple UI test
-checks all six selectors and clicks `settingsPlaybackTab`.
-Switching Simple UI: open settings, go to `settingsAppearanceTab`,
-then use the checkbox labeled `Use simple UI`. It has no stable
-`objectName`, so QtTest loads Simple UI by setting
-`appearance/simpleUi=true` before controller initialization instead.
-After an interactive toggle, wait for `simpleUiChanged`, find the new
-`appWindow`, discard all old window and item pointers, and reacquire
-from the new root.
+```json
+[
+  {"type": "click", "target": "categoryButton_2", "atMs": 500},
+  {"type": "screenshot", "filename": "sil-48-category.png", "atMs": 1500}
+]
+```
 
-## 8. Diagnostics
+History and Watch Next (full UI):
 
-Inspect `automationMode` (must be true), `playerOpen`,
-`selectedCategoryId`, `refreshing`, `historyLoading`,
+```json
+[
+  {"type": "click", "target": "historyNavigationButton", "atMs": 500},
+  {"type": "screenshot", "filename": "sil-48-history.png", "atMs": 1500},
+  {"type": "click", "target": "feedNavigationButton", "atMs": 2000},
+  {"type": "click", "target": "watchNextNavigationButton", "atMs": 3000},
+  {"type": "screenshot", "filename": "sil-48-watchnext.png", "atMs": 4000}
+]
+```
+
+History and Watch Next (Simple UI, same routes are valid in both UIs
+when navigation buttons are replaced by keys):
+
+```json
+[
+  {"type": "key_press", "key": "H", "atMs": 500},
+  {"type": "key_release", "key": "H", "atMs": 550},
+  {"type": "screenshot", "filename": "sil-48-simple-history.png", "atMs": 1500},
+  {"type": "key_press", "key": "Escape", "atMs": 2000},
+  {"type": "key_release", "key": "Escape", "atMs": 2050},
+  {"type": "key_press", "key": "W", "atMs": 2500},
+  {"type": "key_release", "key": "W", "atMs": 2550},
+  {"type": "screenshot", "filename": "sil-48-simple-watchnext.png", "atMs": 3500}
+]
+```
+
+Settings tabs and screenshot (both UIs; `S` opens settings in full
+and Simple UI):
+
+```json
+[
+  {"type": "key_press", "key": "S", "atMs": 500},
+  {"type": "key_release", "key": "S", "atMs": 550},
+  {"type": "click", "target": "settingsAppearanceTab", "window": "settingsWindow", "atMs": 1500},
+  {"type": "screenshot", "filename": "sil-48-settings.png", "window": "settingsWindow", "atMs": 2200},
+  {"type": "click", "target": "settingsCloseButton", "window": "settingsWindow", "atMs": 2700}
+]
+```
+
+Switching Simple UI from the appearance tab (both UIs; `S` valid in
+both, `settingsNavigationButton` is full UI only):
+
+```json
+[
+  {"type": "key_press", "key": "S", "atMs": 500},
+  {"type": "key_release", "key": "S", "atMs": 550},
+  {"type": "click", "target": "settingsAppearanceTab", "window": "settingsWindow", "atMs": 1500},
+  {"type": "click", "target": "simpleUiCheckBox", "window": "settingsWindow", "atMs": 2000},
+  {"type": "screenshot", "filename": "sil-48-after-swap.png", "atMs": 4000}
+]
+```
+
+The long gap after `simpleUiCheckBox` is intentional. The root window
+is replaced, so allow time for the swap and then treat all later
+targets as fresh lookups.
+
+## 7. Diagnostics
+
+Useful state for failure reports: `automationMode` (must be true),
+`playerOpen`, `selectedCategoryId`, `refreshing`, `historyLoading`,
 `statusMessage`, and `simpleUi`, plus QML window property
-`historyOpen` for history visibility. Offscreen `raise()` from
-settings `open()` can warn; this is expected and not a failure. QML
-engine errors such as `objectCreationFailed` are not expected and are
-real defects. `R` is disabled. A direct `App.refresh()` call returns
-without network work and sets status
+`historyOpen` for history visibility. Offscreen `raise()` from settings
+`open()` can warn; this is expected and not a failure. QML engine
+errors such as `objectCreationFailed` are not expected and are real
+defects. `R` is disabled. A direct `App.refresh()` call returns without
+network work and sets status
 `Automation mode: refresh is disabled.` Channel add sets error
 `Automation mode: adding channels is disabled.`
-`--automation --database <path>` exits nonzero before creating windows.
+`--automation --database <path>` and any `--automation-sequence` run
+with `--database` exit nonzero before creating windows.
 
-## 9. Unsupported Scope
+## 8. Unsupported Scope
 
 No live fixture exists, so live cards are absent by design. Drag
 reorder, native file dialogs, and fullscreen behavior stay outside the
-navigation suite. Real playback and network access are disabled; the
-fake player never loads media. The executable reference is
-`tests/navigation_test.cpp`; copy its waits and lookup logic instead
-of inventing new selectors.
+automation suite. Coordinate clicks use logical window-local positions,
+do not auto-scroll, and depend on window layout; they can reach targets
+without `objectName`. The regression reference is
+`tests/automation_test.cpp`; see also `./bin/test` for the full suite.

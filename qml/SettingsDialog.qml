@@ -956,6 +956,7 @@ ApplicationWindow {
 
                     SquareCheckBox {
                         id: simpleUiCheck
+                        objectName: "simpleUiCheckBox"
                         text: qsTr("Use simple UI")
                         checked: App.simpleUi
 

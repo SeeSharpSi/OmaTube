@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 #include "automationfixture.h"
+#include "automationrunner.h"
 #include "iframeplaybacksession.h"
 #include "spaceholdhandler.h"
 
@@ -9,6 +10,7 @@
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QFile>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QQmlApplicationEngine>
@@ -23,6 +25,8 @@
 #include <QtQml/qqml.h>
 
 #include <clocale>
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef Q_OS_LINUX
 #include <QtWebEngineQuick/QtWebEngineQuick>
@@ -31,6 +35,16 @@
 #ifdef Q_OS_MACOS
 #include "macvideoplayer.h"
 #endif
+
+namespace {
+void automationMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    fprintf(stderr, "%s\n", qPrintable(qFormatLogMessage(type, context, message)));
+    fflush(stderr);
+    if (type == QtFatalMsg)
+        std::abort();
+}
+}
 
 int main(int argc, char *argv[])
 {
@@ -70,13 +84,85 @@ int main(int argc, char *argv[])
                        "disposable database and settings, seed a fixed fixture, "
                        "and disable network refresh."));
     parser.addOption(automationOption);
+    QCommandLineOption sequenceOption(
+        QStringLiteral("automation-sequence"),
+        QStringLiteral("Replay the JSON array sequence in <file> "
+                       "(key_press/key_release/click/screenshot steps with atMs; "
+                       "screenshots to /tmp PNG) and exit automatically. "
+                       "The file is only read, never modified."),
+        QStringLiteral("file"));
+    parser.addOption(sequenceOption);
+    QCommandLineOption automationUiOption(
+        QStringLiteral("automation-ui"),
+        QStringLiteral("Select the initial UI for automation modes: <full|simple>. "
+                       "Defaults to full, independent of saved settings. Requires "
+                       "--automation or --automation-sequence."),
+        QStringLiteral("full|simple"));
+    parser.addOption(automationUiOption);
     parser.process(app);
 
     const bool smokeTest = parser.isSet(smokeOption);
-    const bool automation = parser.isSet(automationOption);
-    if (automation && parser.isSet(databaseOption)) {
-        qCritical("--automation cannot be combined with --database: refusing to risk a user database.");
+    const bool automationFlag = parser.isSet(automationOption);
+    const bool hasSequence = parser.isSet(sequenceOption);
+    const QString sequencePath = parser.value(sequenceOption);
+    const bool hasAutomationUi = parser.isSet(automationUiOption);
+    const QString automationUiValue = parser.value(automationUiOption);
+    if (hasSequence)
+        qInstallMessageHandler(automationMessageHandler);
+    if (hasSequence && sequencePath.trimmed().isEmpty()) {
+        qCritical("--automation-sequence requires a file path.");
         return EXIT_FAILURE;
+    }
+    if (hasAutomationUi && automationUiValue.trimmed().isEmpty()) {
+        qCritical("--automation-ui requires 'full' or 'simple'.");
+        return EXIT_FAILURE;
+    }
+    const bool automation = automationFlag || hasSequence;
+    if (automation && parser.isSet(databaseOption)) {
+        if (hasSequence) {
+            qCritical("--automation-sequence cannot be combined with --database: refusing to risk a user database.");
+        } else {
+            qCritical("--automation cannot be combined with --database: refusing to risk a user database.");
+        }
+        return EXIT_FAILURE;
+    }
+    if (hasSequence && smokeTest) {
+        qCritical("--automation-sequence cannot be combined with --quit-after-startup.");
+        return EXIT_FAILURE;
+    }
+    if (hasAutomationUi && !automation) {
+        qCritical("--automation-ui requires --automation or --automation-sequence.");
+        return EXIT_FAILURE;
+    }
+    if (hasAutomationUi && automationUiValue != QStringLiteral("full")
+        && automationUiValue != QStringLiteral("simple")) {
+        qCritical("--automation-ui must be 'full' or 'simple'.");
+        return EXIT_FAILURE;
+    }
+    const bool simpleUiRequested = hasAutomationUi
+        && automationUiValue == QStringLiteral("simple");
+    AutomationRunner sequenceRunner;
+    bool sequenceFinished = false;
+    bool sequenceSuccess = false;
+    if (hasSequence) {
+        QFile sequenceFile(sequencePath);
+        if (!sequenceFile.open(QIODevice::ReadOnly)) {
+            qCritical("Could not open automation sequence file %s: %s",
+                qPrintable(sequencePath), qPrintable(sequenceFile.errorString()));
+            return EXIT_FAILURE;
+        }
+        const QByteArray sequenceData = sequenceFile.readAll();
+        if (sequenceFile.error() != QFileDevice::NoError) {
+            qCritical("Could not read automation sequence file %s: %s",
+                qPrintable(sequencePath), qPrintable(sequenceFile.errorString()));
+            return EXIT_FAILURE;
+        }
+        sequenceFile.close();
+        QString sequenceError;
+        if (!sequenceRunner.loadSequence(sequenceData, &sequenceError)) {
+            qCritical("Could not load automation sequence: %s", qPrintable(sequenceError));
+            return EXIT_FAILURE;
+        }
     }
     if (parser.isSet(verboseOption)) {
         QLoggingCategory::setFilterRules(QStringLiteral("omatube.*.debug=true"));
@@ -101,7 +187,21 @@ int main(int argc, char *argv[])
             QSettings::IniFormat,
             QSettings::UserScope,
             automationSettingsDir->path());
+        QSettings::setPath(
+            QSettings::IniFormat,
+            QSettings::SystemScope,
+            automationSettingsDir->path());
         databasePath = automationDataDir->filePath(QStringLiteral("automation.sqlite3"));
+        {
+            QSettings seedSettings;
+            seedSettings.setValue(
+                QStringLiteral("appearance/simpleUi"), simpleUiRequested);
+            seedSettings.sync();
+            if (seedSettings.status() != QSettings::NoError) {
+                qCritical("Could not seed automation settings.");
+                return EXIT_FAILURE;
+            }
+        }
         QString fixtureError;
         if (!AutomationFixture::seed(databasePath, &fixtureError)) {
             qCritical("Could not seed automation database: %s", qPrintable(fixtureError));
@@ -172,8 +272,35 @@ int main(int argc, char *argv[])
             });
         });
 
+    if (hasSequence) {
+        if (engine.rootObjects().isEmpty() || !currentWindow) {
+            qCritical("Could not create initial window for automation sequence.");
+            return EXIT_FAILURE;
+        }
+        QObject::connect(
+            &sequenceRunner,
+            &AutomationRunner::finished,
+            &app,
+            [&](bool success, const QString &error) {
+                sequenceFinished = true;
+                sequenceSuccess = success;
+                if (!success)
+                    qCritical("Automation sequence failed: %s", qPrintable(error));
+                QCoreApplication::exit(success ? EXIT_SUCCESS : EXIT_FAILURE);
+            });
+        QTimer::singleShot(0, &sequenceRunner, &AutomationRunner::start);
+    }
+
     if (smokeTest)
         QTimer::singleShot(100, &app, &QCoreApplication::quit);
 
-    return app.exec();
+    const int execResult = app.exec();
+    if (execResult != EXIT_SUCCESS)
+        return execResult;
+    if (hasSequence && (!sequenceFinished || !sequenceSuccess)) {
+        if (!sequenceFinished)
+            qCritical("Automation sequence did not finish before exit.");
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

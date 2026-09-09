@@ -901,6 +901,7 @@ ApplicationWindow {
 
                     SimpleSquareCheckBox {
                         id: simpleUiCheck
+                        objectName: "simpleUiCheckBox"
                         text: qsTr("Use simple UI")
                         checked: App.simpleUi
                         onToggled: {

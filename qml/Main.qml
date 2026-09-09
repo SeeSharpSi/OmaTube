@@ -736,6 +736,8 @@ ApplicationWindow {
                     anchors.left: parent.left
                     anchors.right: parent.right
 
+                    Item { width: 1; height: 12 }
+
                     GridLayout {
                         id: feedGrid
                         readonly property real cardWidth: Math.max(0,

@@ -83,6 +83,14 @@ public:
         callback(videos, {});
     }
 
+    void enrichVideos(const Channel &, const QList<Video> &, DurationUpdatesCallback callback) override
+    {
+        if (deferEnrichment)
+            pendingEnrichments.append(std::move(callback));
+        else
+            callback({}, {});
+    }
+
     void fetchLiveChannel(const Channel &channel, LiveCallback callback) override
     {
         if (failLive) {
@@ -105,6 +113,8 @@ public:
     }
 
     bool failLive = false;
+    bool deferEnrichment = false;
+    QList<DurationUpdatesCallback> pendingEnrichments;
     int resolveCount = 0;
     int uploadPageRequestCount = 0;
     int videoDetailRequestCount = 0;
@@ -129,6 +139,9 @@ private slots:
     void refreshServiceStoresFeedAndLiveSnapshot();
     void refreshServiceReportsIncompleteLiveStatus();
     void refreshServiceStoresSourceVideosImmediately();
+    void refreshServiceDefersDurationEnrichment();
+    void refreshServiceDefersDurationEnrichmentEdgeCases_data();
+    void refreshServiceDefersDurationEnrichmentEdgeCases();
     void refreshServiceKeepsLiveStateOnFailure();
     void refreshServiceRefreshesStaleChannelMetadata();
     void refreshServiceInitializesChannelHistoryState();
@@ -326,6 +339,108 @@ void YouTubeTest::refreshServiceStoresSourceVideosImmediately()
     QVERIFY(feedSpy.count() >= 1);
     const QList<ChannelHistoryState> states = repository.channelHistoryStates(&error);
     QCOMPARE(states.first().nextPageToken, QStringLiteral("ytdlp:2"));
+}
+
+void YouTubeTest::refreshServiceDefersDurationEnrichment()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const Video source{QStringLiteral("source-video"), channel.id, channel.title,
+                       QStringLiteral("Source video"), now, false, QStringLiteral("none"), now, -1};
+    FakeYouTubeClient client;
+    client.deferEnrichment = true;
+    client.sourceVideosByChannel.insert(channel.id, {source});
+    RefreshService service(&repository, &client);
+    QSignalSpy feedSpy(&service, &RefreshService::feedChanged);
+    QSignalSpy finishedSpy(&service, &RefreshService::refreshFinished);
+    service.refresh();
+    QCOMPARE(client.pendingEnrichments.size(), 1);
+    QCOMPARE(finishedSpy.count(), 1);
+    QVERIFY(!service.refreshing());
+    QCOMPARE(repository.feed(std::nullopt, 180).size(), 1);
+    const auto provisional = repository.video(source.id, &error);
+    QVERIFY(provisional.has_value());
+    QCOMPARE(provisional->durationSeconds, -1);
+    QVERIFY(feedSpy.count() >= 1);
+
+    Video newer = *provisional;
+    newer.title = QStringLiteral("Newer title");
+    QVERIFY(repository.upsertVideos({newer}, &error));
+    feedSpy.clear();
+    finishedSpy.clear();
+    const QDateTime fetchedAt = now.addSecs(30);
+    client.pendingEnrichments.takeFirst()({{source.id, 600, fetchedAt}}, {});
+    const auto stored = repository.video(source.id, &error);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->durationSeconds, 600);
+    QCOMPARE(stored->title, newer.title);
+    QCOMPARE(stored->fetchedAt, fetchedAt);
+    QCOMPARE(feedSpy.count(), 1);
+    QCOMPARE(finishedSpy.count(), 0);
+    QVERIFY(!service.refreshing());
+}
+
+void YouTubeTest::refreshServiceDefersDurationEnrichmentEdgeCases_data()
+{
+    QTest::addColumn<QString>("mode");
+    QTest::newRow("callbackError") << QStringLiteral("error");
+    QTest::newRow("pruned") << QStringLiteral("pruned");
+    QTest::newRow("channelDeleted") << QStringLiteral("channelDeleted");
+    QTest::newRow("invalidPatch") << QStringLiteral("invalidPatch");
+    QTest::newRow("emptyResult") << QStringLiteral("emptyResult");
+}
+
+void YouTubeTest::refreshServiceDefersDurationEnrichmentEdgeCases()
+{
+    QFETCH(QString, mode);
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const Video source{QStringLiteral("source-video"), channel.id, channel.title,
+                       QStringLiteral("Source video"), now, false, QStringLiteral("none"), now, -1};
+    FakeYouTubeClient client;
+    client.deferEnrichment = true;
+    client.sourceVideosByChannel.insert(channel.id, {source});
+    RefreshService service(&repository, &client);
+    QSignalSpy feedSpy(&service, &RefreshService::feedChanged);
+    QSignalSpy finishedSpy(&service, &RefreshService::refreshFinished);
+    service.refresh();
+    QCOMPARE(client.pendingEnrichments.size(), 1);
+    QCOMPARE(finishedSpy.count(), 1);
+    QVERIFY(finishedSpy.at(0).at(2).toString().isEmpty());
+    feedSpy.clear();
+    finishedSpy.clear();
+
+    auto complete = client.pendingEnrichments.takeFirst();
+    if (mode == QStringLiteral("pruned") || mode == QStringLiteral("channelDeleted")) {
+        if (mode == QStringLiteral("pruned"))
+            QVERIFY(repository.pruneVideoMetadataToLimit(1, &error));
+        else
+            QVERIFY(repository.removeChannel(channel.id, &error));
+        QVERIFY(!repository.video(source.id, &error).has_value());
+        complete({{source.id, 600, now}}, {});
+        QVERIFY(!repository.video(source.id, &error).has_value());
+    } else {
+        if (mode == QStringLiteral("error"))
+            complete({}, QStringLiteral("Enrichment failed."));
+        else if (mode == QStringLiteral("invalidPatch"))
+            complete({{source.id, -5, now}}, {});
+        else
+            complete({}, {});
+        const auto stored = repository.video(source.id, &error);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->durationSeconds, -1);
+    }
+    QCOMPARE(feedSpy.count(), 0);
+    QCOMPARE(finishedSpy.count(), 0);
+    QVERIFY(!service.refreshing());
 }
 
 void YouTubeTest::refreshServiceKeepsLiveStateOnFailure()

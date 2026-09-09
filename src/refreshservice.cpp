@@ -416,11 +416,11 @@ void RefreshService::storeSourceVideos(const Channel &channel, const QList<Video
     m_youTubeClient->enrichVideos(
         channel,
         videos,
-        [this](QList<Video> enriched, QString enrichmentError) {
-            if (!enrichmentError.isEmpty() || enriched.isEmpty())
+        [this](QList<VideoDurationUpdate> updates, QString enrichmentError) {
+            if (!enrichmentError.isEmpty() || updates.isEmpty())
                 return;
             QString databaseError;
-            if (m_repository->upsertVideos(enriched, &databaseError))
+            if (m_repository->updateVideoDurations(updates, &databaseError) > 0)
                 emit feedChanged();
         });
 }

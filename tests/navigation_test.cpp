@@ -11,6 +11,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -25,6 +26,8 @@ private slots:
     void init();
     void fullUiNavigation();
     void simpleUiNavigation();
+    void exclusiveRoutes_data();
+    void exclusiveRoutes();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -585,6 +588,123 @@ void NavigationTest::simpleUiNavigation()
 
     QVERIFY(!controller->refreshing());
     QVERIFY(!controller->historyLoading());
+    QVERIFY(controller->automationMode());
+}
+
+void NavigationTest::exclusiveRoutes_data()
+{
+    QTest::addColumn<bool>("simpleUi");
+    QTest::newRow("fullUi") << false;
+    QTest::newRow("simpleUi") << true;
+}
+
+void NavigationTest::exclusiveRoutes()
+{
+    QFETCH(bool, simpleUi);
+    QSettings settings;
+    settings.setValue(QStringLiteral("appearance/simpleUi"), simpleUi);
+    settings.sync();
+    QTemporaryDir databaseDirectory;
+    QVERIFY(databaseDirectory.isValid());
+    const QString databasePath = databaseDirectory.filePath(QStringLiteral("navigation.sqlite3"));
+    QString error;
+    QVERIFY2(AutomationFixture::seed(databasePath, &error), qPrintable(error));
+    auto controller = AppController::createApplication(databasePath, true);
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QVERIFY(controller->automationMode());
+    QCOMPARE(controller->simpleUi(), simpleUi);
+    QQmlApplicationEngine engine;
+    engine.load(QUrl(simpleUi ? QStringLiteral("qrc:/qml/SimpleMain.qml")
+                             : QStringLiteral("qrc:/qml/Main.qml")));
+    QTRY_VERIFY(!engine.rootObjects().isEmpty());
+    auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+    QVERIFY(window != nullptr);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    window->requestActivate();
+    QTRY_COMPARE(QGuiApplication::focusWindow(), window);
+    QSignalSpy routeSpy(window, SIGNAL(currentRouteChanged()));
+    QVERIFY(routeSpy.isValid());
+    QSignalSpy historyReset(controller->watchHistory(), &QAbstractItemModel::modelReset);
+    QSignalSpy nextReset(controller->watchNext(), &QAbstractItemModel::modelReset);
+    auto checkRoute = [&](bool historyExpected, bool nextExpected) {
+        QTRY_COMPARE(window->property("historyOpen").toBool(), historyExpected);
+        QTRY_COMPARE(window->property("watchNextOpen").toBool(), nextExpected);
+        QQuickItem *contentRoot = window->contentItem();
+        QQuickItem *historyLoader = firstVisualChild(contentRoot, QStringLiteral("historyLoader"));
+        QQuickItem *watchNextLoader = firstVisualChild(contentRoot, QStringLiteral("watchNextLoader"));
+        QVERIFY(historyLoader != nullptr);
+        QVERIFY(watchNextLoader != nullptr);
+        QTRY_COMPARE(historyLoader->property("active").toBool(), historyExpected);
+        QTRY_COMPARE(watchNextLoader->property("active").toBool(), nextExpected);
+        QTRY_COMPARE(firstVisualChild(contentRoot, QStringLiteral("historyPage")) != nullptr,
+                     historyExpected);
+        QTRY_COMPARE(firstVisualChild(contentRoot, QStringLiteral("watchNextPage")) != nullptr,
+                     nextExpected);
+    };
+    checkRoute(false, false);
+    QTest::keyClick(window, Qt::Key_H);
+    checkRoute(true, false);
+    QTest::keyClick(window, Qt::Key_W);
+    checkRoute(false, true);
+    QTest::keyClick(window, Qt::Key_H);
+    checkRoute(true, false);
+    QTest::keyClick(window, Qt::Key_H);
+    checkRoute(false, false);
+    QTest::keyClick(window, Qt::Key_W);
+    checkRoute(false, true);
+    QTest::keyClick(window, Qt::Key_W);
+    checkRoute(false, false);
+    QTest::keyClick(window, Qt::Key_H);
+    checkRoute(true, false);
+    QTest::keyClick(window, Qt::Key_Escape);
+    checkRoute(false, false);
+    QCOMPARE(routeSpy.count(), 8);
+    QCOMPARE(historyReset.count(), 3);
+    QCOMPARE(nextReset.count(), 2);
+    if (!simpleUi) {
+        historyReset.clear();
+        nextReset.clear();
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("historyNavigationButton")));
+        checkRoute(true, false);
+        QCOMPARE(historyReset.count(), 1);
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("historyNavigationButton")));
+        checkRoute(true, false);
+        QCOMPARE(historyReset.count(), 1);
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("watchNextNavigationButton")));
+        checkRoute(false, true);
+        QCOMPARE(nextReset.count(), 1);
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("watchNextNavigationButton")));
+        checkRoute(false, true);
+        QCOMPARE(nextReset.count(), 1);
+        QCOMPARE(routeSpy.count(), 10);
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("feedNavigationButton")));
+        checkRoute(false, false);
+    }
+    for (const auto &[key, selector] : QList<QPair<Qt::Key, QString>>{
+             {Qt::Key_H, QStringLiteral("historyVideo_AUTO0000001")},
+             {Qt::Key_W, QStringLiteral("watchNextVideo_AUTO0000002")}}) {
+        QTest::keyClick(window, key);
+        checkRoute(key == Qt::Key_H, key == Qt::Key_W);
+        QTRY_VERIFY(firstVisualChild(window->contentItem(), selector) != nullptr);
+        QQuickItem *card = firstVisualChild(window->contentItem(), selector);
+        QTRY_VERIFY(card->width() > 0.0);
+        QTRY_VERIFY(card->height() > 0.0);
+        const bool textRow = simpleUi && key == Qt::Key_H;
+        if (!textRow)
+            QTRY_VERIFY(card->height() >= card->width() * 0.5625);
+        const QPointF clickPoint(card->width() / 2.0,
+                                 textRow ? card->height() / 2.0 : card->width() * 0.5625 / 2.0);
+        const QPoint target = card->mapToScene(clickPoint).toPoint();
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, target);
+        QTRY_VERIFY2(controller->playerOpen(), qPrintable(selector));
+        checkRoute(false, false);
+        QTRY_VERIFY(firstVisualChild(window->contentItem(), QStringLiteral("automationPlayer")) != nullptr);
+        clickItem(firstVisualChild(window->contentItem(), QStringLiteral("playerBackButton")));
+        QTRY_VERIFY(!controller->playerOpen());
+        checkRoute(false, false);
+    }
+    QVERIFY(!controller->refreshing());
     QVERIFY(controller->automationMode());
 }
 

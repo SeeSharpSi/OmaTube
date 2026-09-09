@@ -25,8 +25,10 @@ ApplicationWindow {
     readonly property color neonYellow: themeColors.bright_yellow
     readonly property color glassPanel: Qt.rgba(
         panel.r, panel.g, panel.b, themeColors.mode === "dark" ? 0.78 : 0.88)
-    property bool historyOpen: false
-    property bool watchNextOpen: false
+    enum Route { Feed, History, WatchNext }
+    property int currentRoute: Main.Feed
+    readonly property bool historyOpen: currentRoute === Main.History
+    readonly property bool watchNextOpen: currentRoute === Main.WatchNext
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -87,6 +89,18 @@ ApplicationWindow {
         feedbackTimer.restart()
     }
 
+    function navigateTo(route) {
+        if (route === root.currentRoute)
+            return
+        if (route === Main.History)
+            App.reloadWatchHistory()
+        else if (route === Main.WatchNext)
+            App.reloadWatchNext()
+        else if (route !== Main.Feed)
+            return
+        root.currentRoute = route
+    }
+
     Component.onCompleted: App.startupRefresh()
 
     Connections {
@@ -122,10 +136,8 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: App.playerOpen || root.historyOpen || root.watchNextOpen
         onActivated: {
-            if (root.historyOpen)
-                root.historyOpen = false
-            else if (root.watchNextOpen)
-                root.watchNextOpen = false
+            if (root.currentRoute !== Main.Feed)
+                root.navigateTo(Main.Feed)
             else if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
@@ -137,30 +149,14 @@ ApplicationWindow {
         sequence: "H"
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
-        onActivated: {
-            if (root.historyOpen) {
-                root.historyOpen = false
-                return
-            }
-            App.reloadWatchHistory()
-            root.historyOpen = true
-            root.watchNextOpen = false
-        }
+        onActivated: root.navigateTo(root.historyOpen ? Main.Feed : Main.History)
     }
 
     Shortcut {
         sequence: "W"
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
-        onActivated: {
-            if (root.watchNextOpen) {
-                root.watchNextOpen = false
-                return
-            }
-            App.reloadWatchNext()
-            root.watchNextOpen = true
-            root.historyOpen = false
-        }
+        onActivated: root.navigateTo(root.watchNextOpen ? Main.Feed : Main.WatchNext)
     }
 
     Shortcut {
@@ -234,10 +230,7 @@ ApplicationWindow {
                 Accessible.role: Accessible.Button
                 text: qsTr("FEED")
                 flat: true
-                onClicked: {
-                    root.historyOpen = false
-                    root.watchNextOpen = false
-                }
+                onClicked: root.navigateTo(Main.Feed)
                 contentItem: Text { text: parent.text; color: (!root.historyOpen && !root.watchNextOpen) ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : root.rule }
                 PointingCursor {}
@@ -249,13 +242,7 @@ ApplicationWindow {
                 Accessible.role: Accessible.Button
                 text: qsTr("WATCH NEXT")
                 flat: true
-                onClicked: {
-                    if (!root.watchNextOpen) {
-                        App.reloadWatchNext()
-                        root.watchNextOpen = true
-                        root.historyOpen = false
-                    }
-                }
+                onClicked: root.navigateTo(Main.WatchNext)
                 contentItem: Text { text: parent.text; color: root.watchNextOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                 background: Rectangle { color: root.watchNextOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.watchNextOpen ? root.accent : root.rule }
                 PointingCursor {}
@@ -269,13 +256,7 @@ ApplicationWindow {
                 implicitHeight: watchNextButton.height
                 padding: 0
                 flat: true
-                onClicked: {
-                    if (!root.historyOpen) {
-                        App.reloadWatchHistory()
-                        root.historyOpen = true
-                        root.watchNextOpen = false
-                    }
-                }
+                onClicked: root.navigateTo(Main.History)
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("History")
                 contentItem: Item {
@@ -945,7 +926,7 @@ ApplicationWindow {
 
             onLoaded: {
                 item.videoSelected.connect(function(videoId) {
-                    root.historyOpen = false
+                    root.navigateTo(Main.Feed)
                     App.openVideo(videoId)
                 })
             }
@@ -962,7 +943,7 @@ ApplicationWindow {
 
             onLoaded: {
                 item.videoSelected.connect(function(videoId) {
-                    root.watchNextOpen = false
+                    root.navigateTo(Main.Feed)
                     App.openVideo(videoId)
                 })
             }

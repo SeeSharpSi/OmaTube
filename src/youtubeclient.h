@@ -30,6 +30,7 @@ public:
     using ResolveCallback = std::function<void(std::optional<Channel>, QString)>;
     using UploadPageCallback = std::function<void(UploadPage, QString)>;
     using VideosCallback = std::function<void(QList<Video>, QString)>;
+    using DurationUpdatesCallback = std::function<void(QList<VideoDurationUpdate>, QString)>;
     using LiveCallback = std::function<void(std::optional<LiveChannel>, QString)>;
 
     explicit YouTubeClient(QObject *parent = nullptr);
@@ -49,7 +50,7 @@ public:
     virtual void enrichVideos(
         const Channel &channel,
         const QList<Video> &videos,
-        VideosCallback callback);
+        DurationUpdatesCallback callback);
 
     static std::optional<ChannelReference> parseChannelReference(
         const QString &input,

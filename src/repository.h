@@ -73,6 +73,8 @@ public:
         QString *error = nullptr) const;
 
     bool upsertVideos(const QList<Video> &videos, QString *error = nullptr);
+    // Updates existing rows only; returns affected row count or -1 on batch failure.
+    qint64 updateVideoDurations(const QList<VideoDurationUpdate> &updates, QString *error = nullptr);
     [[nodiscard]] std::optional<Video> video(const QString &videoId, QString *error = nullptr) const;
     [[nodiscard]] QList<Video> feed(
         std::optional<qint64> categoryId = std::nullopt,

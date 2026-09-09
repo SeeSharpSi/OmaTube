@@ -35,6 +35,9 @@ private slots:
     void importCategoriesPreservesOrderMembershipsAndIsIdempotent();
     void feedExcludesBroadcastsShortVideosAndFiltersCategories();
     void provisionalMetadataPreservesKnownDuration();
+    void durationUpdatesPreserveMetadata();
+    void durationUpdatesDoNotRestorePrunedVideos();
+    void durationUpdatesRejectInvalidBatch();
     void feedPagePaginatesWithKeysetCursor();
     void channelHistoryStateLifecycle();
     void appliesWatchProgressAndSurvivesPruning();
@@ -847,6 +850,84 @@ void RepositoryTest::provisionalMetadataPreservesKnownDuration()
     const std::optional<Video> stored = repository.video(QStringLiteral("video"), &error);
     QVERIFY2(stored.has_value(), qPrintable(error));
     QCOMPARE(stored->durationSeconds, 600);
+}
+
+void RepositoryTest::durationUpdatesPreserveMetadata()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    Video original = makeVideo(QStringLiteral("vid"), channel.id, now.addSecs(-120), false, -1);
+    QVERIFY(repository.upsertVideos({original}, &error));
+    Video newer = original;
+    newer.title = QStringLiteral("Newer title");
+    newer.publishedAt = now.addSecs(-60);
+    newer.isBroadcast = true;
+    newer.broadcastState = QStringLiteral("live");
+    QVERIFY(repository.upsertVideos({newer}, &error));
+    const auto before = repository.video(newer.id, &error);
+    QVERIFY(before.has_value());
+    QCOMPARE(repository.updateVideoDurations({{newer.id, 600, now}}, &error), 1);
+    const auto stored = repository.video(newer.id, &error);
+    QVERIFY(stored.has_value());
+    Video expected = *before;
+    expected.durationSeconds = 600;
+    expected.fetchedAt = now;
+    QCOMPARE(*stored, expected);
+    QCOMPARE(repository.updateVideoDurations({}, &error), 0);
+    QCOMPARE(repository.updateVideoDurations({{QStringLiteral("missing"), 60, now}}, &error), 0);
+    QVERIFY(!repository.video(QStringLiteral("missing"), &error).has_value());
+    QCOMPARE(repository.updateVideoDurations({{newer.id, 0, now}}, &error), 1);
+    QCOMPARE(repository.video(newer.id, &error)->durationSeconds, 0);
+}
+
+void RepositoryTest::durationUpdatesDoNotRestorePrunedVideos()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const Video video = makeVideo(QStringLiteral("vid"), channel.id, now);
+    QVERIFY(repository.upsertVideos({video}, &error));
+    QVERIFY(repository.pruneVideoMetadataToLimit(1, &error));
+    QVERIFY(!repository.video(video.id, &error).has_value());
+    QCOMPARE(repository.updateVideoDurations({{video.id, 100, now}}, &error), 0);
+    QVERIFY(!repository.video(video.id, &error).has_value());
+
+    QVERIFY(repository.upsertVideos({video}, &error));
+    QVERIFY(repository.removeChannel(channel.id, &error));
+    QCOMPARE(repository.updateVideoDurations({{video.id, 100, now}}, &error), 0);
+    QVERIFY(!repository.video(video.id, &error).has_value());
+}
+
+void RepositoryTest::durationUpdatesRejectInvalidBatch()
+{
+    Repository repository(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(repository.open(&error), qPrintable(error));
+    const Channel channel = makeChannel(QStringLiteral("UCAlpha"), QStringLiteral("Alpha"));
+    QVERIFY(repository.upsertChannel(channel, &error));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QString id = QStringLiteral("vid");
+    QVERIFY(repository.upsertVideos({makeVideo(id, channel.id, now, false, 600)}, &error));
+    const auto before = repository.video(id, &error);
+    QVERIFY(before.has_value());
+    const QList<VideoDurationUpdate> invalidUpdates{
+        {id, -5, now}, {{}, 700, now}, {id, 700, {}},
+    };
+    for (const VideoDurationUpdate &invalid : invalidUpdates) {
+        error.clear();
+        QCOMPARE(repository.updateVideoDurations({{id, 700, now.addSecs(30)}, invalid}, &error), -1);
+        QVERIFY(!error.isEmpty());
+        const auto after = repository.video(id);
+        QVERIFY(after.has_value());
+        QCOMPARE(*after, *before);
+    }
 }
 
 void RepositoryTest::feedPagePaginatesWithKeysetCursor()

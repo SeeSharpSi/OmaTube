@@ -238,7 +238,6 @@ private:
     int m_maximumVideoHeight = 0;
     bool m_simpleUi = false;
     int m_playbackVolume = 100;
-    int m_currentVideoMaximumHeight = 0;
     int m_currentVideoMaximumHeightOverride = -1;
     QString m_currentVideoTitle;
     bool m_currentVideoIsLive = false;

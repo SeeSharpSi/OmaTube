@@ -1,5 +1,7 @@
 #pragma once
 
+#include "iframeplaybacksession.h"
+
 #include <QQuickItem>
 #include <QPointer>
 #include <QString>
@@ -24,6 +26,7 @@ public:
     Q_INVOKABLE void startSpeedBoost();
     Q_INVOKABLE void stopSpeedBoost();
     Q_INVOKABLE void togglePaused();
+    void receivePlaybackReport(const QString &json);
     void syncSpeedBoost();
 
 signals:
@@ -38,6 +41,7 @@ private:
     QString m_videoId;
     int m_startSeconds = 0;
     bool m_speedBoostActive = false;
+    IframePlaybackSession m_playbackSession;
     QPointer<QQuickWindow> m_window;
     void *m_webView = nullptr;
     void *m_navigationDelegate = nullptr;

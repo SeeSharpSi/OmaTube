@@ -23,8 +23,10 @@ ApplicationWindow {
     readonly property color danger: themeColors.red
     readonly property color liveRed: themeColors.bright_red
     readonly property color neonYellow: themeColors.bright_yellow
-    property bool historyOpen: false
-    property bool watchNextOpen: false
+    enum Route { Feed, History, WatchNext }
+    property int currentRoute: SimpleMain.Feed
+    readonly property bool historyOpen: currentRoute === SimpleMain.History
+    readonly property bool watchNextOpen: currentRoute === SimpleMain.WatchNext
     property bool modalOpen: settingsDialog.visible || App.playerOpen
     property int spinnerFrame: 0
     readonly property var spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -85,6 +87,18 @@ ApplicationWindow {
         feedbackTimer.restart()
     }
 
+    function navigateTo(route) {
+        if (route === root.currentRoute)
+            return
+        if (route === SimpleMain.History)
+            App.reloadWatchHistory()
+        else if (route === SimpleMain.WatchNext)
+            App.reloadWatchNext()
+        else if (route !== SimpleMain.Feed)
+            return
+        root.currentRoute = route
+    }
+
     Component.onCompleted: App.startupRefresh()
 
     Connections {
@@ -120,10 +134,8 @@ ApplicationWindow {
         context: Qt.WindowShortcut
         enabled: App.playerOpen || root.historyOpen || root.watchNextOpen
         onActivated: {
-            if (root.historyOpen)
-                root.historyOpen = false
-            else if (root.watchNextOpen)
-                root.watchNextOpen = false
+            if (root.currentRoute !== SimpleMain.Feed)
+                root.navigateTo(SimpleMain.Feed)
             else if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
@@ -135,30 +147,14 @@ ApplicationWindow {
         sequence: "H"
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
-        onActivated: {
-            if (root.historyOpen) {
-                root.historyOpen = false
-                return
-            }
-            App.reloadWatchHistory()
-            root.historyOpen = true
-            root.watchNextOpen = false
-        }
+        onActivated: root.navigateTo(root.historyOpen ? SimpleMain.Feed : SimpleMain.History)
     }
 
     Shortcut {
         sequence: "W"
         context: Qt.WindowShortcut
         enabled: !root.modalOpen && !App.refreshing
-        onActivated: {
-            if (root.watchNextOpen) {
-                root.watchNextOpen = false
-                return
-            }
-            App.reloadWatchNext()
-            root.watchNextOpen = true
-            root.historyOpen = false
-        }
+        onActivated: root.navigateTo(root.watchNextOpen ? SimpleMain.Feed : SimpleMain.WatchNext)
     }
 
     Shortcut {
@@ -756,7 +752,7 @@ ApplicationWindow {
         onLoaded: {
             item.keybinds = keybinds
             item.videoSelected.connect(function(videoId) {
-                root.historyOpen = false
+                root.navigateTo(SimpleMain.Feed)
                 App.openVideo(videoId)
             })
         }
@@ -773,7 +769,7 @@ ApplicationWindow {
         onLoaded: {
             item.keybinds = keybinds
             item.videoSelected.connect(function(videoId) {
-                root.watchNextOpen = false
+                root.navigateTo(SimpleMain.Feed)
                 App.openVideo(videoId)
             })
         }

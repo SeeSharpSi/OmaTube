@@ -1,5 +1,6 @@
 #include "appcontroller.h"
 #include "automationfixture.h"
+#include "iframeplaybacksession.h"
 #include "spaceholdhandler.h"
 
 #ifdef OMA_HAS_MPV
@@ -119,6 +120,7 @@ int main(int argc, char *argv[])
     }
     qmlRegisterSingletonType<AppController>(
         "YtClient", 1, 0, "App", &AppController::create);
+    qmlRegisterType<IframePlaybackSession>("YtClient", 1, 0, "IframePlaybackSession");
 #ifdef Q_OS_MACOS
     qmlRegisterType<MacVideoPlayerNative>("YtClient", 1, 0, "MacVideoPlayerNative");
 #endif

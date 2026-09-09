@@ -326,12 +326,17 @@ void YouTubeClient::fetchLiveChannel(const Channel &channel, LiveCallback callba
 void YouTubeClient::enrichVideos(
     const Channel &channel,
     const QList<Video> &videos,
-    VideosCallback callback)
+    DurationUpdatesCallback callback)
 {
     if (hasApiKey() || m_ytDlpExecutable.isEmpty() || videos.isEmpty()) {
         callback({}, {});
         return;
     }
+
+    QStringList requestedIds;
+    requestedIds.reserve(videos.size());
+    for (const Video &video : videos)
+        requestedIds.append(video.id);
 
     runYtDlp(
         {
@@ -343,7 +348,8 @@ void YouTubeClient::enrichVideos(
         },
         30000,
         false,
-        [channel, videos, callback = std::move(callback)](QByteArray json, QString error) {
+        [channelId = channel.id, requestedIds = std::move(requestedIds), callback = std::move(callback)](
+            QByteArray json, QString error) {
             if (!error.isEmpty()) {
                 callback({}, std::move(error));
                 return;
@@ -358,21 +364,20 @@ void YouTubeClient::enrichVideos(
             for (const QJsonObject &object : objects)
                 metadata.insert(object.value(QStringLiteral("id")).toString(), object);
 
-            QList<Video> enriched;
-            for (Video video : videos) {
-                const auto item = metadata.constFind(video.id);
+            QList<VideoDurationUpdate> updates;
+            const QDateTime fetchedAt = QDateTime::currentDateTimeUtc();
+            for (const QString &id : requestedIds) {
+                const auto item = metadata.constFind(id);
                 if (item == metadata.cend())
                     continue;
                 const QJsonValue duration = item->value(QStringLiteral("duration"));
                 if (duration.isDouble() && duration.toDouble() >= 0
                     && duration.toDouble() <= std::numeric_limits<int>::max()) {
-                    video.durationSeconds = static_cast<int>(duration.toDouble());
-                    video.fetchedAt = QDateTime::currentDateTimeUtc();
-                    enriched.append(std::move(video));
+                    updates.append({id, static_cast<int>(duration.toDouble()), fetchedAt});
                 }
             }
-            qCDebug(youTubeLog) << "enriched" << enriched.size() << "videos for" << channel.id;
-            callback(std::move(enriched), {});
+            qCDebug(youTubeLog) << "enriched" << updates.size() << "videos for" << channelId;
+            callback(std::move(updates), {});
         });
 }
 

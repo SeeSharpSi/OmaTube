@@ -574,6 +574,42 @@ bool Repository::upsertVideos(const QList<Video> &videos, QString *error)
     return true;
 }
 
+qint64 Repository::updateVideoDurations(const QList<VideoDurationUpdate> &updates, QString *error)
+{
+    if (updates.isEmpty())
+        return 0;
+    for (const VideoDurationUpdate &update : updates) {
+        if (update.videoId.isEmpty() || update.durationSeconds < 0 || !update.fetchedAt.isValid()) {
+            setError(error, QStringLiteral("Video duration patch is incomplete."));
+            return -1;
+        }
+    }
+    if (!m_database.transaction()) {
+        setError(error, m_database.lastError().text());
+        return -1;
+    }
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("UPDATE videos SET duration_seconds = ?, fetched_at = ? WHERE id = ?"));
+    qint64 affected = 0;
+    for (const VideoDurationUpdate &update : updates) {
+        query.bindValue(0, update.durationSeconds);
+        query.bindValue(1, toDatabaseTime(update.fetchedAt));
+        query.bindValue(2, update.videoId);
+        if (!query.exec()) {
+            m_database.rollback();
+            setError(error, queryError(query));
+            return -1;
+        }
+        affected += query.numRowsAffected();
+    }
+    if (!m_database.commit()) {
+        setError(error, m_database.lastError().text());
+        m_database.rollback();
+        return -1;
+    }
+    return affected;
+}
+
 QList<Video> Repository::feed(
     std::optional<qint64> categoryId,
     int shortVideoCutoffSeconds,

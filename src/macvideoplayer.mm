@@ -1,7 +1,5 @@
 #include "macvideoplayer.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QUrl>
@@ -71,13 +69,7 @@
     if (![message.body isKindOfClass:[NSString class]])
         return;
     const QString body = QString::fromNSString(static_cast<NSString *>(message.body));
-    const QJsonDocument document = QJsonDocument::fromJson(body.toUtf8());
-    if (!document.isObject())
-        return;
-    const QJsonObject payload = document.object();
-    emit _owner->playbackUpdated(
-        payload.value(QStringLiteral("time")).toDouble(),
-        payload.value(QStringLiteral("state")).toInt() == 1);
+    _owner->receivePlaybackReport(body);
 }
 
 @end
@@ -144,7 +136,9 @@ QString playbackReportJavaScript(bool boostActive)
         "    var s = omaPlayer.getPlayerState();"
         "    var t = omaPlayer.getCurrentTime();"
         "    if (typeof t !== 'number' || isNaN(t)) return null;"
-        "    return JSON.stringify({state: s, time: t});"
+        "    return JSON.stringify({state: s, time: t,"
+        "      videoId: decodeURIComponent(window.__omaVideoId),"
+        "      loadSession: window.__omaLoadSession});"
         "  } catch (e) { return null; }"
         "};").arg(boostStr);
 }
@@ -165,18 +159,20 @@ QString playbackPollerJavaScript()
         "})();");
 }
 
-QString playerHtml(const QString &videoId, int startSeconds, bool boostActive)
+QString playerHtml(const QString &videoId, const QString &loadSession, int startSeconds, bool boostActive)
 {
     return QStringLiteral("<!doctype html><html><head><meta charset=\"utf-8\">"
                            "<style>html,body{width:100%;height:100%;margin:0;border:0;"
                            "overflow:hidden;background:#000}#player{width:100%;height:100%}"
                            "</style></head><body>"
                            "<div id=\"player\"></div>"
-                           "<script>window.__omaVideoId = '%1';"
-                           "window.__omaStartSeconds = %2;</script>"
+                            "<script>window.__omaVideoId = '%1';"
+                            "window.__omaLoadSession = '%2';"
+                            "window.__omaStartSeconds = %3;</script>"
                            "<script src=\"https://www.youtube.com/iframe_api\"></script>"
-                           "<script>%3</script></body></html>")
+                            "<script>%4</script></body></html>")
         .arg(QString::fromUtf8(QUrl::toPercentEncoding(videoId)))
+        .arg(loadSession)
         .arg(qMax(0, startSeconds))
         .arg(playbackReportJavaScript(boostActive));
 }
@@ -185,6 +181,8 @@ QString playerHtml(const QString &videoId, int startSeconds, bool boostActive)
 MacVideoPlayerNative::MacVideoPlayerNative(QQuickItem *parent)
     : QQuickItem(parent)
 {
+    connect(&m_playbackSession, &IframePlaybackSession::playbackUpdated,
+            this, &MacVideoPlayerNative::playbackUpdated);
     const auto sync = [this] { syncNativeView(); };
     connect(this, &QQuickItem::windowChanged, this, &MacVideoPlayerNative::setWindow);
     connect(this, &QQuickItem::xChanged, this, sync);
@@ -196,6 +194,7 @@ MacVideoPlayerNative::MacVideoPlayerNative(QQuickItem *parent)
 
 MacVideoPlayerNative::~MacVideoPlayerNative()
 {
+    m_playbackSession.stop();
     WKWebView *view = webView(m_webView);
     if (view) {
         [view stopLoading];
@@ -222,6 +221,7 @@ void MacVideoPlayerNative::setVideoId(const QString &videoId)
     if (m_videoId == videoId)
         return;
     m_videoId = videoId;
+    m_playbackSession.stop();
     emit videoIdChanged();
     loadVideo();
 }
@@ -236,8 +236,14 @@ void MacVideoPlayerNative::setStartSeconds(int startSeconds)
     m_startSeconds = qMax(0, startSeconds);
 }
 
+void MacVideoPlayerNative::receivePlaybackReport(const QString &json)
+{
+    m_playbackSession.acceptReport(json);
+}
+
 void MacVideoPlayerNative::stop()
 {
+    m_playbackSession.stop();
     if (m_speedBoostActive)
         stopSpeedBoost();
     WKWebView *view = webView(m_webView);
@@ -366,6 +372,7 @@ void MacVideoPlayerNative::loadVideo()
         stop();
         return;
     }
-    [view loadHTMLString:playerHtml(m_videoId, m_startSeconds, m_speedBoostActive).toNSString()
+    const QString loadSession = m_playbackSession.begin(m_videoId);
+    [view loadHTMLString:playerHtml(m_videoId, loadSession, m_startSeconds, m_speedBoostActive).toNSString()
                   baseURL:playerBaseUrl()];
 }

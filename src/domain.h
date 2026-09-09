@@ -45,6 +45,16 @@ struct Video
     bool operator==(const Video &) const = default;
 };
 
+// Only fields learned by background duration enrichment.
+struct VideoDurationUpdate
+{
+    QString videoId;
+    int durationSeconds = -1;
+    QDateTime fetchedAt;
+
+    bool operator==(const VideoDurationUpdate &) const = default;
+};
+
 // One page of a channel's uploads playlist. An empty nextPageToken means
 // the playlist has no further pages.
 struct UploadPage

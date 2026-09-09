@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "iframeplaybacksession.h"
 #include "models/historymodel.h"
 #include "models/watchnextmodel.h"
 #include "playbacksettings.h"
@@ -92,6 +93,7 @@ private slots:
     void perVideoHeightOverrideIsolation();
     void perVideoHeightPersistenceAndDefaultRemoval();
     void perVideoHeightGlobalChangeRespectsOverride();
+    void perVideoHeightSignalsExposeConsistentState();
     void currentVideoTitleFromRepository();
     void currentVideoTitleClearsForUnknownVideo();
     void liveButtonVisibilityAndSeek();
@@ -119,6 +121,9 @@ private slots:
     void errorNotificationsLeftClickCopiesMessageAndKeepsCard();
     void errorNotificationsRightClickDismissesCard();
     void errorNotificationsCloseButtonDismissesCard();
+    void iframePlaybackSessionStaleSessions();
+    void iframePlaybackSessionRejectsMalformed();
+    void iframePlaybackSessionProtectsWatchProgress();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -1034,6 +1039,131 @@ void AppControllerTest::perVideoHeightGlobalChangeRespectsOverride()
     controller->openVideo(otherId);
     QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
     QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+}
+
+void AppControllerTest::perVideoHeightSignalsExposeConsistentState()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->setMaximumVideoHeight(720);
+    const QString videoId = QString::fromUtf8(videoA);
+    const QString otherId = QString::fromUtf8(videoB);
+    controller->openVideo(videoId);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 720);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+
+    QSignalSpy effectiveChanged(controller.get(), &AppController::currentVideoMaximumHeightChanged);
+    QSignalSpy overrideChanged(controller.get(), &AppController::currentVideoMaximumHeightOverrideChanged);
+    QSignalSpy globalChanged(controller.get(), &AppController::maximumVideoHeightChanged);
+    QList<int> seenEffective;
+    QList<int> seenOverrideAtEffective;
+    QList<int> seenOverride;
+    QList<int> seenEffectiveAtOverride;
+    connect(
+        controller.get(),
+        &AppController::currentVideoMaximumHeightChanged,
+        controller.get(),
+        [&]() {
+            seenEffective.append(controller->currentVideoMaximumHeight());
+            seenOverrideAtEffective.append(controller->currentVideoMaximumHeightOverride());
+        });
+    connect(
+        controller.get(),
+        &AppController::currentVideoMaximumHeightOverrideChanged,
+        controller.get(),
+        [&]() {
+            seenOverride.append(controller->currentVideoMaximumHeightOverride());
+            seenEffectiveAtOverride.append(controller->currentVideoMaximumHeight());
+        });
+    auto clearSpies = [&]() {
+        effectiveChanged.clear();
+        overrideChanged.clear();
+        globalChanged.clear();
+        seenEffective.clear();
+        seenOverrideAtEffective.clear();
+        seenOverride.clear();
+        seenEffectiveAtOverride.clear();
+    };
+
+    // Global change while inheriting: both global and effective emit.
+    controller->setMaximumVideoHeight(1080);
+    QCOMPARE(globalChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 1);
+    QCOMPARE(overrideChanged.count(), 0);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+    QCOMPARE(seenEffective.size(), 1);
+    QCOMPARE(seenEffective.at(0), 1080);
+    QCOMPARE(seenOverrideAtEffective.at(0), -1);
+
+    // Explicit override equal to global: override emits, effective does not.
+    clearSpies();
+    controller->setCurrentVideoMaximumHeightOverride(1080);
+    QCOMPARE(overrideChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 0);
+    QCOMPARE(globalChanged.count(), 0);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), 1080);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+    QCOMPARE(seenOverride.size(), 1);
+    QCOMPARE(seenOverride.at(0), 1080);
+    QCOMPARE(seenEffectiveAtOverride.at(0), 1080);
+    QVERIFY(seenEffective.isEmpty());
+
+    // Global change under override: global emits, effective does not.
+    clearSpies();
+    controller->setMaximumVideoHeight(2160);
+    QCOMPARE(globalChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 0);
+    QCOMPARE(overrideChanged.count(), 0);
+    QCOMPARE(controller->maximumVideoHeight(), 2160);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 1080);
+    QVERIFY(seenEffective.isEmpty());
+    QVERIFY(seenOverride.isEmpty());
+
+    // Override clear: both override and effective emit.
+    clearSpies();
+    controller->setCurrentVideoMaximumHeightOverride(-1);
+    QCOMPARE(overrideChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 1);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+    QCOMPARE(seenOverride.size(), 1);
+    QCOMPARE(seenOverride.at(0), -1);
+    QCOMPARE(seenEffectiveAtOverride.at(0), 2160);
+    QCOMPARE(seenEffective.size(), 1);
+    QCOMPARE(seenEffective.at(0), 2160);
+    QCOMPARE(seenOverrideAtEffective.at(0), -1);
+
+    // Different video with same effective: no signals when both inherit.
+    clearSpies();
+    controller->openVideo(otherId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+    QCOMPARE(overrideChanged.count(), 0);
+    QCOMPARE(effectiveChanged.count(), 0);
+
+    // Explicit equal override on other video, then switch videos with same effective.
+    controller->setCurrentVideoMaximumHeightOverride(2160);
+    QCOMPARE(overrideChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 0);
+    clearSpies();
+    controller->openVideo(videoId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), -1);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+    QCOMPARE(overrideChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 0);
+    QCOMPARE(seenOverride.size(), 1);
+    QCOMPARE(seenOverride.at(0), -1);
+    QCOMPARE(seenEffectiveAtOverride.at(0), 2160);
+    clearSpies();
+    controller->openVideo(otherId);
+    QCOMPARE(controller->currentVideoMaximumHeightOverride(), 2160);
+    QCOMPARE(controller->currentVideoMaximumHeight(), 2160);
+    QCOMPARE(overrideChanged.count(), 1);
+    QCOMPARE(effectiveChanged.count(), 0);
+    QCOMPARE(seenOverride.at(0), 2160);
+    QCOMPARE(seenEffectiveAtOverride.at(0), 2160);
 }
 
 void AppControllerTest::currentVideoTitleFromRepository()
@@ -1973,6 +2103,146 @@ void AppControllerTest::errorNotificationsCloseButtonDismissesCard()
     QCOMPARE(dismissed.at(0).at(0).toString(), QStringLiteral("Second"));
     // Close clicks are consumed by the close area, not the body copy area.
     QCOMPARE(QGuiApplication::clipboard()->text(), QString());
+}
+
+namespace {
+QString makePlaybackReport(const QString &videoId, const QString &session, double time, int state)
+{
+    return QString::fromUtf8(QJsonDocument(QJsonObject{
+        {QStringLiteral("videoId"), videoId},
+        {QStringLiteral("loadSession"), session},
+        {QStringLiteral("time"), time},
+        {QStringLiteral("state"), state},
+    }).toJson(QJsonDocument::Compact));
+}
+}
+
+void AppControllerTest::iframePlaybackSessionStaleSessions()
+{
+    IframePlaybackSession session;
+    QSignalSpy spy(&session, &IframePlaybackSession::playbackUpdated);
+    const QString idA = QString::fromUtf8(videoA);
+    const QString idB = QString::fromUtf8(videoB);
+    session.acceptReport(makePlaybackReport(idA, {}, 5, 1));
+    QCOMPARE(spy.count(), 0);
+
+    const QString tokenA = session.begin(idA);
+    QVERIFY(!tokenA.isEmpty());
+    const QString delayedA = makePlaybackReport(idA, tokenA, 5, 1);
+    session.acceptReport(delayedA);
+    session.acceptReport(makePlaybackReport(idA, tokenA, 6, 2));
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(0), QVariantList({5.0, true}));
+    QCOMPARE(spy.at(1), QVariantList({6.0, false}));
+    spy.clear();
+
+    // A report retains its originating document even after A -> B -> A.
+    const QString tokenB = session.begin(idB);
+    QVERIFY(tokenB != tokenA);
+    session.acceptReport(delayedA);
+    QCOMPARE(spy.count(), 0);
+    const QString tokenA2 = session.begin(idA);
+    QVERIFY(tokenA2 != tokenA);
+    session.acceptReport(delayedA);
+    session.acceptReport(makePlaybackReport(idB, tokenB, 7, 1));
+    QCOMPARE(spy.count(), 0);
+
+    // A new document for the same video also retires the previous token.
+    const QString tokenA3 = session.begin(idA);
+    QVERIFY(tokenA3 != tokenA2);
+    session.acceptReport(makePlaybackReport(idA, tokenA2, 8, 1));
+    QCOMPARE(spy.count(), 0);
+    session.acceptReport(makePlaybackReport(idA, tokenA3, 9, 1));
+    QCOMPARE(spy.count(), 1);
+    spy.clear();
+
+    session.stop();
+    session.acceptReport(makePlaybackReport(idA, tokenA3, 10, 1));
+    QCOMPARE(spy.count(), 0);
+    const QString reopenedToken = session.begin(idA);
+    session.acceptReport(makePlaybackReport(idA, tokenA3, 11, 1));
+    QCOMPARE(spy.count(), 0);
+    session.acceptReport(makePlaybackReport(idA, reopenedToken, 12, 1));
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(session.begin({}).isEmpty());
+    session.acceptReport(makePlaybackReport(idA, reopenedToken, 13, 1));
+    QCOMPARE(spy.count(), 1);
+}
+
+void AppControllerTest::iframePlaybackSessionRejectsMalformed()
+{
+    IframePlaybackSession session;
+    QSignalSpy spy(&session, &IframePlaybackSession::playbackUpdated);
+    const QString id = QString::fromUtf8(videoA);
+    const QString token = session.begin(id);
+    const QString good = makePlaybackReport(id, token, 5, 1);
+    for (const QString &json : {QString(), QStringLiteral("not json"),
+                               QStringLiteral("[1,2]"), QStringLiteral("{}")}) {
+        session.acceptReport(json);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    const QJsonObject valid = QJsonDocument::fromJson(good.toUtf8()).object();
+    const QList<QPair<QString, QJsonValue>> invalidFields{
+        {QStringLiteral("videoId"), QString::fromUtf8(videoB)},
+        {QStringLiteral("videoId"), 42},
+        {QStringLiteral("loadSession"), QStringLiteral("wrong")},
+        {QStringLiteral("loadSession"), QJsonValue::Null},
+        {QStringLiteral("time"), QStringLiteral("5")},
+        {QStringLiteral("time"), QJsonValue::Null},
+        {QStringLiteral("time"), -1},
+        {QStringLiteral("time"), 1e100},
+        {QStringLiteral("state"), QStringLiteral("1")},
+        {QStringLiteral("state"), 4},
+        {QStringLiteral("state"), 1.5},
+        {QStringLiteral("state"), 1e100},
+    };
+    for (const auto &[key, value] : invalidFields) {
+        QJsonObject invalid = valid;
+        invalid.insert(key, value);
+        session.acceptReport(QString::fromUtf8(QJsonDocument(invalid).toJson()));
+        QCOMPARE(spy.count(), 0);
+    }
+    for (int state : {-1, 0, 1, 2, 3, 5})
+        session.acceptReport(makePlaybackReport(id, token, 0, state));
+    QCOMPARE(spy.count(), 6);
+}
+
+void AppControllerTest::iframePlaybackSessionProtectsWatchProgress()
+{
+    auto controller = AppController::createApplication(QStringLiteral(":memory:"), true);
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    IframePlaybackSession session;
+    connect(&session, &IframePlaybackSession::playbackUpdated, controller.get(),
+            [&](double position, bool playing) {
+                controller->reportPlayback(controller->currentVideoId(), position, playing);
+            });
+
+    const QString idA = QString::fromUtf8(videoA);
+    const QString idB = QString::fromUtf8(videoB);
+    controller->openVideo(idA);
+    const QString tokenA = session.begin(idA);
+    const QString delayedA = makePlaybackReport(idA, tokenA, 120, 1);
+    controller->openVideo(idB);
+    const QString tokenB = session.begin(idB);
+    session.acceptReport(delayedA);
+    session.acceptReport(makePlaybackReport(idB, tokenB, 0, 2));
+    session.acceptReport(makePlaybackReport(idB, tokenB, 5, 1));
+    controller->closePlayer();
+    const QVariantMap statsB = controller->watchStatsForVideo(idB);
+    QCOMPARE(statsB.value(QStringLiteral("watchedSeconds")).toLongLong(), 5);
+    QCOMPARE(statsB.value(QStringLiteral("lastPositionSeconds")).toInt(), 5);
+
+    controller->openVideo(idA);
+    const QString reopenedToken = session.begin(idA);
+    session.acceptReport(delayedA);
+    session.acceptReport(makePlaybackReport(idA, reopenedToken, 0, 2));
+    session.acceptReport(makePlaybackReport(idA, reopenedToken, 5, 1));
+    controller->closePlayer();
+    const QVariantMap statsA = controller->watchStatsForVideo(idA);
+    QCOMPARE(statsA.value(QStringLiteral("watchedSeconds")).toLongLong(), 5);
+    QCOMPARE(statsA.value(QStringLiteral("lastPositionSeconds")).toInt(), 5);
 }
 
 QTEST_MAIN(AppControllerTest)

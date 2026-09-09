@@ -278,7 +278,6 @@ bool AppController::initialize(QString *error)
         settings.value(QString::fromLatin1(maximumVideoHeightSetting)).toInt());
     m_playbackVolume = qBound(0, settings.value(QString::fromLatin1(playbackVolumeSetting), 100).toInt(), 100);
     m_simpleUi = settings.value(QString::fromLatin1(simpleUiSetting), false).toBool();
-    m_currentVideoMaximumHeight = m_maximumVideoHeight;
     m_currentVideoMaximumHeightOverride = -1;
     m_currentVideoTitle.clear();
     m_currentVideoIsLive = false;
@@ -447,7 +446,8 @@ bool AppController::simpleUi() const
 
 int AppController::currentVideoMaximumHeight() const
 {
-    return m_currentVideoMaximumHeight;
+    return m_currentVideoMaximumHeightOverride == -1 ? m_maximumVideoHeight
+                                                     : m_currentVideoMaximumHeightOverride;
 }
 
 int AppController::currentVideoMaximumHeightOverride() const
@@ -1149,17 +1149,14 @@ void AppController::setMaximumVideoHeight(int height)
     if (m_maximumVideoHeight == normalized)
         return;
 
+    const int oldEffective = currentVideoMaximumHeight();
     m_maximumVideoHeight = normalized;
     QSettings settings;
     settings.setValue(QString::fromLatin1(maximumVideoHeightSetting), normalized);
     settings.sync();
     emit maximumVideoHeightChanged();
-    if (m_currentVideoMaximumHeightOverride == -1) {
-        if (m_currentVideoMaximumHeight != normalized) {
-            m_currentVideoMaximumHeight = normalized;
-            emit currentVideoMaximumHeightChanged();
-        }
-    }
+    if (currentVideoMaximumHeight() != oldEffective)
+        emit currentVideoMaximumHeightChanged();
 }
 
 void AppController::setPlaybackVolume(int volume)
@@ -1190,29 +1187,25 @@ void AppController::setCurrentVideoMaximumHeightOverride(int height)
 {
     if (!isValidVideoId(m_currentVideoId))
         return;
+    const int oldEffective = currentVideoMaximumHeight();
+    const int oldOverride = m_currentVideoMaximumHeightOverride;
     int overrideValue = -1;
-    int effective = m_maximumVideoHeight;
     QSettings settings;
     const QString key = perVideoHeightKey(m_currentVideoId);
     if (height == -1) {
         settings.remove(key);
         settings.sync();
         overrideValue = -1;
-        effective = m_maximumVideoHeight;
     } else {
         const int normalized = PlaybackSettings::normalizeMaximumVideoHeight(height);
         settings.setValue(key, normalized);
         settings.sync();
         overrideValue = normalized;
-        effective = normalized;
     }
-    bool overrideChanged = m_currentVideoMaximumHeightOverride != overrideValue;
-    bool effectiveChanged = m_currentVideoMaximumHeight != effective;
     m_currentVideoMaximumHeightOverride = overrideValue;
-    m_currentVideoMaximumHeight = effective;
-    if (overrideChanged)
+    if (m_currentVideoMaximumHeightOverride != oldOverride)
         emit currentVideoMaximumHeightOverrideChanged();
-    if (effectiveChanged)
+    if (currentVideoMaximumHeight() != oldEffective)
         emit currentVideoMaximumHeightChanged();
 }
 
@@ -1466,19 +1459,15 @@ void AppController::updateCurrentVideoMaximumHeightForOpen(const QString &videoI
     QSettings settings;
     const QString key = perVideoHeightKey(videoId);
     int overrideValue = -1;
-    int effective = m_maximumVideoHeight;
     if (settings.contains(key)) {
-        const int stored = PlaybackSettings::normalizeMaximumVideoHeight(settings.value(key).toInt());
-        overrideValue = stored;
-        effective = stored;
+        overrideValue = PlaybackSettings::normalizeMaximumVideoHeight(settings.value(key).toInt());
     }
-    bool overrideChanged = m_currentVideoMaximumHeightOverride != overrideValue;
-    bool effectiveChanged = m_currentVideoMaximumHeight != effective;
+    const int oldEffective = currentVideoMaximumHeight();
+    const int oldOverride = m_currentVideoMaximumHeightOverride;
     m_currentVideoMaximumHeightOverride = overrideValue;
-    m_currentVideoMaximumHeight = effective;
-    if (overrideChanged)
+    if (m_currentVideoMaximumHeightOverride != oldOverride)
         emit currentVideoMaximumHeightOverrideChanged();
-    if (effectiveChanged)
+    if (currentVideoMaximumHeight() != oldEffective)
         emit currentVideoMaximumHeightChanged();
 }
 

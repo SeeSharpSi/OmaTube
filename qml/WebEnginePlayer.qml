@@ -1,5 +1,6 @@
 import QtQuick
 import QtWebEngine
+import YtClient
 
 Item {
     id: root
@@ -10,6 +11,13 @@ Item {
     signal playbackUpdated(real positionSeconds, bool playing)
 
     property bool speedBoostActive: false
+
+    IframePlaybackSession {
+        id: reportSession
+        onPlaybackUpdated: function(positionSeconds, playing) {
+            root.playbackUpdated(positionSeconds, playing)
+        }
+    }
 
     function syncSpeedBoost() {
         if (speedBoostActive)
@@ -36,7 +44,7 @@ Item {
         player.runJavaScript("if (window.__omaTogglePaused) window.__omaTogglePaused(); else { try { var s = omaPlayer.getPlayerState(); if (s === 1) omaPlayer.pauseVideo(); else omaPlayer.playVideo(); } catch(e) {} }")
     }
 
-    function playerHtml(id) {
+    function playerHtml(id, loadSession) {
         const encodedId = encodeURIComponent(id)
         const startAt = root.startSeconds > 0 ? Math.floor(root.startSeconds) : 0
         const boostActive = root.speedBoostActive ? "true" : "false"
@@ -48,7 +56,8 @@ Item {
             + "<script src=\"https://www.youtube.com/iframe_api\"></script>"
             + "<script>"
             + "var omaPlayer = null;"
-            + "var omaPendingId = '" + encodedId + "';"
+            + "var omaPendingId = " + JSON.stringify(encodedId) + ";"
+            + "var omaLoadSession = " + JSON.stringify(loadSession) + ";"
             + "var omaSpeedBoostActive = " + boostActive + ";"
             + "var omaSpeedBoostApplied = false;"
             + "var omaSavedRate = 1;"
@@ -89,7 +98,7 @@ Item {
             + "    var s = omaPlayer.getPlayerState();"
             + "    var t = omaPlayer.getCurrentTime();"
             + "    if (typeof t !== 'number' || isNaN(t)) return null;"
-            + "    return JSON.stringify({state: s, time: t});"
+            + "    return JSON.stringify({state: s, time: t, videoId: decodeURIComponent(omaPendingId), loadSession: omaLoadSession});"
             + "  } catch (e) { return null; }"
             + "};"
             + "</script></body></html>"
@@ -126,30 +135,25 @@ Item {
             player.runJavaScript(
                 "window.__omaPlaybackReport ? window.__omaPlaybackReport() : null",
                 function(result) {
-                    if (!result || typeof result !== "string")
+                    if (!reportSession || !result || typeof result !== "string")
                         return
-                    let report = null
-                    try {
-                        report = JSON.parse(result)
-                    } catch (e) {
-                        return
-                    }
-                    if (!report || typeof report.time !== "number")
-                        return
-                    root.playbackUpdated(report.time, report.state === 1)
+                    reportSession.acceptReport(result)
                 })
         }
     }
 
     onVideoIdChanged: {
         if (videoId.length > 0) {
-            player.loadHtml(playerHtml(videoId), "https://dev.ytclient.app/")
+            const loadSession = reportSession.begin(videoId)
+            player.loadHtml(playerHtml(videoId, loadSession), "https://dev.ytclient.app/")
         } else {
+            reportSession.stop()
             player.stop()
         }
     }
 
     Component.onDestruction: {
+        reportSession.stop()
         if (speedBoostActive)
             stopSpeedBoost()
         player.stop()

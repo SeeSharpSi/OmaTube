@@ -495,10 +495,25 @@ Item {
                     color: root.rule
                     border.color: root.mutedInk
                     border.width: 1
+                    clip: true
                     Rectangle {
                         width: seekSlider.visualPosition * parent.width
                         height: parent.height
                         color: root.accent
+                    }
+                    Repeater {
+                        model: App.sponsorBlockEnabled ? App.sponsorSegments : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            x: (modelData.start / Math.max(1, root.durationS)) * parent.width
+                            width: Math.max(2,
+                                ((modelData.end - modelData.start) / Math.max(1, root.durationS))
+                                * parent.width)
+                            height: parent.height
+                            color: App.themeColors[App.sponsorColorKey(modelData.category)]
+                                ?? App.themeColors.green
+                            visible: root.durationS > 0 && modelData.end > modelData.start
+                        }
                     }
                 }
                 handle: Rectangle {

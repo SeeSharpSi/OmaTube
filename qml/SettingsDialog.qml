@@ -66,6 +66,16 @@ ApplicationWindow {
         return 0
     }
 
+    function sponsorActionIndex(key) {
+        const action = App.sponsorActions[key] !== undefined
+            ? App.sponsorActions[key] : App.sponsorActionForCategory(key)
+        if (action === 1)
+            return 1
+        if (action === 2)
+            return 2
+        return 0
+    }
+
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.WindowModal
     width: 900
@@ -1065,10 +1075,15 @@ ApplicationWindow {
                 }
             }
 
-            Item {
+            Flickable {
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                contentHeight: playbackColumn.implicitHeight + 44
                 ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 22
+                    id: playbackColumn
+                    width: parent.width - 44
+                    x: 22
+                    y: 22
                     spacing: 14
 
                     Label {
@@ -1337,6 +1352,194 @@ ApplicationWindow {
                         color: root.mutedInk
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                        color: root.rule
+                    }
+
+                    Label {
+                        text: qsTr("SponsorBlock")
+                        color: root.ink
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    SquareCheckBox {
+                        id: sponsorBlockToggle
+                        objectName: "sponsorBlockToggle"
+                        text: qsTr("Enable SponsorBlock (default off)")
+                        checked: App.sponsorBlockEnabled
+                        onCheckedChanged: {
+                            if (checked !== App.sponsorBlockEnabled)
+                                App.setSponsorBlockEnabled(checked)
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Fetches crowdsourced segments from sponsor.ajay.app. Colors follow theme.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    Repeater {
+                        model: [
+                            { key: "sponsor", label: "Sponsor" },
+                            { key: "selfpromo", label: "Self promotion" },
+                            { key: "interaction", label: "Interaction reminder" },
+                            { key: "intro", label: "Intro" },
+                            { key: "outro", label: "Outro" },
+                            { key: "preview", label: "Preview / recap" },
+                            { key: "music_offtopic", label: "Music: non-music" },
+                            { key: "poi_highlight", label: "Highlight" }
+                        ]
+
+                        delegate: RowLayout {
+                            id: sponsorRow
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                width: 8
+                                height: 8
+                                color: App.themeColors[App.sponsorColorKey(sponsorRow.modelData.key)]
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                text: sponsorRow.modelData.label
+                                color: root.ink
+                                elide: Text.ElideRight
+                            }
+
+                            ComboBox {
+                                id: sponsorActionCombo
+                                objectName: "sponsorAction_" + sponsorRow.modelData.key
+                                implicitHeight: 36
+                                Layout.preferredWidth: 160
+                                model: [
+                                    { label: qsTr("Nothing"), value: 0 },
+                                    { label: qsTr("Manual skip"), value: 1 },
+                                    { label: qsTr("Auto skip"), value: 2 }
+                                ]
+                                textRole: "label"
+                                valueRole: "value"
+                                currentIndex: sponsorActionIndex(sponsorRow.modelData.key)
+                                enabled: App.sponsorBlockEnabled
+                                onActivated: App.setSponsorAction(
+                                    sponsorRow.modelData.key, Number(currentValue))
+
+                                PointingCursor {}
+
+                                background: Rectangle {
+                                    color: (sponsorActionCombo.hovered || sponsorActionCombo.popup.visible)
+                                           && sponsorActionCombo.enabled
+                                        ? root.softFill : root.paper
+                                    border.color: (sponsorActionCombo.hovered || sponsorActionCombo.popup.visible)
+                                           && sponsorActionCombo.enabled
+                                        ? root.mutedInk : root.rule
+                                }
+
+                                contentItem: Text {
+                                    leftPadding: 12
+                                    rightPadding: 34
+                                    text: sponsorActionCombo.displayText
+                                    color: sponsorActionCombo.enabled ? root.ink : root.mutedInk
+                                    font.pixelSize: 13
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+
+                                indicator: Canvas {
+                                    x: sponsorActionCombo.width - width - 12
+                                    y: sponsorActionCombo.height / 2 - height / 2
+                                    width: 10
+                                    height: 6
+
+                                    readonly property color chevronColor:
+                                        sponsorActionCombo.enabled
+                                        && (sponsorActionCombo.hovered || sponsorActionCombo.popup.visible)
+                                            ? root.ink : root.mutedInk
+
+                                    onChevronColorChanged: requestPaint()
+
+                                    onPaint: {
+                                        const context = getContext("2d")
+                                        context.reset()
+                                        context.strokeStyle = chevronColor
+                                        context.lineWidth = 1.4
+                                        context.lineCap = "round"
+                                        context.lineJoin = "round"
+                                        context.beginPath()
+                                        context.moveTo(0, 0.5)
+                                        context.lineTo(width / 2, height - 0.5)
+                                        context.lineTo(width, 0.5)
+                                        context.stroke()
+                                    }
+                                }
+
+                                delegate: ItemDelegate {
+                                    id: sponsorActionOption
+                                    required property int index
+                                    required property var modelData
+
+                                    width: sponsorActionCombo.width
+                                    highlighted: sponsorActionCombo.highlightedIndex
+                                        === sponsorActionOption.index
+
+                                    PointingCursor {}
+
+                                    background: Rectangle {
+                                        color: sponsorActionOption.highlighted
+                                            ? root.softFill : root.popupColor
+                                    }
+
+                                    contentItem: Text {
+                                        leftPadding: 12
+                                        text: sponsorActionOption.modelData.label
+                                        color: sponsorActionOption.highlighted
+                                            || sponsorActionCombo.currentValue
+                                                === sponsorActionOption.modelData.value
+                                            ? root.ink : root.mutedInk
+                                        font.pixelSize: 13
+                                        font.weight: sponsorActionCombo.currentValue
+                                                === sponsorActionOption.modelData.value
+                                            ? Font.DemiBold : Font.Normal
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                popup: Popup {
+                                    y: sponsorActionCombo.height + 2
+                                    width: sponsorActionCombo.width
+                                    implicitHeight: Math.min(contentItem.implicitHeight + 2, 320)
+                                    padding: 1
+
+                                    background: Rectangle {
+                                        color: root.popupColor
+                                        border.color: root.rule
+                                    }
+
+                                    contentItem: ListView {
+                                        clip: true
+                                        implicitHeight: contentHeight
+                                        model: sponsorActionCombo.popup.visible
+                                            ? sponsorActionCombo.delegateModel : null
+                                        currentIndex: sponsorActionCombo.highlightedIndex
+                                        interactive: false
+                                        spacing: 0
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Item { Layout.fillHeight: true }

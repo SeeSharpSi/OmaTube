@@ -12,6 +12,61 @@ Item {
 
     property bool speedBoostActive: false
 
+    property var sponsorSegments: App.sponsorSegments
+    property string sponsorColorsJson: ""
+
+    readonly property var sponsorCategories: [
+        "sponsor", "selfpromo", "interaction", "intro", "outro",
+        "preview", "music_offtopic", "poi_highlight"
+    ]
+
+    function sponsorLabel(category) {
+        switch (category) {
+        case "sponsor": return qsTr("Sponsor")
+        case "selfpromo": return qsTr("Self promotion")
+        case "interaction": return qsTr("Interaction reminder")
+        case "intro": return qsTr("Intro")
+        case "outro": return qsTr("Outro")
+        case "preview": return qsTr("Preview / recap")
+        case "music_offtopic": return qsTr("Music: non-music")
+        case "poi_highlight": return qsTr("Highlight")
+        default: return category
+        }
+    }
+
+    function colorToHex(c) {
+        if (!c)
+            return "#ffffff"
+        const r = Math.round(c.r * 255)
+        const g = Math.round(c.g * 255)
+        const b = Math.round(c.b * 255)
+        return "#" + [r, g, b].map(function(v) {
+            return ("0" + v.toString(16)).slice(-2)
+        }).join("")
+    }
+
+    function sponsorColors() {
+        const map = {}
+        for (let i = 0; i < sponsorCategories.length; ++i) {
+            const key = sponsorCategories[i]
+            map[key] = colorToHex(App.themeColors[App.sponsorColorKey(key)])
+        }
+        sponsorColorsJson = JSON.stringify(map)
+        return sponsorColorsJson
+    }
+
+    function pushSponsorToJs() {
+        if (root.videoId.length === 0)
+            return
+        const segments = App.sponsorBlockEnabled ? App.sponsorSegments : []
+        const actions = App.sponsorActions
+        const js = "window.__omaSetSponsor("
+            + JSON.stringify(segments) + ","
+            + JSON.stringify(actions) + ","
+            + JSON.stringify(sponsorColors()) + ");"
+        player.runJavaScript(js)
+    }
+
     IframePlaybackSession {
         id: reportSession
         onPlaybackUpdated: function(positionSeconds, playing) {
@@ -48,11 +103,19 @@ Item {
         const encodedId = encodeURIComponent(id)
         const startAt = root.startSeconds > 0 ? Math.floor(root.startSeconds) : 0
         const boostActive = root.speedBoostActive ? "true" : "false"
+        const segments = App.sponsorBlockEnabled ? JSON.stringify(App.sponsorSegments) : "[]"
+        const actions = JSON.stringify(App.sponsorActions)
+        const colors = sponsorColors()
         return "<!doctype html><html><head><meta charset=\"utf-8\">"
             + "<meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">"
             + "<style>html,body{width:100%;height:100%;margin:0;border:0;overflow:hidden;"
             + "background:#000}#player{width:100%;height:100%}</style></head><body>"
             + "<div id=\"player\"></div>"
+            + "<div id=\"oma-sb-bar\" style=\"position:absolute;left:0;right:0;bottom:0;"
+            + "height:5px;pointer-events:none;z-index:10;display:none\"></div>"
+            + "<button id=\"oma-sb-skip\" style=\"position:absolute;right:16px;bottom:48px;"
+            + "display:none;z-index:10;background:#000;color:#fff;border:2px solid #fff;"
+            + "padding:8px 16px;cursor:pointer;font-family:monospace;font-size:12px\"></button>"
             + "<script src=\"https://www.youtube.com/iframe_api\"></script>"
             + "<script>"
             + "var omaPlayer = null;"
@@ -61,6 +124,78 @@ Item {
             + "var omaSpeedBoostActive = " + boostActive + ";"
             + "var omaSpeedBoostApplied = false;"
             + "var omaSavedRate = 1;"
+            + "var omaSbSegments = " + segments + ";"
+            + "var omaSbActions = " + actions + ";"
+            + "var omaSbColors = " + colors + ";"
+            + "var omaSbSkipEnd = 0;"
+            + "function omaSbLabel(cat) {"
+            + "  var m = {sponsor:'Sponsor',selfpromo:'Self promotion',interaction:'Interaction reminder',"
+            + "    intro:'Intro',outro:'Outro',preview:'Preview / recap',"
+            + "    music_offtopic:'Music: non-music',poi_highlight:'Highlight'};"
+            + "  return m[cat] || cat;"
+            + "}"
+            + "function omaRenderSponsorSegments() {"
+            + "  var bar = document.getElementById('oma-sb-bar');"
+            + "  if (!bar) return;"
+            + "  bar.innerHTML = '';"
+            + "  if (!omaSbSegments || !omaSbSegments.length) { bar.style.display = 'none'; return; }"
+            + "  var dur = 0;"
+            + "  try { if (omaPlayer && omaPlayer.getDuration) dur = omaPlayer.getDuration(); } catch(e) {}"
+            + "  if (!(dur > 0)) { bar.style.display = 'none'; return; }"
+            + "  bar.style.display = 'block';"
+            + "  for (var i=0;i<omaSbSegments.length;i++) {"
+            + "    var s = omaSbSegments[i];"
+            + "    if (!s || !s.end || s.end <= s.start) continue;"
+            + "    var d = document.createElement('div');"
+            + "    d.style.position = 'absolute';"
+            + "    d.style.left = ((s.start / dur) * 100) + '%';"
+            + "    d.style.width = (((s.end - s.start) / dur) * 100) + '%';"
+            + "    d.style.top = '0';"
+            + "    d.style.height = '100%';"
+            + "    d.style.background = (omaSbColors && omaSbColors[s.category]) ? omaSbColors[s.category] : '#00ff00';"
+            + "    bar.appendChild(d);"
+            + "  }"
+            + "}"
+            + "function omaCheckSponsor() {"
+            + "  var bar = document.getElementById('oma-sb-bar');"
+            + "  if (bar && bar.style.display === 'none') { omaRenderSponsorSegments(); }"
+            + "  var skipBtn = document.getElementById('oma-sb-skip');"
+            + "  if (!omaSbSegments || !omaSbSegments.length) { if (skipBtn) skipBtn.style.display = 'none'; return; }"
+            + "  if (!omaPlayer || !omaPlayer.getCurrentTime) return;"
+            + "  var t;"
+            + "  try { t = omaPlayer.getCurrentTime(); } catch(e) { return; }"
+            + "  if (typeof t !== 'number' || isNaN(t)) return;"
+            + "  var found = null;"
+            + "  for (var i=0;i<omaSbSegments.length;i++) {"
+            + "    var s = omaSbSegments[i];"
+            + "    if (s && s.start !== undefined && s.end !== undefined && t >= s.start && t < s.end - 0.15) { found = s; break; }"
+            + "  }"
+            + "  if (!found) { if (skipBtn) skipBtn.style.display = 'none'; return; }"
+            + "  var act = (omaSbActions && omaSbActions[found.category] !== undefined) ? omaSbActions[found.category] : 0;"
+            + "  if (act === 2) {"
+            + "    try { omaPlayer.seekTo(found.end + 0.1, true); } catch(e) {}"
+            + "    return;"
+            + "  }"
+            + "  if (act === 1) {"
+            + "    if (skipBtn) {"
+            + "      omaSbSkipEnd = found.end;"
+            + "      skipBtn.textContent = 'Skip ' + omaSbLabel(found.category);"
+            + "      skipBtn.style.display = 'block';"
+            + "    }"
+            + "  } else if (skipBtn) {"
+            + "    skipBtn.style.display = 'none';"
+            + "  }"
+            + "}"
+            + "document.getElementById('oma-sb-skip').onclick = function() {"
+            + "  try { omaPlayer.seekTo(omaSbSkipEnd + 0.1, true); } catch(e) {}"
+            + "};"
+            + "window.__omaSetSponsor = function(segs, acts, cols) {"
+            + "  omaSbSegments = segs;"
+            + "  omaSbActions = acts;"
+            + "  omaSbColors = cols;"
+            + "  omaRenderSponsorSegments();"
+            + "};"
+            + "setInterval(omaCheckSponsor, 500);"
             + "function omaApplySpeedBoost() {"
             + "  if (!omaSpeedBoostActive) return;"
             + "  if (!omaPlayer || !omaPlayer.getPlaybackRate || !omaPlayer.setPlaybackRate) return;"
@@ -74,7 +209,7 @@ Item {
             + "  omaPlayer = new YT.Player('player', {"
             + "    videoId: decodeURIComponent(omaPendingId),"
             + "    playerVars: {autoplay: 1, playsinline: 1, rel: 0, start: " + startAt + "},"
-            + "    events: {onReady: function(e) { omaPlayer = e.target; omaApplySpeedBoost(); }}"
+            + "    events: {onReady: function(e) { omaPlayer = e.target; omaApplySpeedBoost(); omaRenderSponsorSegments(); }}"
             + "  });"
             + "};"
             + "window.__omaStartSpeedBoost = function() {"
@@ -123,6 +258,7 @@ Item {
 
         onLoadingChanged: function(loadRequest) {
             root.syncSpeedBoost()
+            root.pushSponsorToJs()
         }
 
     }
@@ -149,6 +285,27 @@ Item {
         } else {
             reportSession.stop()
             player.stop()
+        }
+    }
+
+    Connections {
+        target: App
+
+        function onSponsorSegmentsChanged() {
+            sponsorSegments = App.sponsorSegments
+            pushSponsorToJs()
+        }
+
+        function onSponsorActionsChanged() {
+            pushSponsorToJs()
+        }
+
+        function onSponsorBlockEnabledChanged() {
+            pushSponsorToJs()
+        }
+
+        function onThemeChanged() {
+            pushSponsorToJs()
         }
     }
 

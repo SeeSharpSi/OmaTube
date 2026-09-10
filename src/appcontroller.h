@@ -9,6 +9,7 @@
 #include "pointerwatch.h"
 #include "refreshservice.h"
 #include "repository.h"
+#include "sponsorblockclient.h"
 #include "thememanager.h"
 #include "watchtracker.h"
 #include "youtubeclient.h"
@@ -68,6 +69,10 @@ class AppController final : public QObject
     Q_PROPERTY(QString currentVideoTitle READ currentVideoTitle NOTIFY currentVideoTitleChanged)
     Q_PROPERTY(bool currentVideoIsLive READ currentVideoIsLive NOTIFY currentVideoIsLiveChanged)
     Q_PROPERTY(bool automationMode READ automationMode CONSTANT)
+    Q_PROPERTY(bool sponsorBlockEnabled READ sponsorBlockEnabled NOTIFY sponsorBlockEnabledChanged)
+    Q_PROPERTY(QVariantList sponsorSegments READ sponsorSegments NOTIFY sponsorSegmentsChanged)
+    Q_PROPERTY(QVariantMap sponsorActions READ sponsorActions NOTIFY sponsorActionsChanged)
+    Q_PROPERTY(QString sponsorSegmentsVideoId READ sponsorSegmentsVideoId NOTIFY sponsorSegmentsChanged)
 
 public:
     ~AppController() override;
@@ -114,6 +119,10 @@ public:
     [[nodiscard]] QString currentVideoTitle() const;
     [[nodiscard]] bool currentVideoIsLive() const;
     [[nodiscard]] bool automationMode() const;
+    [[nodiscard]] bool sponsorBlockEnabled() const;
+    [[nodiscard]] QVariantList sponsorSegments() const;
+    [[nodiscard]] QVariantMap sponsorActions() const;
+    [[nodiscard]] QString sponsorSegmentsVideoId() const;
 
     Q_INVOKABLE void startupRefresh();
     Q_INVOKABLE void refresh();
@@ -154,6 +163,13 @@ public:
     Q_INVOKABLE void reportPlayback(const QString &videoId, double positionSeconds, bool playing);
     Q_INVOKABLE QVariantMap watchStatsForVideo(const QString &videoId);
     Q_INVOKABLE void clearError();
+    Q_INVOKABLE void setSponsorBlockEnabled(bool enabled);
+    Q_INVOKABLE void setSponsorAction(const QString &category, int action);
+    Q_INVOKABLE int sponsorActionForCategory(const QString &category) const;
+    Q_INVOKABLE double sponsorSkipTarget(double positionSeconds) const;
+    Q_INVOKABLE QVariantMap sponsorManualSegmentAt(double positionSeconds) const;
+    Q_INVOKABLE QString sponsorColorKey(const QString &category) const;
+    Q_INVOKABLE void refreshSponsorSegments();
 
 signals:
     void refreshingChanged();
@@ -181,6 +197,9 @@ signals:
     void currentVideoIsLiveChanged();
     void channelAdded(QString title);
     void watchNextFeedback(const QString &message);
+    void sponsorBlockEnabledChanged();
+    void sponsorSegmentsChanged();
+    void sponsorActionsChanged();
 
 private:
     explicit AppController(QString databasePath, QObject *parent = nullptr, bool automationMode = false);
@@ -205,6 +224,11 @@ private:
     static QString perVideoHeightKey(const QString &videoId);
     void updateCurrentVideoMaximumHeightForOpen(const QString &videoId);
     void updateCurrentVideoMetadataForOpen(const QString &videoId);
+    void loadSponsorSettings();
+    void requestSponsorSegments(const QString &videoId);
+    void clearSponsorSegments(const QString &videoId = {});
+    static QString sponsorActionSettingKey(const QString &category);
+    static QString sponsorColorKeyFor(const QString &category);
 
     static constexpr int feedPageSize = 50;
 
@@ -243,6 +267,12 @@ private:
     bool m_currentVideoIsLive = false;
     WatchTracker m_watchTracker;
     QTimer m_watchFlushTimer;
+    SponsorBlockClient m_sponsorBlockClient;
+    bool m_sponsorBlockEnabled = false;
+    QVariantList m_sponsorSegments;
+    QVariantMap m_sponsorActions;
+    QString m_sponsorSegmentsVideoId;
+    int m_sponsorRequestId = 0;
 
     static AppController *s_instance;
 };

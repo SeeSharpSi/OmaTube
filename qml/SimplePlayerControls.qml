@@ -434,6 +434,34 @@ Item {
                 onMoved: root.seekPreview = value
 
                 PointingCursor {}
+
+                background: Rectangle {
+                    x: seekSlider.leftPadding
+                    y: seekSlider.topPadding + seekSlider.availableHeight / 2 - height / 2
+                    width: seekSlider.availableWidth
+                    height: 4
+                    color: root.rule
+                    clip: true
+                    Rectangle {
+                        width: seekSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: root.accent
+                    }
+                    Repeater {
+                        model: App.sponsorBlockEnabled ? App.sponsorSegments : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            x: (modelData.start / Math.max(1, root.durationS)) * parent.width
+                            width: Math.max(2,
+                                ((modelData.end - modelData.start) / Math.max(1, root.durationS))
+                                * parent.width)
+                            height: parent.height
+                            color: App.themeColors[App.sponsorColorKey(modelData.category)]
+                                ?? App.themeColors.green
+                            visible: root.durationS > 0 && modelData.end > modelData.start
+                        }
+                    }
+                }
             }
 
             Text {

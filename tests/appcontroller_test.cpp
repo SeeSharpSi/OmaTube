@@ -3,6 +3,7 @@
 #include "models/historymodel.h"
 #include "models/watchnextmodel.h"
 #include "playbacksettings.h"
+#include "sponsorblockclient.h"
 #include "repository.h"
 #include "spaceholdhandler.h"
 
@@ -22,7 +23,10 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrlQuery>
 #include <QtQml/qqml.h>
+
+#include <cmath>
 
 class FakePlayer final : public QObject
 {
@@ -124,6 +128,13 @@ private slots:
     void iframePlaybackSessionStaleSessions();
     void iframePlaybackSessionRejectsMalformed();
     void iframePlaybackSessionProtectsWatchProgress();
+    void sponsorBlockDefaultsToOff();
+    void sponsorBlockUrlBuilding();
+    void sponsorBlockParsesSegments();
+    void sponsorBlockRejectsInvalidPayload();
+    void sponsorBlockActionPersistence();
+    void sponsorBlockEmptySkipTargets();
+    void sponsorBlockColorKeys();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -2243,6 +2254,167 @@ void AppControllerTest::iframePlaybackSessionProtectsWatchProgress()
     const QVariantMap statsA = controller->watchStatsForVideo(idA);
     QCOMPARE(statsA.value(QStringLiteral("watchedSeconds")).toLongLong(), 5);
     QCOMPARE(statsA.value(QStringLiteral("lastPositionSeconds")).toInt(), 5);
+}
+
+void AppControllerTest::sponsorBlockDefaultsToOff()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+    QCOMPARE(controller->sponsorBlockEnabled(), false);
+    QCOMPARE(controller->sponsorSegments().size(), 0);
+    QCOMPARE(controller->sponsorActions().size(), 8);
+    for (const QVariant &value : controller->sponsorActions())
+        QCOMPARE(value.toInt(), 0);
+    QCOMPARE(controller->sponsorActionForCategory(QStringLiteral("sponsor")), 0);
+    QCOMPARE(controller->sponsorActionForCategory(QStringLiteral("bogus")), 0);
+    QCOMPARE(controller->sponsorSkipTarget(10.0), -1);
+    QVERIFY(controller->sponsorManualSegmentAt(10.0).isEmpty());
+    QVERIFY(controller->sponsorSegmentsVideoId().isEmpty());
+}
+
+void AppControllerTest::sponsorBlockUrlBuilding()
+{
+    const QUrl u = SponsorBlock::buildSkipSegmentsUrl(
+        QStringLiteral("dQw4w9WgXcQ"),
+        {QStringLiteral("sponsor"), QStringLiteral("bogus"), QStringLiteral("intro")});
+    QVERIFY(!u.isEmpty());
+    QCOMPARE(u.host(), QStringLiteral("sponsor.ajay.app"));
+    QCOMPARE(u.path(), QStringLiteral("/api/skipSegments"));
+    QUrlQuery q(u);
+    QCOMPARE(q.queryItemValue(QStringLiteral("videoID")), QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(q.queryItemValue(QStringLiteral("actionType")), QStringLiteral("skip"));
+    const QStringList categories = q.allQueryItemValues(QStringLiteral("category"));
+    QCOMPARE(categories.size(), 2);
+    QVERIFY(categories.contains(QStringLiteral("sponsor")));
+    QVERIFY(categories.contains(QStringLiteral("intro")));
+    QVERIFY(!categories.contains(QStringLiteral("bogus")));
+
+    QVERIFY(SponsorBlock::buildSkipSegmentsUrl(QStringLiteral("short"), {QStringLiteral("sponsor")}).isEmpty());
+
+    QVERIFY(SponsorBlock::isSupportedCategory(QStringLiteral("sponsor")));
+    QVERIFY(!SponsorBlock::isSupportedCategory(QStringLiteral("bogus")));
+    QCOMPARE(SponsorBlock::normalizeAction(2), 2);
+    QCOMPARE(SponsorBlock::normalizeAction(1), 1);
+    QCOMPARE(SponsorBlock::normalizeAction(0), 0);
+    QCOMPARE(SponsorBlock::normalizeAction(99), 0);
+    QCOMPARE(SponsorBlock::normalizeAction(-1), 0);
+}
+
+void AppControllerTest::sponsorBlockParsesSegments()
+{
+    const QByteArray json = R"json([
+        {"category":"selfpromo","segment":[30.5,40],"UUID":"BBB"},
+        {"category":"sponsor","segment":[10,20],"UUID":"AAA"},
+        {"category":"bogus","segment":[1,2],"UUID":"X"},
+        {"category":"sponsor","segment":[50,40],"UUID":"BAD"},
+        {"category":"intro","segment":[-5,5],"UUID":"NEG"},
+        {"category":"outro","segment":[60],"UUID":"SHORT"}
+    ])json";
+    QString err;
+    const QVariantList segs = SponsorBlock::parseSkipSegmentsResponse(json, &err);
+    QVERIFY(err.isEmpty());
+    QCOMPARE(segs.size(), 2);
+    QVERIFY(qAbs(segs.at(0).toMap().value(QStringLiteral("start")).toDouble() - 10.0) < 1e-6);
+    QCOMPARE(segs.at(0).toMap().value(QStringLiteral("category")).toString(), QStringLiteral("sponsor"));
+    QCOMPARE(segs.at(0).toMap().value(QStringLiteral("uuid")).toString(), QStringLiteral("AAA"));
+    QVERIFY(qAbs(segs.at(1).toMap().value(QStringLiteral("start")).toDouble() - 30.5) < 1e-6);
+    QCOMPARE(segs.at(1).toMap().value(QStringLiteral("category")).toString(), QStringLiteral("selfpromo"));
+    QCOMPARE(segs.at(1).toMap().value(QStringLiteral("uuid")).toString(), QStringLiteral("BBB"));
+
+    const QByteArray lower = R"json([{"category":"intro","segment":[1,2],"uuid":"lower"}])json";
+    QString lowerErr;
+    const QVariantList lowerSegs = SponsorBlock::parseSkipSegmentsResponse(lower, &lowerErr);
+    QVERIFY(lowerErr.isEmpty());
+    QCOMPARE(lowerSegs.size(), 1);
+    QCOMPARE(lowerSegs.at(0).toMap().value(QStringLiteral("uuid")).toString(), QStringLiteral("lower"));
+}
+
+void AppControllerTest::sponsorBlockRejectsInvalidPayload()
+{
+    QString err;
+    QVERIFY(SponsorBlock::parseSkipSegmentsResponse("{bad", &err).isEmpty());
+    QVERIFY(!err.isEmpty());
+
+    err.clear();
+    QVERIFY(SponsorBlock::parseSkipSegmentsResponse("{\"not\":\"array\"}", &err).isEmpty());
+    QVERIFY(!err.isEmpty());
+
+    QVERIFY(SponsorBlock::parseSkipSegmentsResponse("[]", nullptr).isEmpty());
+}
+
+void AppControllerTest::sponsorBlockActionPersistence()
+{
+    QString error;
+    {
+        std::unique_ptr<AppController> controller1 =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller1->initialize(&error), qPrintable(error));
+        QSignalSpy enabledSpy(controller1.get(), &AppController::sponsorBlockEnabledChanged);
+        QSignalSpy actionsSpy(controller1.get(), &AppController::sponsorActionsChanged);
+        controller1->setSponsorBlockEnabled(true);
+        controller1->setSponsorAction(QStringLiteral("sponsor"), 2);
+        controller1->setSponsorAction(QStringLiteral("intro"), 1);
+        controller1->setSponsorAction(QStringLiteral("bogus"), 2);
+        QCOMPARE(controller1->sponsorActionForCategory(QStringLiteral("bogus")), 0);
+        QCOMPARE(enabledSpy.count(), 1);
+        QVERIFY(actionsSpy.count() >= 2);
+    }
+    {
+        std::unique_ptr<AppController> controller2 =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller2->initialize(&error), qPrintable(error));
+        QCOMPARE(controller2->sponsorBlockEnabled(), true);
+        QCOMPARE(controller2->sponsorActionForCategory(QStringLiteral("sponsor")), 2);
+        QCOMPARE(controller2->sponsorActionForCategory(QStringLiteral("intro")), 1);
+        QCOMPARE(controller2->sponsorActionForCategory(QStringLiteral("outro")), 0);
+
+        controller2->setSponsorBlockEnabled(false);
+    }
+    {
+        std::unique_ptr<AppController> controller3 =
+            AppController::createApplication(QStringLiteral(":memory:"));
+        QVERIFY2(controller3->initialize(&error), qPrintable(error));
+        QCOMPARE(controller3->sponsorBlockEnabled(), false);
+        QCOMPARE(controller3->sponsorActionForCategory(QStringLiteral("sponsor")), 2);
+    }
+}
+
+void AppControllerTest::sponsorBlockEmptySkipTargets()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"), true);
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+
+    controller->setSponsorBlockEnabled(true);
+    controller->openVideo(QStringLiteral("dQw4w9WgXcQ"));
+    QCOMPARE(controller->sponsorSegments().size(), 0);
+    QCOMPARE(controller->sponsorSkipTarget(15.0), -1);
+    QVERIFY(controller->sponsorManualSegmentAt(15.0).isEmpty());
+    QCOMPARE(controller->sponsorSegmentsVideoId(), QStringLiteral("dQw4w9WgXcQ"));
+
+    QCOMPARE(controller->sponsorSkipTarget(-1.0), -1);
+    QCOMPARE(controller->sponsorSkipTarget(qInf()), -1);
+}
+
+void AppControllerTest::sponsorBlockColorKeys()
+{
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("sponsor")), QStringLiteral("green"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("selfpromo")), QStringLiteral("bright_green"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("intro")), QStringLiteral("cyan"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("outro")), QStringLiteral("blue"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("preview")), QStringLiteral("yellow"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("interaction")), QStringLiteral("orange"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("music_offtopic")), QStringLiteral("magenta"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("poi_highlight")), QStringLiteral("red"));
+    QCOMPARE(controller->sponsorColorKey(QStringLiteral("bogus")), QStringLiteral("green"));
 }
 
 QTEST_MAIN(AppControllerTest)

@@ -15,6 +15,9 @@
 #include <QSettings>
 #include <QSet>
 
+#include <cmath>
+#include <utility>
+
 namespace {
 constexpr auto apiKeySetting = "credentials/youtubeApiKey";
 constexpr auto shortVideoCutoffSetting = "feed/shortVideoCutoffMinutes";
@@ -22,6 +25,8 @@ constexpr auto playbackBackendSetting = "playback/backend";
 constexpr auto maximumVideoHeightSetting = "playback/maximumVideoHeight";
 constexpr auto playbackVolumeSetting = "playback/volume";
 constexpr auto simpleUiSetting = "appearance/simpleUi";
+constexpr auto sponsorblockEnabledSetting = "sponsorblock/enabled";
+constexpr auto sponsorActionPrefix = "sponsorblock/action_";
 constexpr auto perVideoHeightPrefix = "playback/videoMaximumHeight/";
 constexpr auto defaultPlaybackBackend = "iframe";
 constexpr int defaultShortVideoCutoffMinutes = 3;
@@ -278,6 +283,7 @@ bool AppController::initialize(QString *error)
         settings.value(QString::fromLatin1(maximumVideoHeightSetting)).toInt());
     m_playbackVolume = qBound(0, settings.value(QString::fromLatin1(playbackVolumeSetting), 100).toInt(), 100);
     m_simpleUi = settings.value(QString::fromLatin1(simpleUiSetting), false).toBool();
+    loadSponsorSettings();
     m_currentVideoMaximumHeightOverride = -1;
     m_currentVideoTitle.clear();
     m_currentVideoIsLive = false;
@@ -1111,6 +1117,10 @@ void AppController::openVideo(const QString &videoId)
         m_playerOpen = true;
         emit playerOpenChanged();
     }
+    if (m_sponsorBlockEnabled)
+        requestSponsorSegments(videoId);
+    else
+        clearSponsorSegments(videoId);
 }
 
 void AppController::closePlayer()
@@ -1124,6 +1134,7 @@ void AppController::closePlayer()
     reloadWatchNext();
     m_playerOpen = false;
     emit playerOpenChanged();
+    clearSponsorSegments();
 }
 
 void AppController::setVideoBackend(const QString &backend)
@@ -1238,6 +1249,195 @@ QVariantMap AppController::watchStatsForVideo(const QString &videoId)
 void AppController::clearError()
 {
     setErrorMessage({});
+}
+
+bool AppController::sponsorBlockEnabled() const
+{
+    return m_sponsorBlockEnabled;
+}
+
+QVariantList AppController::sponsorSegments() const
+{
+    return m_sponsorSegments;
+}
+
+QVariantMap AppController::sponsorActions() const
+{
+    return m_sponsorActions;
+}
+
+QString AppController::sponsorSegmentsVideoId() const
+{
+    return m_sponsorSegmentsVideoId;
+}
+
+void AppController::loadSponsorSettings()
+{
+    QSettings settings;
+    m_sponsorBlockEnabled =
+        settings.value(QString::fromLatin1(sponsorblockEnabledSetting), false).toBool();
+    m_sponsorActions.clear();
+    for (const QString &category : SponsorBlock::kCategories) {
+        const int action = SponsorBlock::normalizeAction(
+            settings.value(sponsorActionSettingKey(category), 0).toInt());
+        m_sponsorActions.insert(category, action);
+    }
+}
+
+QString AppController::sponsorActionSettingKey(const QString &category)
+{
+    return QString::fromLatin1(sponsorActionPrefix) + category;
+}
+
+void AppController::setSponsorBlockEnabled(bool enabled)
+{
+    if (m_sponsorBlockEnabled == enabled)
+        return;
+    m_sponsorBlockEnabled = enabled;
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(sponsorblockEnabledSetting), enabled);
+    settings.sync();
+    emit sponsorBlockEnabledChanged();
+    if (enabled) {
+        if (isValidVideoId(m_currentVideoId) && m_playerOpen)
+            requestSponsorSegments(m_currentVideoId);
+    } else {
+        clearSponsorSegments(m_currentVideoId);
+    }
+}
+
+void AppController::setSponsorAction(const QString &category, int action)
+{
+    if (!SponsorBlock::isSupportedCategory(category))
+        return;
+    const int normalized = SponsorBlock::normalizeAction(action);
+    if (m_sponsorActions.value(category).toInt() == normalized)
+        return;
+    m_sponsorActions.insert(category, normalized);
+    QSettings settings;
+    settings.setValue(sponsorActionSettingKey(category), normalized);
+    settings.sync();
+    emit sponsorActionsChanged();
+}
+
+int AppController::sponsorActionForCategory(const QString &category) const
+{
+    return m_sponsorActions.value(category).toInt();
+}
+
+double AppController::sponsorSkipTarget(double positionSeconds) const
+{
+    if (!m_sponsorBlockEnabled || !std::isfinite(positionSeconds) || positionSeconds < 0.0)
+        return -1.0;
+    for (const QVariant &value : m_sponsorSegments) {
+        const QVariantMap segment = value.toMap();
+        const double start = segment.value(QStringLiteral("start")).toDouble();
+        const double end = segment.value(QStringLiteral("end")).toDouble();
+        const int action = m_sponsorActions
+                               .value(segment.value(QStringLiteral("category")).toString())
+                               .toInt();
+        if (positionSeconds >= start && positionSeconds < end - 0.15 && action == SponsorBlock::Action::AutoSkip)
+            return end + 0.1;
+    }
+    return -1.0;
+}
+
+QVariantMap AppController::sponsorManualSegmentAt(double positionSeconds) const
+{
+    if (!m_sponsorBlockEnabled || !std::isfinite(positionSeconds) || positionSeconds < 0.0)
+        return {};
+    for (const QVariant &value : m_sponsorSegments) {
+        const QVariantMap segment = value.toMap();
+        const double start = segment.value(QStringLiteral("start")).toDouble();
+        const double end = segment.value(QStringLiteral("end")).toDouble();
+        const int action = m_sponsorActions
+                               .value(segment.value(QStringLiteral("category")).toString())
+                               .toInt();
+        if (positionSeconds >= start && positionSeconds < end - 0.15 && action == SponsorBlock::Action::ManualSkip) {
+            QVariantMap result = segment;
+            result.insert(
+                QStringLiteral("colorKey"),
+                sponsorColorKeyFor(segment.value(QStringLiteral("category")).toString()));
+            return result;
+        }
+    }
+    return {};
+}
+
+QString AppController::sponsorColorKey(const QString &category) const
+{
+    return sponsorColorKeyFor(category);
+}
+
+QString AppController::sponsorColorKeyFor(const QString &category)
+{
+    static const QHash<QString, QString> mapping = {
+        {QStringLiteral("sponsor"), QStringLiteral("green")},
+        {QStringLiteral("selfpromo"), QStringLiteral("bright_green")},
+        {QStringLiteral("intro"), QStringLiteral("cyan")},
+        {QStringLiteral("outro"), QStringLiteral("blue")},
+        {QStringLiteral("preview"), QStringLiteral("yellow")},
+        {QStringLiteral("interaction"), QStringLiteral("orange")},
+        {QStringLiteral("music_offtopic"), QStringLiteral("magenta")},
+        {QStringLiteral("poi_highlight"), QStringLiteral("red")},
+    };
+    return mapping.value(category, QStringLiteral("green"));
+}
+
+void AppController::requestSponsorSegments(const QString &videoId)
+{
+    if (!isValidVideoId(videoId)) {
+        clearSponsorSegments(videoId);
+        return;
+    }
+    if (m_automationMode) {
+        clearSponsorSegments(videoId);
+        return;
+    }
+    m_sponsorSegmentsVideoId = videoId;
+    m_sponsorSegments.clear();
+    emit sponsorSegmentsChanged();
+    const int requestId = ++m_sponsorRequestId;
+    m_sponsorBlockClient.fetchSegments(
+        videoId,
+        SponsorBlock::kCategories,
+        [this, requestId, videoId](QVariantList segments, QString error, bool notFound) {
+            if (requestId != m_sponsorRequestId)
+                return;
+            if (notFound || !error.isEmpty()) {
+                m_sponsorSegments.clear();
+                m_sponsorSegmentsVideoId = videoId;
+                emit sponsorSegmentsChanged();
+                return;
+            }
+            m_sponsorSegments = std::move(segments);
+            m_sponsorSegmentsVideoId = videoId;
+            emit sponsorSegmentsChanged();
+        });
+}
+
+void AppController::refreshSponsorSegments()
+{
+    if (m_sponsorBlockEnabled && isValidVideoId(m_currentVideoId))
+        requestSponsorSegments(m_currentVideoId);
+    else
+        clearSponsorSegments(m_currentVideoId);
+}
+
+void AppController::clearSponsorSegments(const QString &videoId)
+{
+    ++m_sponsorRequestId;
+    bool changed = false;
+    if (m_sponsorSegmentsVideoId != videoId) {
+        m_sponsorSegmentsVideoId = videoId;
+        changed = true;
+    }
+    if (!m_sponsorSegments.isEmpty()) {
+        m_sponsorSegments.clear();
+        changed = true;
+    }
+    if (changed)
+        emit sponsorSegmentsChanged();
 }
 
 void AppController::reloadCategories()

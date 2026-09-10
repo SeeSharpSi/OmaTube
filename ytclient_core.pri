@@ -23,6 +23,7 @@ HEADERS += \
     $$PROJECT_ROOT/src/models/watchnextmodel.h \
     $$PROJECT_ROOT/src/playbacksettings.h \
     $$PROJECT_ROOT/src/pointerwatch.h \
+    $$PROJECT_ROOT/src/sponsorblockclient.h \
     $$PROJECT_ROOT/src/refreshservice.h \
     $$PROJECT_ROOT/src/repository.h \
     $$PROJECT_ROOT/src/watchtracker.h \
@@ -40,6 +41,7 @@ SOURCES += \
     $$PROJECT_ROOT/src/pointerwatch.cpp \
     $$PROJECT_ROOT/src/refreshservice.cpp \
     $$PROJECT_ROOT/src/repository.cpp \
+    $$PROJECT_ROOT/src/sponsorblockclient.cpp \
     $$PROJECT_ROOT/src/watchtracker.cpp \
     $$PROJECT_ROOT/src/youtubeclient.cpp \
     $$PROJECT_ROOT/src/youtubefeed.cpp

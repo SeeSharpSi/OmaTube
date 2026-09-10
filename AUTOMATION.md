@@ -211,6 +211,7 @@ Shared selectors, present in full and Simple UI:
 |---|---|---|
 | `appWindow` | none | Root `ApplicationWindow` |
 | `feedPage` | none | Main feed container |
+| `liveNowLabel` | none | `LIVE NOW` header above the live channel list; text switches to the hovered live video title |
 | `historyLoader` | none | Lazy history `Loader`, active when history is open |
 | `watchNextLoader` | none | Lazy Watch Next `Loader`, active when Watch Next is open |
 | `playerLoader` | none | Lazy player `Loader`, active when `playerOpen` is true |

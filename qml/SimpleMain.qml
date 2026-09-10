@@ -221,11 +221,16 @@ ApplicationWindow {
             spacing: 9
 
             Label {
-                text: qsTr("LIVE NOW")
+                objectName: "liveNowLabel"
+                text: liveList.hoveredVideoId.length > 0
+                    ? liveList.hoveredVideoTitle
+                    : qsTr("LIVE NOW")
                 color: root.liveRed
                 font.pixelSize: 11
                 font.weight: Font.Bold
                 font.letterSpacing: 1.5
+                Layout.fillWidth: true
+                elide: Text.ElideRight
             }
 
             ListView {
@@ -237,6 +242,8 @@ ApplicationWindow {
                 clip: true
                 model: App.liveChannels
                 boundsBehavior: Flickable.StopAtBounds
+                property string hoveredVideoId: ""
+                property string hoveredVideoTitle: ""
 
                 delegate: Item {
                     id: liveDelegate
@@ -292,9 +299,16 @@ ApplicationWindow {
                     HoverHandler {
                         id: liveHover
                         cursorShape: Qt.PointingHandCursor
+                        onHoveredChanged: {
+                            if (hovered) {
+                                liveList.hoveredVideoId = liveDelegate.videoId
+                                liveList.hoveredVideoTitle = liveDelegate.videoTitle
+                            } else if (liveList.hoveredVideoId === liveDelegate.videoId) {
+                                liveList.hoveredVideoId = ""
+                                liveList.hoveredVideoTitle = ""
+                            }
+                        }
                     }
-                    ToolTip.visible: liveHover.hovered
-                    ToolTip.text: liveDelegate.videoTitle
                 }
             }
         }

@@ -157,6 +157,12 @@ void NavigationTest::fullUiNavigation()
     QString initializeError;
     QVERIFY2(controller->initialize(&initializeError), qPrintable(initializeError));
     QVERIFY(controller->automationMode());
+    controller->liveChannels()->setLiveChannels(
+        {LiveChannel{QStringLiteral("UCAlpha"),
+                     QStringLiteral("Live Channel"),
+                     {},
+                     QStringLiteral("LIVEAUTO001"),
+                     QStringLiteral("Automation Live Stream")}});
 
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
@@ -250,6 +256,24 @@ void NavigationTest::fullUiNavigation()
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000005")).isEmpty());
 
+    QQuickItem *liveNowLabel = nullptr;
+    QTRY_VERIFY((liveNowLabel = firstVisualChild(rootItem, QStringLiteral("liveNowLabel")))
+                != nullptr);
+    QTRY_COMPARE(liveNowLabel->property("text").toString(), QStringLiteral("LIVE NOW"));
+    QQuickItem *liveDelegate = nullptr;
+    QTRY_VERIFY((liveDelegate =
+                     firstVisualChild(rootItem, QStringLiteral("liveVideo_LIVEAUTO001")))
+                != nullptr);
+    QTRY_VERIFY(liveDelegate->width() > 0.0);
+    moveMouseToItem(liveDelegate);
+    QTRY_COMPARE(liveNowLabel->property("text").toString(),
+                 QStringLiteral("Automation Live Stream"));
+    QQuickItem *nonLiveFeedVideo =
+        firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
+    QTRY_VERIFY(nonLiveFeedVideo != nullptr);
+    moveMouseToItem(nonLiveFeedVideo);
+    QTRY_COMPARE(liveNowLabel->property("text").toString(), QStringLiteral("LIVE NOW"));
+
     QQuickItem *feedVideo = firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
     QVERIFY(feedVideo != nullptr);
     QTRY_VERIFY(feedVideo->width() > 0.0);
@@ -312,6 +336,7 @@ void NavigationTest::fullUiNavigation()
     QQuickItem *historyCard = firstVisualChild(
         historyPage, QStringLiteral("historyVideo_AUTO0000001"));
     QVERIFY(historyCard != nullptr);
+    QTRY_VERIFY(historyCard->width() > 0.0);
     QQuickItem *historyOutline = nullptr;
     QTRY_VERIFY((historyOutline = firstVisualChild(
                      historyPage,
@@ -445,6 +470,12 @@ void NavigationTest::simpleUiNavigation()
     QVERIFY2(controller->initialize(&initializeError), qPrintable(initializeError));
     QVERIFY(controller->automationMode());
     QVERIFY(controller->simpleUi());
+    controller->liveChannels()->setLiveChannels(
+        {LiveChannel{QStringLiteral("UCAlpha"),
+                     QStringLiteral("Live Channel"),
+                     {},
+                     QStringLiteral("LIVEAUTO001"),
+                     QStringLiteral("Automation Live Stream")}});
 
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/qml/SimpleMain.qml")));
@@ -469,6 +500,25 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("feedPage")).isEmpty());
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
+
+    QQuickItem *simpleLiveNowLabel = nullptr;
+    QTRY_VERIFY((simpleLiveNowLabel = firstVisualChild(rootItem, QStringLiteral("liveNowLabel")))
+                != nullptr);
+    QTRY_COMPARE(simpleLiveNowLabel->property("text").toString(), QStringLiteral("LIVE NOW"));
+    QQuickItem *simpleLiveDelegate = nullptr;
+    QTRY_VERIFY((simpleLiveDelegate =
+                     firstVisualChild(rootItem, QStringLiteral("liveVideo_LIVEAUTO001")))
+                != nullptr);
+    QTRY_VERIFY(simpleLiveDelegate->width() > 0.0);
+    moveMouseToItem(simpleLiveDelegate);
+    QTRY_COMPARE(simpleLiveNowLabel->property("text").toString(),
+                 QStringLiteral("Automation Live Stream"));
+    QQuickItem *simpleNonLiveFeed =
+        firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
+    QTRY_VERIFY(simpleNonLiveFeed != nullptr);
+    moveMouseToItem(simpleNonLiveFeed);
+    QTRY_COMPARE(simpleLiveNowLabel->property("text").toString(), QStringLiteral("LIVE NOW"));
+
     const int unselectedCategoryId = controller->selectedCategoryId() == 1 ? 2 : 1;
     QQuickItem *simpleCategoryButton = firstVisualChild(
         rootItem, QStringLiteral("categoryButton_%1").arg(unselectedCategoryId));

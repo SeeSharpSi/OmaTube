@@ -127,7 +127,7 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: "S"
+        sequence: "C"
         context: Qt.WindowShortcut
         enabled: !settingsDialog.visible && !App.playerOpen
         onActivated: settingsDialog.open()
@@ -248,9 +248,25 @@ ApplicationWindow {
                 font.family: "monospace"
                 font.pixelSize: 20
                 font.bold: true
-                visible: text.length > 0
+                // Always reserve the slot width so hovering the top-right
+                // buttons never shifts the centered keybinds label.
             }
-            Item { Layout.fillWidth: true }
+            Label {
+                id: keybindsLabel
+                objectName: "keybindsLabel"
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                Layout.minimumWidth: 0
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                maximumLineCount: 1
+                color: root.mutedInk
+                font.family: "monospace"
+                font.pixelSize: 11
+                textFormat: Text.RichText
+                text: keybinds.headerText(root.historyOpen ? "history" : root.watchNextOpen ? "watchnext" : "feed", root.ink)
+            }
             Button {
                 id: feedButton
                 objectName: "feedNavigationButton"
@@ -1133,28 +1149,6 @@ ApplicationWindow {
                 color: root.mutedInk
                 font.pixelSize: 12
             }
-        }
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.leftMargin: 18
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 14
-        z: 10
-        visible: !App.playerOpen
-        color: root.panel
-        border.color: root.rule
-        width: keybindsLabel.implicitWidth + 20
-        height: keybindsLabel.implicitHeight + 12
-
-        Label {
-            id: keybindsLabel
-            anchors.centerIn: parent
-            color: root.mutedInk
-            font.family: "monospace"
-            font.pixelSize: 11
-            text: keybinds.footerText(root.historyOpen ? "history" : root.watchNextOpen ? "watchnext" : "feed").split("\n").join("  /  ")
         }
     }
 

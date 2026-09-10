@@ -1269,12 +1269,12 @@ void AutomationTest::e2eSettingsRootSwap()
         return o;
     };
     QJsonArray seq;
-    // S opens settingsWindow; the release is pinned to appWindow explicitly
+    // C opens settingsWindow; the release is pinned to appWindow explicitly
     // so it must not fail on the modal gate either.
-    QJsonObject sPress = key("key_press", 800, "S");
+    QJsonObject sPress = key("key_press", 800, "C");
     sPress[QStringLiteral("window")] = QStringLiteral("appWindow");
     seq.append(sPress);
-    QJsonObject sRelease = key("key_release", 950, "S");
+    QJsonObject sRelease = key("key_release", 950, "C");
     sRelease[QStringLiteral("window")] = QStringLiteral("appWindow");
     seq.append(sRelease);
     seq.append(click(2200, QStringLiteral("settingsAppearanceTab")));

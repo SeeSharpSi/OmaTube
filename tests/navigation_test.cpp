@@ -677,7 +677,7 @@ void NavigationTest::simpleUiNavigation()
     clickItem(queueBackButton);
     QTRY_VERIFY(!controller->playerOpen());
 
-    QTest::keyClick(window, Qt::Key_S);
+    QTest::keyClick(window, Qt::Key_C);
     QQuickWindow *settingsWindow = nullptr;
     QTRY_VERIFY((settingsWindow = findWindowByName(&engine, QStringLiteral("settingsWindow")))
                 != nullptr);

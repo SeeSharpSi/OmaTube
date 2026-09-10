@@ -266,7 +266,7 @@ Simple UI keyboard routes, no navigation buttons:
 |---|---|
 | `H` | Toggles `historyOpen`, reloads watch history, closes Watch Next |
 | `W` | Toggles `watchNextOpen`, reloads Watch Next, closes history |
-| `S` | Opens `settingsWindow` |
+| `C` | Opens `settingsWindow` |
 | `R` | Shortcut is disabled in automation, so status stays unchanged |
 | `Escape` | Closes history, then Watch Next, exits fullscreen, or closes player, in that order |
 | `j`, `k` | Scrolls feed, history, or Watch Next by 120 pixels |
@@ -332,26 +332,26 @@ when navigation buttons are replaced by keys):
 ]
 ```
 
-Settings tabs and screenshot (both UIs; `S` opens settings in full
+Settings tabs and screenshot (both UIs; `C` opens settings in full
 and Simple UI):
 
 ```json
 [
-  {"type": "key_press", "key": "S", "atMs": 500},
-  {"type": "key_release", "key": "S", "atMs": 550},
+  {"type": "key_press", "key": "C", "atMs": 500},
+  {"type": "key_release", "key": "C", "atMs": 550},
   {"type": "click", "target": "settingsAppearanceTab", "window": "settingsWindow", "atMs": 1500},
   {"type": "screenshot", "filename": "sil-48-settings.png", "window": "settingsWindow", "atMs": 2200},
   {"type": "click", "target": "settingsCloseButton", "window": "settingsWindow", "atMs": 2700}
 ]
 ```
 
-Switching Simple UI from the appearance tab (both UIs; `S` valid in
+Switching Simple UI from the appearance tab (both UIs; `C` valid in
 both, `settingsNavigationButton` is full UI only):
 
 ```json
 [
-  {"type": "key_press", "key": "S", "atMs": 500},
-  {"type": "key_release", "key": "S", "atMs": 550},
+  {"type": "key_press", "key": "C", "atMs": 500},
+  {"type": "key_release", "key": "C", "atMs": 550},
   {"type": "click", "target": "settingsAppearanceTab", "window": "settingsWindow", "atMs": 1500},
   {"type": "click", "target": "simpleUiCheckBox", "window": "settingsWindow", "atMs": 2000},
   {"type": "screenshot", "filename": "sil-48-after-swap.png", "atMs": 4000}

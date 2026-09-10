@@ -125,7 +125,7 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: "S"
+        sequence: "C"
         context: Qt.WindowShortcut
         enabled: !settingsDialog.visible && !App.playerOpen
         onActivated: settingsDialog.open()
@@ -214,6 +214,38 @@ ApplicationWindow {
         width: Math.min(parent.width - 56, 820)
         spacing: 18
         visible: !App.playerOpen && !root.historyOpen && !root.watchNextOpen
+
+        RowLayout {
+            Layout.fillWidth: true
+            implicitHeight: 42
+
+            Text {
+                id: simpleFeedTitle
+                objectName: "currentTabLabel"
+                Layout.alignment: Qt.AlignVCenter
+                text: qsTr("Feed")
+                color: root.accent
+                font.family: "monospace"
+                font.pixelSize: 20
+                font.bold: true
+            }
+            Label {
+                id: keybindsLabel
+                objectName: "keybindsLabel"
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                Layout.minimumWidth: 0
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                maximumLineCount: 1
+                color: root.mutedInk
+                font.family: "monospace"
+                font.pixelSize: 11
+                textFormat: Text.RichText
+                text: keybinds.headerText("feed", root.ink)
+            }
+        }
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -729,28 +761,6 @@ ApplicationWindow {
                 color: root.mutedInk
                 font.pixelSize: 12
             }
-        }
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.leftMargin: 18
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 14
-        z: 10
-        visible: !App.playerOpen && !root.historyOpen && !root.watchNextOpen
-        color: root.panel
-        border.color: root.rule
-        width: keybindsLabel.implicitWidth + 20
-        height: keybindsLabel.implicitHeight + 12
-
-        Label {
-            id: keybindsLabel
-            anchors.centerIn: parent
-            color: root.mutedInk
-            font.family: "monospace"
-            font.pixelSize: 11
-            text: keybinds.footerText("feed").split("\n").join("  /  ")
         }
     }
 

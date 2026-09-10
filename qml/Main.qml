@@ -136,15 +136,20 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: App.playerOpen || root.historyOpen || root.watchNextOpen
+        enabled: App.playerOpen
         onActivated: {
-            if (root.currentRoute !== Main.Feed)
-                root.navigateTo(Main.Feed)
-            else if (root.visibility === Window.FullScreen)
+            if (root.visibility === Window.FullScreen)
                 root.showNormal()
             else
                 App.closePlayer()
         }
+    }
+
+    Shortcut {
+        sequence: "F"
+        context: Qt.WindowShortcut
+        enabled: !root.modalOpen && (root.historyOpen || root.watchNextOpen)
+        onActivated: root.navigateTo(Main.Feed)
     }
 
     Shortcut {

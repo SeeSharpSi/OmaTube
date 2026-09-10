@@ -268,7 +268,8 @@ Simple UI keyboard routes, no navigation buttons:
 | `W` | Toggles `watchNextOpen`, reloads Watch Next, closes history |
 | `C` | Opens `settingsWindow` |
 | `R` | Shortcut is disabled in automation, so status stays unchanged |
-| `Escape` | Closes history, then Watch Next, exits fullscreen, or closes player, in that order |
+| `F` | Closes history or Watch Next and returns to feed |
+| `Escape` | Exits fullscreen or closes player |
 | `j`, `k` | Scrolls feed, history, or Watch Next by 120 pixels |
 | `q` | Quits application |
 
@@ -324,8 +325,8 @@ when navigation buttons are replaced by keys):
   {"type": "key_press", "key": "H", "atMs": 500},
   {"type": "key_release", "key": "H", "atMs": 550},
   {"type": "screenshot", "filename": "sil-48-simple-history.png", "atMs": 1500},
-  {"type": "key_press", "key": "Escape", "atMs": 2000},
-  {"type": "key_release", "key": "Escape", "atMs": 2050},
+  {"type": "key_press", "key": "F", "atMs": 2000},
+  {"type": "key_release", "key": "F", "atMs": 2050},
   {"type": "key_press", "key": "W", "atMs": 2500},
   {"type": "key_release", "key": "W", "atMs": 2550},
   {"type": "screenshot", "filename": "sil-48-simple-watchnext.png", "atMs": 3500}

@@ -776,6 +776,8 @@ void NavigationTest::exclusiveRoutes()
     QTest::keyClick(window, Qt::Key_H);
     checkRoute(true, false);
     QTest::keyClick(window, Qt::Key_Escape);
+    checkRoute(true, false);
+    QTest::keyClick(window, Qt::Key_F);
     checkRoute(false, false);
     QCOMPARE(routeSpy.count(), 8);
     QCOMPARE(historyReset.count(), 3);

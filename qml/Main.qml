@@ -220,20 +220,74 @@ ApplicationWindow {
             Layout.fillWidth: true
             implicitHeight: 42
 
-            Column {
-                spacing: 1
-                Text { text: "OMA / TUBE"; color: root.ink; font.family: "monospace"; font.pixelSize: 16; font.bold: true }
-                Text { text: qsTr("PERSONAL VIDEO LIBRARY"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 8; font.letterSpacing: 1 }
+            Text {
+                id: currentTabLabel
+                objectName: "currentTabLabel"
+                Layout.alignment: Qt.AlignVCenter
+                text: root.historyOpen ? qsTr("History") : root.watchNextOpen ? qsTr("Watch Next") : qsTr("Feed")
+                color: root.accent
+                font.family: "monospace"
+                font.pixelSize: 20
+                font.bold: true
+            }
+            Text {
+                id: slotMetrics
+                visible: false
+                text: qsTr("Watch Next")
+                font.family: "monospace"
+                font.pixelSize: 20
+                font.bold: true
+            }
+            Text {
+                id: navHint
+                objectName: "navigationHintLabel"
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredWidth: slotMetrics.implicitWidth
+                text: feedButton.hovered && (root.historyOpen || root.watchNextOpen) ? qsTr("Feed") : watchNextButton.hovered && !root.watchNextOpen ? qsTr("Watch Next") : historyButton.hovered && !root.historyOpen ? qsTr("History") : settingsButton.hovered ? qsTr("Config") : refreshButton.hovered ? qsTr("Refresh") : ""
+                color: root.mutedInk
+                font.family: "monospace"
+                font.pixelSize: 20
+                font.bold: true
+                visible: text.length > 0
             }
             Item { Layout.fillWidth: true }
             Button {
+                id: feedButton
                 objectName: "feedNavigationButton"
                 Accessible.name: "Show feed"
                 Accessible.role: Accessible.Button
-                text: qsTr("FEED")
                 flat: true
                 onClicked: root.navigateTo(Main.Feed)
-                contentItem: Text { text: parent.text; color: (!root.historyOpen && !root.watchNextOpen) ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Item {
+                    implicitWidth: 15
+                    implicitHeight: 15
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 15
+                        height: 15
+                        antialiasing: true
+                        property color glyphColor: (!root.historyOpen && !root.watchNextOpen) ? root.panel : feedButton.hovered ? root.accent : root.mutedInk
+                        onGlyphColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = glyphColor
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            var w = width
+                            var h = height
+                            ctx.beginPath()
+                            ctx.moveTo(1.5, h / 2 + 0.5)
+                            ctx.lineTo(w / 2, 1.5)
+                            ctx.lineTo(w - 1.5, h / 2 + 0.5)
+                            ctx.stroke()
+                            ctx.strokeRect(4, h / 2 + 0.5, w - 8, h - (h / 2 + 0.5) - 1.5)
+                        }
+                    }
+                }
                 background: Rectangle { color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: (!root.historyOpen && !root.watchNextOpen) ? root.accent : root.rule }
                 PointingCursor {}
             }
@@ -242,10 +296,45 @@ ApplicationWindow {
                 objectName: "watchNextNavigationButton"
                 Accessible.name: "Show Watch Next"
                 Accessible.role: Accessible.Button
-                text: qsTr("WATCH NEXT")
                 flat: true
                 onClicked: root.navigateTo(Main.WatchNext)
-                contentItem: Text { text: parent.text; color: root.watchNextOpen ? root.panel : parent.hovered ? root.accent : root.mutedInk; font.family: "monospace"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Item {
+                    implicitWidth: 15
+                    implicitHeight: 15
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 15
+                        height: 15
+                        antialiasing: true
+                        property color glyphColor: root.watchNextOpen ? root.panel : watchNextButton.hovered ? root.accent : root.mutedInk
+                        onGlyphColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.fillStyle = glyphColor
+                            ctx.strokeStyle = glyphColor
+                            ctx.lineWidth = 1.5
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(1.5, 2.5)
+                            ctx.lineTo(5.5, 5)
+                            ctx.lineTo(1.5, 7.5)
+                            ctx.closePath()
+                            ctx.fill()
+                            ctx.beginPath()
+                            ctx.moveTo(7.5, 3.5)
+                            ctx.lineTo(13.5, 3.5)
+                            ctx.moveTo(7.5, 7)
+                            ctx.lineTo(13.5, 7)
+                            ctx.moveTo(1.5, 10.5)
+                            ctx.lineTo(13.5, 10.5)
+                            ctx.stroke()
+                        }
+                    }
+                }
                 background: Rectangle { color: root.watchNextOpen ? root.accent : parent.hovered ? root.softFill : "transparent"; border.color: root.watchNextOpen ? root.accent : root.rule }
                 PointingCursor {}
             }
@@ -254,14 +343,11 @@ ApplicationWindow {
                 objectName: "historyNavigationButton"
                 Accessible.name: "Show history"
                 Accessible.role: Accessible.Button
-                implicitWidth: watchNextButton.height
-                implicitHeight: watchNextButton.height
-                padding: 0
                 flat: true
                 onClicked: root.navigateTo(Main.History)
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("History")
                 contentItem: Item {
+                    implicitWidth: 15
+                    implicitHeight: 15
                     Canvas {
                         anchors.centerIn: parent
                         width: 15
@@ -301,14 +387,11 @@ ApplicationWindow {
                 objectName: "settingsNavigationButton"
                 Accessible.name: "Open settings"
                 Accessible.role: Accessible.Button
-                implicitWidth: watchNextButton.height
-                implicitHeight: watchNextButton.height
-                padding: 0
                 flat: true
                 onClicked: settingsDialog.open()
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Config")
                 contentItem: Item {
+                    implicitWidth: 15
+                    implicitHeight: 15
                     Canvas {
                         anchors.centerIn: parent
                         width: 15
@@ -358,13 +441,12 @@ ApplicationWindow {
                 objectName: "refreshButton"
                 Accessible.name: "Refresh feed"
                 Accessible.role: Accessible.Button
-                implicitWidth: watchNextButton.height
-                implicitHeight: watchNextButton.height
-                padding: 0
                 enabled: !App.refreshing && !App.automationMode
                 flat: true
                 onClicked: App.refresh()
                 contentItem: Item {
+                    implicitWidth: 15
+                    implicitHeight: 15
                     Canvas {
                         anchors.centerIn: parent
                         width: 13

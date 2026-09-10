@@ -211,6 +211,40 @@ void NavigationTest::fullUiNavigation()
         !findVisualChildrenByName(rootItem, QStringLiteral("categoryButton_1")).isEmpty());
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("categoryButton_2")).isEmpty());
+    QQuickItem *categoryButton1 =
+        firstVisualChild(rootItem, QStringLiteral("categoryButton_1"));
+    QVERIFY(categoryButton1 != nullptr);
+    QTRY_VERIFY(categoryButton1->isVisible());
+    QVERIFY(categoryButton1->width() > 0.0);
+    QVERIFY(categoryButton1->height() > 0.0);
+    QQuickItem *categoryOutline1 = nullptr;
+    QTRY_VERIFY((categoryOutline1 = firstVisualChild(
+                     rootItem,
+                     QStringLiteral("categoryButtonOutline_1")))
+                != nullptr);
+    QCOMPARE(controller->selectedCategoryId(), qint64(-1));
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       categoryOutline1, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor ruleColor = window->property("rule").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), ruleColor.red());
+        QCOMPARE(borderColor.green(), ruleColor.green());
+        QCOMPARE(borderColor.blue(), ruleColor.blue());
+    }
+    moveMouseToItem(categoryButton1);
+    QTRY_VERIFY(categoryButton1->property("hovered").toBool());
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       categoryOutline1, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
     QTRY_VERIFY(
@@ -435,6 +469,40 @@ void NavigationTest::simpleUiNavigation()
     QTRY_VERIFY(!findVisualChildrenByName(rootItem, QStringLiteral("feedPage")).isEmpty());
     QTRY_VERIFY(
         !findVisualChildrenByName(rootItem, QStringLiteral("feedVideo_AUTO0000001")).isEmpty());
+    const int unselectedCategoryId = controller->selectedCategoryId() == 1 ? 2 : 1;
+    QQuickItem *simpleCategoryButton = firstVisualChild(
+        rootItem, QStringLiteral("categoryButton_%1").arg(unselectedCategoryId));
+    QVERIFY(simpleCategoryButton != nullptr);
+    QTRY_VERIFY(simpleCategoryButton->isVisible());
+    QVERIFY(simpleCategoryButton->width() > 0.0);
+    QVERIFY(simpleCategoryButton->height() > 0.0);
+    QQuickItem *simpleCategoryOutline = nullptr;
+    QTRY_VERIFY((simpleCategoryOutline = firstVisualChild(
+                     rootItem,
+                     QStringLiteral("categoryButtonOutline_%1").arg(unselectedCategoryId)))
+                != nullptr);
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       simpleCategoryOutline, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor ruleColor = window->property("rule").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), ruleColor.red());
+        QCOMPARE(borderColor.green(), ruleColor.green());
+        QCOMPARE(borderColor.blue(), ruleColor.blue());
+    }
+    moveMouseToItem(simpleCategoryButton);
+    QTRY_VERIFY(simpleCategoryButton->property("hovered").toBool());
+    {
+        const QColor borderColor = QQmlProperty::read(
+                                       simpleCategoryOutline, QStringLiteral("border.color"))
+                                       .value<QColor>();
+        const QColor accentColor = window->property("accent").value<QColor>();
+        QCOMPARE(borderColor.alpha(), 255);
+        QCOMPARE(borderColor.red(), accentColor.red());
+        QCOMPARE(borderColor.green(), accentColor.green());
+        QCOMPARE(borderColor.blue(), accentColor.blue());
+    }
     QQuickItem *simpleFeedVideo =
         firstVisualChild(rootItem, QStringLiteral("feedVideo_AUTO0000001"));
     QVERIFY(simpleFeedVideo != nullptr);

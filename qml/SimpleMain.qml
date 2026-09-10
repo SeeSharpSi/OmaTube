@@ -422,9 +422,11 @@ ApplicationWindow {
                         PointingCursor {}
 
                         background: Rectangle {
+                            objectName: "categoryButtonOutline_" + categoryButton.categoryId
                             color: App.selectedCategoryId === categoryButton.categoryId
                                 ? root.accent : "transparent"
                             border.color: App.selectedCategoryId === categoryButton.categoryId
+                                || categoryButton.hovered
                                 ? root.accent : root.rule
                         }
 

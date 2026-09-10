@@ -59,6 +59,17 @@ Item {
         return v === 0 ? qsTr("Auto") : v + "p"
     }
 
+    // Longest option label, used to size the selector box to the widest
+    // dropdown entry instead of a fixed width.
+    function widestQualityLabel() {
+        let widest = ""
+        for (let i = 0; i < qualityOptions.length; ++i) {
+            if (qualityOptions[i].label.length > widest.length)
+                widest = qualityOptions[i].label
+        }
+        return widest
+    }
+
     readonly property string overlayMode: player
         ? (player.errorMessage.length > 0 ? "error"
             : player.loading ? "loading"
@@ -148,7 +159,9 @@ Item {
 
             ComboBox {
                 id: qualitySelector
-                Layout.preferredWidth: 136
+                // Hug the widest option label (plus text paddings and a
+                // little slack) instead of a fixed width.
+                Layout.preferredWidth: Math.ceil(qualityTextMetrics.advanceWidth) + 8 + 24 + 6
                 Layout.preferredHeight: 34
                 model: root.qualityOptions
                 textRole: "label"
@@ -160,6 +173,13 @@ Item {
                 ToolTip.text: App.currentVideoMaximumHeightOverride === -1
                     ? qsTr("Quality: Default (%1)").arg(root.qualityLabelForValue(App.currentVideoMaximumHeight))
                     : qsTr("Quality: %1").arg(root.qualityLabelForValue(App.currentVideoMaximumHeightOverride))
+
+                TextMetrics {
+                    id: qualityTextMetrics
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    text: root.widestQualityLabel()
+                }
 
                 PointingCursor {}
                 background: Rectangle {
@@ -173,7 +193,7 @@ Item {
                 contentItem: Text {
                     leftPadding: 8
                     rightPadding: 24
-                    text: qsTr("Quality: %1").arg(qualitySelector.displayText)
+                    text: qualitySelector.displayText
                     color: "#ffffff"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

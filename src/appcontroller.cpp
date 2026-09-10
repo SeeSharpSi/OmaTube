@@ -175,7 +175,7 @@ AppController::AppController(QString databasePath, QObject *parent, bool automat
     connect(&m_refreshService, &RefreshService::progressTextChanged,
             this, &AppController::progressTextChanged);
     connect(&m_refreshService, &RefreshService::feedChanged, this, [this]() {
-        reloadFeed();
+        reloadFeed(true);
         reloadWatchNext();
     });
     connect(
@@ -204,7 +204,7 @@ AppController::AppController(QString databasePath, QObject *parent, bool automat
             const QString &feedError,
             const QString &liveError) {
             m_liveChannels.setLiveChannels(std::move(live));
-            reloadFeed();
+            reloadFeed(true);
             reloadWatchNext();
             m_lastRefreshedAt = QDateTime::currentDateTime();
             emit lastRefreshedAtChanged();
@@ -1276,7 +1276,7 @@ std::optional<qint64> AppController::feedCategoryScope() const
         : std::optional<qint64>(m_selectedCategoryId);
 }
 
-void AppController::reloadFeed()
+void AppController::reloadFeed(bool preserveItems)
 {
     QString error;
     const QList<Video> videos = m_repository.feedPage(
@@ -1286,7 +1286,10 @@ void AppController::reloadFeed()
         {},
         feedPageSize,
         &error);
-    m_feed.setVideos(videos);
+    if (preserveItems)
+        m_feed.updateVideos(videos);
+    else
+        m_feed.setVideos(videos);
     updateFeedCursor(videos);
     if (!error.isEmpty())
         setErrorMessage(error);

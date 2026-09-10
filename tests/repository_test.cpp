@@ -4,6 +4,7 @@
 #include "models/watchnextmodel.h"
 #include "repository.h"
 
+#include <QPersistentModelIndex>
 #include <QSignalSpy>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -47,6 +48,7 @@ private slots:
     void watchHistorySkipsMissingVideoMetadata();
     void deleteWatchHistoryRemovesOnlyHistory();
     void modelsExposeExpectedRoles();
+    void feedModelUpdatesWithoutReset();
     void historyModelExposesExpectedRoles();
     void watchNextModelExposesExpectedRoles();
 };
@@ -1283,6 +1285,142 @@ void RepositoryTest::modelsExposeExpectedRoles()
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::VideoUrlRole).toUrl().toString(),
              QStringLiteral("https://www.youtube.com/watch?v=abc123"));
     QCOMPARE(feedModel.data(feedModel.index(0), FeedModel::WatchProgressPercentRole).toInt(), -1);
+}
+
+void RepositoryTest::feedModelUpdatesWithoutReset()
+{
+    FeedModel model;
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    QVERIFY(resetSpy.isValid());
+
+    const QDateTime base = QDateTime::currentDateTimeUtc();
+    Video videoA = makeVideo(QStringLiteral("vid-a"), QStringLiteral("UCAlpha"), base);
+    videoA.channelTitle = QStringLiteral("Alpha");
+    Video videoB = makeVideo(QStringLiteral("vid-b"), QStringLiteral("UCAlpha"), base.addSecs(-60));
+    videoB.channelTitle = QStringLiteral("Alpha");
+    Video videoC = makeVideo(QStringLiteral("vid-c"), QStringLiteral("UCAlpha"), base.addSecs(60));
+    videoC.channelTitle = QStringLiteral("Alpha");
+
+    auto currentIds = [&model]() {
+        QStringList ids;
+        for (int row = 0; row < model.rowCount(); ++row)
+            ids.append(model.data(model.index(row), FeedModel::VideoIdRole).toString());
+        return ids;
+    };
+
+    // Initial loads and filters retain reset semantics.
+    model.setVideos({videoA, videoB});
+    QCOMPARE(resetSpy.count(), 1);
+    resetSpy.clear();
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(currentIds(), QStringList({QStringLiteral("vid-a"), QStringLiteral("vid-b")}));
+
+    QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy movedSpy(&model, &QAbstractItemModel::rowsMoved);
+    QSignalSpy removedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy changedSpy(&model, &QAbstractItemModel::dataChanged);
+    QVERIFY(insertedSpy.isValid());
+    QVERIFY(movedSpy.isValid());
+    QVERIFY(removedSpy.isValid());
+    QVERIFY(changedSpy.isValid());
+
+    QPersistentModelIndex persistentA(model.index(0, 0));
+    QVERIFY(persistentA.isValid());
+
+    // Progressive insertion at the front preserves existing identities.
+    model.updateVideos({videoC, videoA, videoB});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 1);
+    QCOMPARE(insertedSpy.at(0).at(1).toInt(), 0);
+    QCOMPARE(insertedSpy.at(0).at(2).toInt(), 0);
+    QCOMPARE(removedSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 0);
+    QCOMPARE(currentIds(), QStringList({QStringLiteral("vid-c"), QStringLiteral("vid-a"), QStringLiteral("vid-b")}));
+    QVERIFY(persistentA.isValid());
+    QCOMPARE(persistentA.row(), 1);
+    QCOMPARE(model.data(persistentA, FeedModel::VideoIdRole).toString(), QStringLiteral("vid-a"));
+    insertedSpy.clear();
+
+    // Reordering moves rows instead of resetting.
+    model.updateVideos({videoB, videoA, videoC});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 2);
+    QCOMPARE(movedSpy.at(0).at(1).toInt(), 2);
+    QCOMPARE(movedSpy.at(0).at(4).toInt(), 0);
+    QCOMPARE(movedSpy.at(1).at(1).toInt(), 2);
+    QCOMPARE(movedSpy.at(1).at(4).toInt(), 1);
+    QCOMPARE(changedSpy.count(), 0);
+    QCOMPARE(currentIds(), QStringList({QStringLiteral("vid-b"), QStringLiteral("vid-a"), QStringLiteral("vid-c")}));
+    QVERIFY(persistentA.isValid());
+    QCOMPARE(persistentA.row(), 1);
+    QCOMPARE(model.data(persistentA, FeedModel::VideoIdRole).toString(), QStringLiteral("vid-a"));
+    movedSpy.clear();
+
+    // Removal drops only the absent row.
+    model.updateVideos({videoB, videoA});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 1);
+    QCOMPARE(movedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 0);
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(currentIds(), QStringList({QStringLiteral("vid-b"), QStringLiteral("vid-a")}));
+    QVERIFY(persistentA.isValid());
+    QCOMPARE(persistentA.row(), 1);
+    removedSpy.clear();
+
+    // Exposed metadata updates emit dataChanged without structural signals.
+    Video updatedA = videoA;
+    updatedA.channelId = QStringLiteral("UCBeta");
+    updatedA.channelTitle = QStringLiteral("Beta");
+    updatedA.title = QStringLiteral("Renamed title");
+    updatedA.publishedAt = videoA.publishedAt.addSecs(10);
+    updatedA.watchProgressPercent = 42;
+    model.updateVideos({videoB, updatedA});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 1);
+    const QVector<int> roles = changedSpy.at(0).at(2).value<QVector<int>>();
+    QVERIFY(roles.contains(FeedModel::ChannelIdRole));
+    QVERIFY(roles.contains(FeedModel::ChannelTitleRole));
+    QVERIFY(roles.contains(FeedModel::TitleRole));
+    QVERIFY(roles.contains(FeedModel::PublishedAtRole));
+    QVERIFY(roles.contains(FeedModel::WatchProgressPercentRole));
+    QVERIFY(!roles.contains(FeedModel::VideoIdRole));
+    QVERIFY(!roles.contains(FeedModel::VideoUrlRole));
+    QCOMPARE(model.data(model.index(1), FeedModel::TitleRole).toString(),
+             QStringLiteral("Renamed title"));
+    QCOMPARE(model.data(model.index(1), FeedModel::ChannelTitleRole).toString(),
+             QStringLiteral("Beta"));
+    QCOMPARE(model.data(model.index(1), FeedModel::WatchProgressPercentRole).toInt(), 42);
+    QVERIFY(persistentA.isValid());
+    QCOMPARE(persistentA.row(), 1);
+    QCOMPARE(model.data(persistentA, FeedModel::VideoIdRole).toString(), QStringLiteral("vid-a"));
+    changedSpy.clear();
+
+    // No-op update emits nothing.
+    model.updateVideos({videoB, updatedA});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 0);
+    QCOMPARE(currentIds(), QStringList({QStringLiteral("vid-b"), QStringLiteral("vid-a")}));
+
+    // Clearing removes rows without resetting.
+    model.updateVideos({});
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(insertedSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 2);
+    QVERIFY(!persistentA.isValid());
 }
 
 void RepositoryTest::historyModelExposesExpectedRoles()

@@ -187,7 +187,7 @@ private:
 
     void reloadCategories();
     void reloadChannels();
-    void reloadFeed();
+    void reloadFeed(bool preserveItems = false);
     void updateFeedCursor(const QList<Video> &videos);
     // Loads one further page of the feed starting at the current cursor and
     // appends it to the model.

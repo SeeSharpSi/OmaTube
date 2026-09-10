@@ -1,5 +1,6 @@
 #include "models/feedmodel.h"
 
+#include <QSet>
 #include <QUrl>
 
 FeedModel::FeedModel(QObject *parent)
@@ -56,6 +57,66 @@ void FeedModel::setVideos(QList<Video> videos)
     beginResetModel();
     m_videos = std::move(videos);
     endResetModel();
+}
+
+void FeedModel::updateVideos(QList<Video> videos)
+{
+    QSet<QString> targetIds;
+    targetIds.reserve(videos.size());
+    for (const Video &video : videos)
+        targetIds.insert(video.id);
+
+    for (int row = m_videos.size() - 1; row >= 0; --row) {
+        if (!targetIds.contains(m_videos.at(row).id)) {
+            beginRemoveRows({}, row, row);
+            m_videos.removeAt(row);
+            endRemoveRows();
+        }
+    }
+
+    auto changedRoles = [](const Video &oldVideo, const Video &newVideo) {
+        QVector<int> roles;
+        if (oldVideo.channelId != newVideo.channelId)
+            roles << ChannelIdRole;
+        if (oldVideo.channelTitle != newVideo.channelTitle)
+            roles << ChannelTitleRole;
+        if (oldVideo.title != newVideo.title)
+            roles << TitleRole;
+        if (oldVideo.publishedAt != newVideo.publishedAt)
+            roles << PublishedAtRole;
+        if (oldVideo.watchProgressPercent != newVideo.watchProgressPercent)
+            roles << WatchProgressPercentRole;
+        return roles;
+    };
+
+    for (int targetPos = 0; targetPos < videos.size(); ++targetPos) {
+        const QString targetId = videos.at(targetPos).id;
+        if (targetPos >= m_videos.size() || m_videos.at(targetPos).id != targetId) {
+            int currentAt = -1;
+            for (int row = targetPos + 1; row < m_videos.size(); ++row) {
+                if (m_videos.at(row).id == targetId) {
+                    currentAt = row;
+                    break;
+                }
+            }
+            if (currentAt == -1) {
+                beginInsertRows({}, targetPos, targetPos);
+                m_videos.insert(targetPos, videos.at(targetPos));
+                endInsertRows();
+                continue;
+            }
+            beginMoveRows({}, currentAt, currentAt, {}, targetPos);
+            m_videos.move(currentAt, targetPos);
+            endMoveRows();
+        }
+
+        const QVector<int> roles = changedRoles(m_videos.at(targetPos), videos.at(targetPos));
+        if (m_videos.at(targetPos) != videos.at(targetPos)) {
+            m_videos[targetPos] = videos.at(targetPos);
+            if (!roles.isEmpty())
+                emit dataChanged(index(targetPos), index(targetPos), roles);
+        }
+    }
 }
 
 void FeedModel::appendVideos(const QList<Video> &videos)

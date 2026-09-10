@@ -27,6 +27,8 @@ public:
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
     void setVideos(QList<Video> videos);
+    // Preserve existing rows while progressive refresh results arrive.
+    void updateVideos(QList<Video> videos);
     // Appends an older page without resetting the model so the scroll
     // position is preserved while paging through history.
     void appendVideos(const QList<Video> &videos);

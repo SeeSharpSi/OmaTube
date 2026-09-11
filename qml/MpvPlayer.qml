@@ -6,6 +6,13 @@ import YtClient
 
 Item {
     id: root
+    opacity: 1.0
+
+    Rectangle {
+        anchors.fill: parent
+        color: "black"
+        z: -1
+    }
 
     property var hostWindow
     property string videoId: ""

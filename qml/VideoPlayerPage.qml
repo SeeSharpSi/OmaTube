@@ -4,6 +4,14 @@ import YtClient
 Item {
     id: root
     objectName: "playerPage"
+    opacity: 1.0
+
+    Rectangle {
+        objectName: "playerOpaqueBackground"
+        anchors.fill: parent
+        color: "black"
+        z: -1
+    }
 
     property var hostWindow
     property string videoId: ""

@@ -7,6 +7,7 @@ import YtClient
 Item {
     id: root
     objectName: "automationPlayer"
+    opacity: 1.0
 
     property var hostWindow
     property string videoId: ""

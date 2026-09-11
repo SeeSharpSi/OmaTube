@@ -98,9 +98,9 @@ python3 tests/packaging_test.py
 To inspect a package without installing it:
 
 ```sh
-pacman -Qip dist/omatube-0.1.0-1-x86_64.pkg.tar.zst
+pacman -Qip dist/omatube-0.1.1-1-x86_64.pkg.tar.zst
 mkdir -p build-arch/verify-package
-bsdtar -xf dist/omatube-0.1.0-1-x86_64.pkg.tar.zst -C build-arch/verify-package
+bsdtar -xf dist/omatube-0.1.1-1-x86_64.pkg.tar.zst -C build-arch/verify-package
 python3 packaging/arch/bundle.py audit build-arch/verify-package
 QT_QPA_PLATFORM=offscreen build-arch/verify-package/opt/omatube/omatube \
   --automation --quit-after-startup

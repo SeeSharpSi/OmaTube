@@ -22,11 +22,11 @@ a YouTube Data API v3 key to use the documented metadata backend instead.
 ## Install on Omarchy
 
 Download the bundled x86_64 Arch package from a published release, then
-install it with Omarchy's existing package manager. For version 0.1.0:
+install it with Omarchy's existing package manager. For version 0.1.1:
 
 ```sh
-sha256sum -c omatube-0.1.0-1-x86_64.pkg.tar.zst.sha256
-sudo pacman -U ./omatube-0.1.0-1-x86_64.pkg.tar.zst
+sha256sum -c omatube-0.1.1-1-x86_64.pkg.tar.zst.sha256
+sudo pacman -U ./omatube-0.1.1-1-x86_64.pkg.tar.zst
 ```
 
 Launch **OmaTube** from the application launcher or run `omatube`.

@@ -7,7 +7,7 @@ linux {
 
 TEMPLATE = app
 TARGET = yt-client
-VERSION = 0.1.0
+VERSION = 0.1.1
 
 PROJECT_ROOT = $$PWD
 include($$PROJECT_ROOT/ytclient_core.pri)

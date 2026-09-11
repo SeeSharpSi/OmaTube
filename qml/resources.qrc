@@ -17,7 +17,6 @@
         <file alias="SimpleHistoryPage.qml">SimpleHistoryPage.qml</file>
         <file alias="SimpleWatchNextPage.qml">SimpleWatchNextPage.qml</file>
         <file alias="SimpleMain.qml">SimpleMain.qml</file>
-        <file alias="SimplePlayerControls.qml">SimplePlayerControls.qml</file>
         <file alias="SimpleSettingsDialog.qml">SimpleSettingsDialog.qml</file>
         <file alias="SimpleSquareCheckBox.qml">SimpleSquareCheckBox.qml</file>
         <file alias="VideoPlayerPage.qml">VideoPlayerPage.qml</file>

@@ -111,9 +111,7 @@ Item {
 
     Loader {
         anchors.fill: parent
-        source: App.simpleUi
-            ? "qrc:/qml/SimplePlayerControls.qml"
-            : "qrc:/qml/PlayerControls.qml"
+        source: "qrc:/qml/PlayerControls.qml"
 
         onLoaded: {
             item.player = Qt.binding(function() { return player })

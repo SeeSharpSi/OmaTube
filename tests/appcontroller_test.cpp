@@ -1275,7 +1275,6 @@ void AppControllerTest::liveButtonVisibilityAndSeek()
 
     const QList<QUrl> controlSources{
         QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml")),
-        QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml")),
     };
     for (const QUrl &source : controlSources) {
         FakePlayer player;
@@ -1321,7 +1320,6 @@ void AppControllerTest::videoLoadingOverlayIsCenteredSquare_data()
 {
     QTest::addColumn<QUrl>("source");
     QTest::newRow("normal") << QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml"));
-    QTest::newRow("simple") << QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml"));
 }
 
 void AppControllerTest::videoLoadingOverlayIsCenteredSquare()
@@ -2423,7 +2421,6 @@ void AppControllerTest::segmentTooltipHiddenWithoutSegments_data()
 {
     QTest::addColumn<QUrl>("source");
     QTest::newRow("normal") << QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml"));
-    QTest::newRow("simple") << QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml"));
 }
 
 void AppControllerTest::segmentTooltipHiddenWithoutSegments()

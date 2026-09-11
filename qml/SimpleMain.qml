@@ -292,6 +292,7 @@ ApplicationWindow {
                     required property string channelTitle
                     required property string videoId
                     required property string videoTitle
+                    required property string avatarUrl
 
                     width: 72
                     height: 86
@@ -302,18 +303,28 @@ ApplicationWindow {
 
                         Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: 58
-                            height: 58
-                            radius: 29
+                            width: 56
+                            height: 56
                             color: liveHover.hovered
                                 ? Qt.tint(root.panel, Qt.rgba(
                                     root.liveRed.r, root.liveRed.g, root.liveRed.b, 0.14))
                                 : root.panel
                             border.width: 2
                             border.color: root.liveRed
+                            clip: true
+
+                            Image {
+                                id: avatarImage
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                source: App.automationMode ? "" : liveDelegate.avatarUrl
+                                visible: status === Image.Ready
+                                fillMode: Image.PreserveAspectCrop
+                            }
 
                             Text {
                                 anchors.centerIn: parent
+                                visible: avatarImage.status !== Image.Ready
                                 text: liveDelegate.channelTitle.length > 0
                                     ? liveDelegate.channelTitle.charAt(0).toUpperCase()
                                     : "?"

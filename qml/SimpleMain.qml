@@ -536,11 +536,14 @@ ApplicationWindow {
             }
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.topMargin: -18
             model: App.feed
             clip: true
             spacing: 0
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 800
+
+            header: Item { width: feedList.width; height: 12 }
 
             onMovementEnded: maybeLoadMore()
 

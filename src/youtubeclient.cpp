@@ -11,6 +11,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTimeZone>
@@ -975,6 +976,29 @@ void YouTubeClient::dispatchYtDlp()
         ++m_ytDlpInFlight;
         QProcess *process = new QProcess(this);
         process->setProcessChannelMode(QProcess::SeparateChannels);
+        // Run helpers without the private Qt/audio runtime. The packaged
+        // launcher exports LD_LIBRARY_PATH plus QT_*/SPA_*/PIPEWIRE_* for the
+        // app and libmpv; a bundled helper must use its own libs plus system
+        // glibc instead. (mpv-spawned yt-dlp is covered by the bin/yt-dlp
+        // wrapper, which unsets the same keys.)
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const QString &key : {
+                 QStringLiteral("LD_LIBRARY_PATH"),
+                 QStringLiteral("QT_PLUGIN_PATH"),
+                 QStringLiteral("QML2_IMPORT_PATH"),
+                 QStringLiteral("QML_IMPORT_PATH"),
+                 QStringLiteral("QT_QPA_PLATFORM_PLUGIN_PATH"),
+                 QStringLiteral("QTWEBENGINEPROCESS_PATH"),
+                 QStringLiteral("QTWEBENGINE_RESOURCES_PATH"),
+                 QStringLiteral("QTWEBENGINE_LOCALES_PATH"),
+                 QStringLiteral("SPA_PLUGIN_DIR"),
+                 QStringLiteral("PIPEWIRE_MODULE_DIR"),
+                 QStringLiteral("PYTHONHOME"),
+                 QStringLiteral("PYTHONPATH"),
+             }) {
+            env.remove(key);
+        }
+        process->setProcessEnvironment(env);
         QTimer *timer = new QTimer(process);
         timer->setSingleShot(true);
         const auto completed = std::make_shared<bool>(false);

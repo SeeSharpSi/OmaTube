@@ -58,7 +58,7 @@ The package installs `/opt/omatube/omatube` and symlinks `/usr/bin/omatube`
 to it. Desktop metadata and the icon use standard `/usr/share` directories.
 Everything application-specific is private to `/opt/omatube`:
 
-- `bin/omatube`, standalone `bin/yt-dlp`, and `bin/deno`.
+- `bin/omatube`, `bin/yt-dlp` wrapper plus `lib/yt-dlp/` onedir, and `bin/deno`.
 - Qt, libmpv, FFmpeg and transitive libraries in `lib`.
 - QML modules, Qt plugins, WebEngine process/resources, audio client modules.
 - Component notices and `/opt/omatube/share/manifest.json`.
@@ -79,7 +79,14 @@ bundle a replacement GPU driver or kernel for arbitrary machines.
 Packaging audits all copied ELF dependencies by exact SONAME, rewrites
 absolute library references on copies, and checks private relative RPATHs.
 Opaque standalone helpers are not patched: changing a PyInstaller binary
-can corrupt its appended archive. File hashes and symlink containment are
+can corrupt its appended archive. yt-dlp ships as an onedir tree
+(`lib/yt-dlp/` plus a `bin/yt-dlp` wrapper) instead of a onefile binary:
+onefile extracts ~90MB to `$TMPDIR` on every launch, so per-channel live
+checks plus mpv playback accumulate stale `_MEI*` dirs and later runs fail
+with `Failed to extract ... return code -1` once the tmpfs quota fills.
+Onedir runs in place with no extraction. The wrapper and the app's helper
+spawns strip the private `LD_LIBRARY_PATH`/`QT_*`/audio env so helpers use
+their own libs plus system glibc. File hashes and symlink containment are
 checked again during `makepkg`.
 
 Run the small offline packaging regression suite independently with:

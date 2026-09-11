@@ -47,6 +47,15 @@ EXPLICIT_LIBS = (
     "libfreebl3.so", "libfreeblpriv3.so",
 )
 OPAQUE = {"bin/yt-dlp", "bin/deno"}
+# Self-contained upstream helper trees (PyInstaller onedir). Their ELFs link
+# against their own _internal directory and system glibc, not the private Qt
+# runtime, so patchelf and the private-lib closure must leave them alone.
+# bin/yt-dlp is a small wrapper script; the real tree lives under lib/yt-dlp/.
+OPAQUE_PREFIXES = ("lib/yt-dlp/",)
+
+
+def is_opaque(relative_posix):
+    return relative_posix in OPAQUE or relative_posix.startswith(OPAQUE_PREFIXES)
 
 
 def run(*cmd):
@@ -133,13 +142,15 @@ def elf_closure_issues(opt, check_rpath=True):
     for path in sorted(opt.rglob("*")):
         if not path.is_file() or path.is_symlink() or not is_elf(path):
             continue
+        if is_opaque(path.relative_to(opt).as_posix()):
+            continue
         count += 1
         for needed in dt_needed(path):
             if "/" in needed and check_rpath:
                 issues.append(f"absolute DT_NEEDED {needed} in {path}")
             elif Path(needed).name not in have | HOST_ALLOW:
                 issues.append(f"unresolved {needed} needed by {path}")
-        if check_rpath and path.relative_to(opt).as_posix() not in OPAQUE:
+        if check_rpath:
             paths = rpath_of(path)
             if not paths:
                 issues.append(f"missing RPATH: {path}")
@@ -157,6 +168,8 @@ def audit(root):
     issues = symlink_issues(opt)
     required = [
         "omatube", "bin/omatube", "bin/yt-dlp", "bin/deno", "bin/qt.conf",
+        "lib/yt-dlp/yt-dlp_linux",
+        "lib/yt-dlp/_internal/Cryptodome/Cipher/_ARC4.abi3.so",
         "libexec/QtWebEngineProcess", "share/manifest.json",
         "share/qt6/translations/qtwebengine_locales/en-US.pak",
         "plugins/platforms/libqoffscreen.so", "plugins/platforms/libqwayland.so",
@@ -167,6 +180,7 @@ def audit(root):
         if not (opt / relative).is_file():
             issues.append(f"required file missing: {relative}")
     for relative in ("omatube", "bin/omatube", "bin/yt-dlp", "bin/deno",
+                     "lib/yt-dlp/yt-dlp_linux",
                      "libexec/QtWebEngineProcess"):
         if not os.access(opt / relative, os.X_OK):
             issues.append(f"required executable not executable: {relative}")
@@ -224,7 +238,7 @@ class Bundler:
         self.versions = dict(line.split(None, 1) for line in run("pacman", "-Q").splitlines())
         self.skipped = []
 
-    def copy_file(self, source, target, provenance=None):
+    def copy_file(self, source, target, provenance=None, track_seed=True):
         source = Path(source).resolve(strict=True)
         target = Path(target)
         if target.parent == self.lib:
@@ -235,7 +249,7 @@ class Bundler:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
         shutil.copymode(source, target)
-        if is_elf(target):
+        if track_seed and is_elf(target):
             self.seeds.add(source)
         if provenance:
             owner, version, origin = provenance
@@ -275,6 +289,92 @@ class Bundler:
                 raise RuntimeError(f"unsupported source: {src}")
 
         visit(Path(source), Path(target), set())
+
+    def install_onedir_helper(self, helper, cached):
+        """Unpack a PyInstaller onedir zip once; avoid per-run /tmp extraction.
+
+        The legacy onefile binary extracts ~90MB to $TMPDIR on every launch.
+        OmaTube spawns yt-dlp for each channel, so stale _MEI dirs accumulate
+        and later runs fail with 'Failed to extract ... return code -1'
+        (zlib Z_ERRNO: TMPDIR write failed: quota/full). The onedir zip runs
+        in place with no extraction, fixing live checks and mpv playback for
+        every install, not just one machine.
+        """
+        name = helper["name"]
+        executable = helper.get("executable", name)
+        provenance = ("bundled-helper", helper["version"], helper["url"])
+        target_dir = self.opt / "lib" / name
+        if target_dir.exists():
+            raise RuntimeError(f"output already exists: {target_dir}")
+        extract_dir = Path(self.args.cache) / f"{name}-{helper['version']}.extracted"
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        extract_dir.mkdir(parents=True)
+        with zipfile.ZipFile(cached) as archive:
+            infos = archive.infolist()
+            if not infos:
+                raise RuntimeError(f"empty helper archive: {cached}")
+            tops = set()
+            for info in infos:
+                filename = info.filename
+                if not filename or filename.startswith("/") or ".." in Path(filename).parts:
+                    raise RuntimeError(f"unsafe helper archive entry: {filename}")
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode == 0o120000:
+                    raise RuntimeError(f"helper archive symlink unsupported: {filename}")
+                tops.add(Path(filename).parts[0])
+                target = extract_dir / filename
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(info) as stream, target.open("wb") as out:
+                        shutil.copyfileobj(stream, out)
+                    file_mode = (info.external_attr >> 16) & 0o7777
+                    target.chmod(file_mode or 0o644)
+            if executable not in tops or "_internal" not in tops:
+                raise RuntimeError(f"unexpected {name} onedir layout: {sorted(tops)}")
+            if sorted(tops) != sorted([executable, "_internal"]):
+                raise RuntimeError(f"unexpected {name} onedir top level: {sorted(tops)}")
+        main_source = extract_dir / executable
+        if not main_source.is_file():
+            raise RuntimeError(f"helper executable missing in archive: {executable}")
+        for root, _, files in os.walk(extract_dir):
+            for filename in files:
+                source = Path(root, filename)
+                target = target_dir / source.relative_to(extract_dir)
+                # Self-contained upstream tree: never seed the private-lib
+                # closure (its _internal libs are not in private lib/).
+                self.copy_file(source, target, provenance, track_seed=False)
+        main_target = target_dir / executable
+        main_target.chmod(0o755)
+        self.write_helper_wrapper(helper)
+        shutil.rmtree(extract_dir)
+
+    def write_helper_wrapper(self, helper):
+        """PATH-stable wrapper that runs the helper without private Qt env."""
+        name = helper["name"]
+        executable = helper.get("executable", name)
+        wrapper = self.opt / "bin" / name
+        text = (
+            "#!/bin/sh\n"
+            f"# Bundled {name} onedir wrapper. Resolves via PATH for the app\n"
+            "# and the mpv ytdl hook; runs without the private Qt/audio env so\n"
+            "# the helper uses its own _internal libs plus system glibc.\n"
+            "set -eu\n"
+            "HERE=\"$(dirname \"$(readlink -f \"$0\")\")\"\n"
+            "unset LD_LIBRARY_PATH QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH "
+            "QT_QPA_PLATFORM_PLUGIN_PATH QTWEBENGINEPROCESS_PATH "
+            "QTWEBENGINE_RESOURCES_PATH QTWEBENGINE_LOCALES_PATH "
+            "SPA_PLUGIN_DIR PIPEWIRE_MODULE_DIR\n"
+            f"exec \"$HERE/../lib/{name}/{executable}\" \"$@\"\n"
+        )
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        wrapper.write_text(text)
+        wrapper.chmod(0o755)
+        relative = wrapper.relative_to(self.opt).as_posix()
+        self.files[relative] = {"path": relative, "source": f"generated:{name}-wrapper",
+                                "owner": "omatube", "owner_version": self.args.version}
 
     def run_bundle(self, runtime):
         query = lambda key: Path(run("qmake6", "-query", key).strip())
@@ -322,6 +422,9 @@ class Bundler:
         for helper in runtime["helpers"]:
             cached = cache / f"{helper['name']}-{helper['version']}"
             fetch_verify(helper["url"], cached, helper["sha256"])
+            if helper.get("format") == "onedir-zip":
+                self.install_onedir_helper(helper, cached)
+                continue
             source = cached
             if helper["name"] == "deno":
                 source = cached.with_name(cached.name + ".bin")
@@ -379,7 +482,9 @@ class Bundler:
         if issues:
             raise RuntimeError("closure incomplete:\n" + "\n".join(issues))
         for path in sorted(self.opt.rglob("*")):
-            if not path.is_file() or path.relative_to(self.opt).as_posix() in OPAQUE or not is_elf(path):
+            if not path.is_file() or not is_elf(path):
+                continue
+            if is_opaque(path.relative_to(self.opt).as_posix()):
                 continue
             for needed in dt_needed(path):
                 if "/" in needed:

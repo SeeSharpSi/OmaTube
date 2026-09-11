@@ -258,7 +258,7 @@ private:
     QString m_currentVideoId;
     bool m_playerOpen = false;
     int m_currentStartPosition = 0;
-    QString m_videoBackend = QStringLiteral("iframe");
+    QString m_videoBackend = QStringLiteral("mpv");
     int m_maximumVideoHeight = 0;
     bool m_simpleUi = false;
     int m_playbackVolume = 100;

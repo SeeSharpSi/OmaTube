@@ -114,7 +114,6 @@ const QStringList settingsTabNames{
     QStringLiteral("settingsCategoriesTab"),
     QStringLiteral("settingsFeedTab"),
     QStringLiteral("settingsAppearanceTab"),
-    QStringLiteral("settingsApiTab"),
     QStringLiteral("settingsPlaybackTab"),
 };
 } // namespace
@@ -692,7 +691,7 @@ void NavigationTest::simpleUiNavigation()
         firstVisualChild(settingsRoot, QStringLiteral("settingsPlaybackTab"));
     QVERIFY(lastTab != nullptr);
     clickItem(lastTab);
-    QTRY_VERIFY(settingsTabs->property("currentIndex").toInt() == 5);
+    QTRY_VERIFY(settingsTabs->property("currentIndex").toInt() == 4);
 
     QTest::keyClick(settingsWindow, Qt::Key_Escape);
     if (settingsWindow->isVisible()) {

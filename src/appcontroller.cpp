@@ -28,7 +28,7 @@ constexpr auto simpleUiSetting = "appearance/simpleUi";
 constexpr auto sponsorblockEnabledSetting = "sponsorblock/enabled";
 constexpr auto sponsorActionPrefix = "sponsorblock/action_";
 constexpr auto perVideoHeightPrefix = "playback/videoMaximumHeight/";
-constexpr auto defaultPlaybackBackend = "iframe";
+constexpr auto defaultPlaybackBackend = "mpv";
 constexpr int defaultShortVideoCutoffMinutes = 3;
 constexpr int maximumShortVideoCutoffMinutes = 60;
 // Resume only when the stored position is past this many seconds.

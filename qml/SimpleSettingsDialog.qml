@@ -18,6 +18,7 @@ ApplicationWindow {
     readonly property color accent: themeColors.accent
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
+    readonly property color softInk: themeColors.light_foreground
     readonly property color paper: themeColors.background
     readonly property color popupColor: Qt.rgba(themeColors.background.r,
         themeColors.background.g, themeColors.background.b, 1)
@@ -32,9 +33,9 @@ ApplicationWindow {
     property var pendingId: -1
     property string pendingName: ""
     readonly property var playbackBackends: App.mpvAvailable
-        ? [ { label: qsTr("Official embedded player"), value: "iframe" },
-            { label: qsTr("Embedded mpv"), value: "mpv" } ]
-        : [ { label: qsTr("Official embedded player"), value: "iframe" } ]
+        ? [ { label: qsTr("Embedded mpv"), value: "mpv" },
+            { label: qsTr("Legacy Player"), value: "iframe" } ]
+        : [ { label: qsTr("Legacy Player"), value: "iframe" } ]
     readonly property var playbackQualities: [
         { label: qsTr("Auto"), value: 0 },
         { label: qsTr("2160p"), value: 2160 },
@@ -74,9 +75,9 @@ ApplicationWindow {
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.WindowModal
     width: 780
-    height: 720
+    height: 980
     minimumWidth: 700
-    minimumHeight: 500
+    minimumHeight: 700
     visible: false
     title: qsTr("Config")
     color: root.panel
@@ -252,7 +253,7 @@ ApplicationWindow {
 
                 contentItem: Text {
                     text: channelsTab.text
-                    color: channelsTab.checked ? root.ink : root.mutedInk
+                    color: channelsTab.checked ? root.ink : root.softInk
                     font.pixelSize: 13
                     font.weight: channelsTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
@@ -275,7 +276,7 @@ ApplicationWindow {
 
                 contentItem: Text {
                     text: categoriesTab.text
-                    color: categoriesTab.checked ? root.ink : root.mutedInk
+                    color: categoriesTab.checked ? root.ink : root.softInk
                     font.pixelSize: 13
                     font.weight: categoriesTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
@@ -298,7 +299,7 @@ ApplicationWindow {
 
                 contentItem: Text {
                     text: feedTab.text
-                    color: feedTab.checked ? root.ink : root.mutedInk
+                    color: feedTab.checked ? root.ink : root.softInk
                     font.pixelSize: 13
                     font.weight: feedTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
@@ -321,32 +322,9 @@ ApplicationWindow {
 
                 contentItem: Text {
                     text: appearanceTab.text
-                    color: appearanceTab.checked ? root.ink : root.mutedInk
+                    color: appearanceTab.checked ? root.ink : root.softInk
                     font.pixelSize: 13
                     font.weight: appearanceTab.checked ? Font.DemiBold : Font.Normal
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            TabButton {
-                id: apiTab
-                objectName: "settingsApiTab"
-                Accessible.name: "Settings data API tab"
-                Accessible.role: Accessible.Button
-                height: tabs.height
-                implicitHeight: tabs.height
-                text: qsTr("Data API")
-
-                PointingCursor {}
-
-                background: Rectangle { color: "transparent" }
-
-                contentItem: Text {
-                    text: apiTab.text
-                    color: apiTab.checked ? root.ink : root.mutedInk
-                    font.pixelSize: 13
-                    font.weight: apiTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -367,7 +345,7 @@ ApplicationWindow {
 
                 contentItem: Text {
                     text: playbackTab.text
-                    color: playbackTab.checked ? root.ink : root.mutedInk
+                    color: playbackTab.checked ? root.ink : root.softInk
                     font.pixelSize: 13
                     font.weight: playbackTab.checked ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
@@ -387,11 +365,35 @@ ApplicationWindow {
                     anchors.margins: 22
                     spacing: 14
 
-                    Label {
-                        text: qsTr("Add a channel")
-                        color: root.ink
-                        font.pixelSize: 16
-                        font.weight: Font.DemiBold
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Label {
+                            text: qsTr("Add a channel")
+                            color: root.ink
+                            font.pixelSize: 16
+                            font.weight: Font.DemiBold
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            text: qsTr("Import JSON")
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: channelImportDialog.open()
+
+                            PointingCursor {}
+                        }
+
+                        Button {
+                            text: qsTr("Export JSON")
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: channelExportDialog.open()
+
+                            PointingCursor {}
+                        }
                     }
 
                     RowLayout {
@@ -560,27 +562,6 @@ ApplicationWindow {
                             visible: parent.count === 0
                         }
                     }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Item { Layout.fillWidth: true }
-
-                        Button {
-                            text: qsTr("Import JSON")
-                            onClicked: channelImportDialog.open()
-
-                            PointingCursor {}
-                        }
-
-                        Button {
-                            text: qsTr("Export JSON")
-                            onClicked: channelExportDialog.open()
-
-                            PointingCursor {}
-                        }
-                    }
                 }
             }
 
@@ -670,6 +651,10 @@ ApplicationWindow {
                                     Layout.preferredHeight: 40
                                     text: categoryDelegate.name
                                     selectByMouse: true
+                                    background: Rectangle {
+                                        color: "transparent"
+                                        border.width: 0
+                                    }
                                 }
 
                                 Button {
@@ -733,17 +718,158 @@ ApplicationWindow {
                             Label { text: qsTr("Hide videos up to"); color: root.ink }
                             SpinBox {
                                 id: shortVideoCutoff
-                                Layout.preferredWidth: 100
+                                Layout.preferredWidth: 150
+                                Layout.preferredHeight: 40
                                 from: 0
                                 to: 60
                                 value: App.shortVideoCutoffMinutes
                                 editable: true
                                 onValueModified: App.setShortVideoCutoffMinutes(value)
                                 PointingCursor {}
+
+                                background: Rectangle {
+                                    color: root.paper
+                                    border.color: root.rule
+                                    border.width: 1
+                                }
+
+                                contentItem: TextInput {
+                                    text: shortVideoCutoff.displayText
+                                    color: root.ink
+                                    font.pixelSize: 13
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    readOnly: !shortVideoCutoff.editable
+                                    validator: shortVideoCutoff.validator
+                                    inputMethodHints: Qt.ImhDigitsOnly
+                                    selectByMouse: true
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 36
+                                }
+
+                                up.indicator: Rectangle {
+                                    x: shortVideoCutoff.mirrored ? 0 : parent.width - width
+                                    height: parent.height / 2
+                                    width: 32
+                                    color: shortVideoCutoff.up.hovered ? root.softFill : root.paper
+                                    border.color: root.rule
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "+"
+                                        color: root.ink
+                                        font.pixelSize: 12
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+
+                                down.indicator: Rectangle {
+                                    x: shortVideoCutoff.mirrored ? 0 : parent.width - width
+                                    y: parent.height / 2
+                                    height: parent.height / 2
+                                    width: 32
+                                    color: shortVideoCutoff.down.hovered ? root.softFill : root.paper
+                                    border.color: root.rule
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\u2212"
+                                        color: root.ink
+                                        font.pixelSize: 12
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
                             }
                             Label { text: qsTr("minutes"); color: root.ink }
                             Item { Layout.fillWidth: true }
                         }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                        color: root.rule
+                    }
+
+                    Label {
+                        text: qsTr("YouTube Data API")
+                        color: root.ink
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                    }
+
+                    TextField {
+                        id: keyInput
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("YouTube Data API key")
+                        echoMode: TextInput.Password
+                        selectByMouse: true
+                        onAccepted: saveKeyButton.clicked()
+                    }
+
+                    SimpleSquareCheckBox {
+                        id: rememberKey
+                        text: qsTr("Remember locally")
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Saved keys use plain local storage. Leave this unchecked or set YT_CLIENT_API_KEY to avoid it.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Button {
+                            text: qsTr("Clear current key")
+                            visible: App.apiKeyConfigured
+                            onClicked: App.clearApiKey()
+
+                            PointingCursor {}
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: root.danger
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                color: parent.hovered ? root.errorFill : root.popupColor
+                                border.color: root.danger
+                                border.width: 1
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Button {
+                            id: saveKeyButton
+                            text: qsTr("Use key")
+                            enabled: keyInput.text.trim().length > 0
+
+                            PointingCursor {}
+
+                            onClicked: {
+                                if (App.setApiKey(keyInput.text, rememberKey.checked))
+                                    keyInput.clear()
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Key changes apply on the next feed refresh.")
+                        color: root.mutedInk
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
                     }
 
                     Item { Layout.fillHeight: true }
@@ -920,93 +1046,6 @@ ApplicationWindow {
                             if (checked !== App.simpleUi)
                                 App.setSimpleUi(checked)
                         }
-                    }
-
-                    Item { Layout.fillHeight: true }
-                }
-            }
-
-            Item {
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 22
-                    spacing: 14
-
-                    TextField {
-                        id: keyInput
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("YouTube Data API key")
-                        echoMode: TextInput.Password
-                        selectByMouse: true
-                        onAccepted: saveKeyButton.clicked()
-                    }
-
-                    SimpleSquareCheckBox {
-                        id: rememberKey
-                        text: qsTr("Remember locally")
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Saved keys use plain local storage. Leave this unchecked or set YT_CLIENT_API_KEY to avoid it.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Button {
-                            text: qsTr("Clear current key")
-                            visible: App.apiKeyConfigured
-                            onClicked: App.clearApiKey()
-
-                            PointingCursor {}
-
-                            contentItem: Text {
-                                text: parent.text
-                                color: root.danger
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            background: Rectangle {
-                                color: parent.hovered ? root.errorFill : root.popupColor
-                                border.color: root.danger
-                                border.width: 1
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Button {
-                            id: saveKeyButton
-                            text: qsTr("Use key")
-                            enabled: keyInput.text.trim().length > 0
-
-                            PointingCursor {}
-
-                            onClicked: {
-                                if (App.setApiKey(keyInput.text, rememberKey.checked))
-                                    keyInput.clear()
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 1
-                        color: root.rule
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Key changes apply on the next feed refresh.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     Item { Layout.fillHeight: true }
@@ -1314,14 +1353,6 @@ ApplicationWindow {
                             if (checked !== App.sponsorBlockEnabled)
                                 App.setSponsorBlockEnabled(checked)
                         }
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Fetches crowdsourced segments from sponsor.ajay.app. Colors follow theme.")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
                     }
 
                     Repeater {

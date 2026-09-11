@@ -229,8 +229,7 @@ Shared selectors, present in full and Simple UI:
 | `settingsCategoriesTab` | `Settings categories tab` | Tab index 1 |
 | `settingsFeedTab` | `Settings feed tab` | Tab index 2 |
 | `settingsAppearanceTab` | `Settings appearance tab` | Tab index 3 |
-| `settingsApiTab` | `Settings data API tab` | Tab index 4 |
-| `settingsPlaybackTab` | `Settings playback tab` | Tab index 5 |
+| `settingsPlaybackTab` | `Settings playback tab` | Tab index 4 |
 | `settingsCloseButton` | `Close settings` | Hides settings window |
 | `simpleUiCheckBox` | none | Checkbox labeled `Use simple UI` in the appearance tab of both UIs |
 

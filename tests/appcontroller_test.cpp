@@ -71,7 +71,7 @@ private slots:
     void init();
     void normalizesBackendAndHeight();
     void formatsHeightSelector();
-    void defaultsToIframeAndAutoHeight();
+    void defaultsToMpvAndAutoHeight();
     void automationModeDefaultsToFalse();
     void automationModeSuppressesNetworkRefresh();
     void automationModeAddChannelIsDisabled();
@@ -283,13 +283,15 @@ void AppControllerTest::formatsHeightSelector()
     QCOMPARE(PlaybackSettings::ytDlpFormatForMaximumHeight(999), QString());
 }
 
-void AppControllerTest::defaultsToIframeAndAutoHeight()
+void AppControllerTest::defaultsToMpvAndAutoHeight()
 {
     std::unique_ptr<AppController> controller =
         AppController::createApplication(QStringLiteral(":memory:"));
     QString error;
     QVERIFY2(controller->initialize(&error), qPrintable(error));
-    QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
+    const QString expectedBackend =
+        controller->mpvAvailable() ? QStringLiteral("mpv") : QStringLiteral("iframe");
+    QCOMPARE(controller->videoBackend(), expectedBackend);
     QCOMPARE(controller->maximumVideoHeight(), 0);
 }
 
@@ -385,7 +387,13 @@ void AppControllerTest::rejectsInvalidHeightAndBackend()
 
         controller->setVideoBackend(QStringLiteral("bogus"));
         QCOMPARE(controller->videoBackend(), QStringLiteral("iframe"));
-        QVERIFY(!settings.contains(QString::fromLatin1("playback/backend")));
+        if (controller->mpvAvailable()) {
+            QVERIFY(settings.contains(QString::fromLatin1("playback/backend")));
+            QCOMPARE(settings.value(QString::fromLatin1("playback/backend")).toString(),
+                     QStringLiteral("iframe"));
+        } else {
+            QVERIFY(!settings.contains(QString::fromLatin1("playback/backend")));
+        }
     }
     {
         settings.setValue(QString::fromLatin1("playback/backend"), QStringLiteral("bogus"));

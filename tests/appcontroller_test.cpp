@@ -135,6 +135,8 @@ private slots:
     void sponsorBlockActionPersistence();
     void sponsorBlockEmptySkipTargets();
     void sponsorBlockColorKeys();
+    void segmentTooltipHiddenWithoutSegments_data();
+    void segmentTooltipHiddenWithoutSegments();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -2415,6 +2417,74 @@ void AppControllerTest::sponsorBlockColorKeys()
     QCOMPARE(controller->sponsorColorKey(QStringLiteral("music_offtopic")), QStringLiteral("magenta"));
     QCOMPARE(controller->sponsorColorKey(QStringLiteral("poi_highlight")), QStringLiteral("red"));
     QCOMPARE(controller->sponsorColorKey(QStringLiteral("bogus")), QStringLiteral("green"));
+}
+
+void AppControllerTest::segmentTooltipHiddenWithoutSegments_data()
+{
+    QTest::addColumn<QUrl>("source");
+    QTest::newRow("normal") << QUrl(QStringLiteral("qrc:/qml/PlayerControls.qml"));
+    QTest::newRow("simple") << QUrl(QStringLiteral("qrc:/qml/SimplePlayerControls.qml"));
+}
+
+void AppControllerTest::segmentTooltipHiddenWithoutSegments()
+{
+    QFETCH(QUrl, source);
+    std::unique_ptr<AppController> controller =
+        AppController::createApplication(QStringLiteral(":memory:"));
+    QString error;
+    QVERIFY2(controller->initialize(&error), qPrintable(error));
+    controller->setSponsorBlockEnabled(true);
+    QVERIFY(controller->sponsorSegments().isEmpty());
+
+    FakePlayer player;
+    QQuickWindow hostWindow;
+    QQmlEngine engine;
+    QQmlComponent component(&engine, source);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> controls(component.createWithInitialProperties({
+        {QStringLiteral("player"), QVariant::fromValue(static_cast<QObject *>(&player))},
+        {QStringLiteral("hostWindow"),
+         QVariant::fromValue(static_cast<QObject *>(&hostWindow))},
+    }));
+    QVERIFY2(controls != nullptr, qPrintable(component.errorString()));
+
+    QQuickItem *controlsItem = qobject_cast<QQuickItem *>(controls.data());
+    QVERIFY(controlsItem != nullptr);
+    QQuickItem *tooltip = nullptr;
+    QTRY_VERIFY((tooltip = findVisualChildrenByName(
+                    controlsItem, QStringLiteral("segmentTooltip"))
+                                     .value(0))
+                != nullptr);
+    QVERIFY(!tooltip->isVisible());
+
+    QVariant label;
+    QVERIFY(QMetaObject::invokeMethod(
+        controls.data(), "sponsorLabel", Q_RETURN_ARG(QVariant, label),
+        Q_ARG(QVariant, QStringLiteral("selfpromo"))));
+    QCOMPARE(label.toString(), QStringLiteral("Self promotion"));
+    QVERIFY(QMetaObject::invokeMethod(
+        controls.data(), "sponsorLabel", Q_RETURN_ARG(QVariant, label),
+        Q_ARG(QVariant, QStringLiteral("bogus"))));
+    QCOMPARE(label.toString(), QStringLiteral("bogus"));
+
+    QVERIFY(QMetaObject::invokeMethod(
+        controls.data(), "updateSegmentHover", Q_ARG(QVariant, 100.0)));
+    QVERIFY(controls->property("hoveredSegment").toMap().isEmpty());
+    QTRY_VERIFY(!tooltip->isVisible());
+
+    QVariantMap segment;
+    segment.insert(QStringLiteral("category"), QStringLiteral("selfpromo"));
+    segment.insert(QStringLiteral("start"), 10.0);
+    segment.insert(QStringLiteral("end"), 20.0);
+    controls->setProperty("hoveredSegment", segment);
+    controls->setProperty("hoverX", 100.0);
+    QQuickItem *tipText = nullptr;
+    QTRY_VERIFY((tipText = findVisualChildrenByName(
+                    controlsItem, QStringLiteral("segmentTipText"))
+                                     .value(0))
+                != nullptr);
+    QTRY_VERIFY(tooltip->isVisible());
+    QCOMPARE(tipText->property("text").toString(), QStringLiteral("Self promotion"));
 }
 
 QTEST_MAIN(AppControllerTest)

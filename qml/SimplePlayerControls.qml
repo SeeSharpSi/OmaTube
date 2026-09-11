@@ -91,6 +91,43 @@ Item {
         return minutes + ":" + s
     }
 
+    property var hoveredSegment: ({})
+    property real hoverX: 0
+
+    function sponsorLabel(category) {
+        switch (category) {
+        case "sponsor": return qsTr("Sponsor")
+        case "selfpromo": return qsTr("Self promotion")
+        case "interaction": return qsTr("Interaction reminder")
+        case "intro": return qsTr("Intro")
+        case "outro": return qsTr("Outro")
+        case "preview": return qsTr("Preview / recap")
+        case "music_offtopic": return qsTr("Music: non-music")
+        case "poi_highlight": return qsTr("Highlight")
+        default: return category
+        }
+    }
+
+    function updateSegmentHover(x) {
+        hoverX = x
+        if (!App.sponsorBlockEnabled || root.seekDragging || !(root.durationS > 0)) {
+            hoveredSegment = ({})
+            return
+        }
+        const t = ((x - seekSlider.leftPadding) / Math.max(1, seekSlider.availableWidth))
+            * root.durationS
+        let found = ({})
+        const segments = App.sponsorSegments
+        for (let i = 0; i < segments.length; ++i) {
+            const segment = segments[i]
+            if (segment && t >= segment.start && t <= segment.end) {
+                found = segment
+                break
+            }
+        }
+        hoveredSegment = found
+    }
+
     function toggleFullscreen() {
         if (!hostWindow)
             return
@@ -460,6 +497,38 @@ Item {
                                 ?? App.themeColors.green
                             visible: root.durationS > 0 && modelData.end > modelData.start
                         }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onPositionChanged: function(mouse) { root.updateSegmentHover(mouse.x) }
+                    onExited: root.hoveredSegment = ({})
+                }
+
+                Rectangle {
+                    id: segmentTip
+                    objectName: "segmentTooltip"
+                    visible: root.hoveredSegment.category !== undefined
+                    x: Math.min(Math.max(0, root.hoverX - width / 2),
+                        Math.max(0, seekSlider.width - width))
+                    y: -height - 8
+                    width: tipText.implicitWidth + 16
+                    height: tipText.implicitHeight + 10
+                    color: root.paper
+                    border.color: root.rule
+                    border.width: 1
+                    Text {
+                        id: tipText
+                        objectName: "segmentTipText"
+                        anchors.centerIn: parent
+                        text: root.hoveredSegment.category !== undefined
+                            ? root.sponsorLabel(root.hoveredSegment.category) : ""
+                        color: root.ink
+                        font.pixelSize: 12
                     }
                 }
             }

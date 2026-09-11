@@ -605,17 +605,25 @@ ApplicationWindow {
 
                     Row {
                         width: parent.width
+                        spacing: 6
                         Text {
+                            id: channelText
                             text: feedDelegate.channelTitle
                             color: root.channelBlue
                             font.pixelSize: 12
                             elide: Text.ElideRight
-                            width: Math.max(0, parent.width - metaText.implicitWidth)
+                            width: Math.min(channelText.implicitWidth, Math.max(0, parent.width - dotText.implicitWidth - metaText.implicitWidth - parent.spacing * 2))
                             verticalAlignment: Text.AlignVCenter
                         }
                         Text {
+                            id: dotText
+                            text: "·"
+                            color: root.mutedInk
+                            font.pixelSize: 12
+                        }
+                        Text {
                             id: metaText
-                            text: "  " + root.relativeTime(feedDelegate.publishedAt)
+                            text: root.relativeTime(feedDelegate.publishedAt)
                             color: root.mutedInk
                             font.pixelSize: 12
                         }

@@ -92,7 +92,6 @@ Item {
     }
 
     property var hoveredSegment: ({})
-    property real hoverX: 0
 
     function sponsorLabel(category) {
         switch (category) {
@@ -109,9 +108,9 @@ Item {
     }
 
     function updateSegmentHover(x) {
-        hoverX = x
         if (!App.sponsorBlockEnabled || root.seekDragging || !(root.durationS > 0)) {
-            hoveredSegment = ({})
+            if (root.hoveredSegment.category !== undefined)
+                root.hoveredSegment = ({})
             return
         }
         const t = ((x - seekSlider.leftPadding) / Math.max(1, seekSlider.availableWidth))
@@ -125,7 +124,10 @@ Item {
                 break
             }
         }
-        hoveredSegment = found
+        // Only write on category change: reassigning every mouse pixel
+        // would relayout the tooltip each move and make it trail the cursor.
+        if (root.hoveredSegment.category !== found.category)
+            root.hoveredSegment = found
     }
 
     function toggleFullscreen() {
@@ -564,6 +566,7 @@ Item {
                 }
 
                 MouseArea {
+                    id: segmentHover
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
                     hoverEnabled: true
@@ -576,7 +579,9 @@ Item {
                     id: segmentTip
                     objectName: "segmentTooltip"
                     visible: root.hoveredSegment.category !== undefined
-                    x: Math.min(Math.max(0, root.hoverX - width / 2),
+                    // Bind straight to the hover area: routing x through JS
+                    // made the tip trail the cursor by a frame.
+                    x: Math.min(Math.max(0, segmentHover.mouseX - width / 2),
                         Math.max(0, seekSlider.width - width))
                     y: -height - 8
                     width: tipText.implicitWidth + 16

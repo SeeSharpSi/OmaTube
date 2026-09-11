@@ -2477,7 +2477,6 @@ void AppControllerTest::segmentTooltipHiddenWithoutSegments()
     segment.insert(QStringLiteral("start"), 10.0);
     segment.insert(QStringLiteral("end"), 20.0);
     controls->setProperty("hoveredSegment", segment);
-    controls->setProperty("hoverX", 100.0);
     QQuickItem *tipText = nullptr;
     QTRY_VERIFY((tipText = findVisualChildrenByName(
                     controlsItem, QStringLiteral("segmentTipText"))

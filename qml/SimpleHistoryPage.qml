@@ -22,6 +22,7 @@ Item {
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
+    readonly property color channelBlue: themeColors.blue
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
     readonly property color paper: themeColors.background
@@ -145,14 +146,22 @@ Item {
                         wrapMode: Text.Wrap
                     }
 
-                    Text {
+                    Row {
                         width: parent.width
-                        text: historyDelegate.channelTitle + "  \u00b7  "
-                              + qsTr("last viewed")
-                              + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP")
-                        color: root.mutedInk
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
+                        Text {
+                            text: historyDelegate.channelTitle
+                            color: root.channelBlue
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                            width: Math.max(0, parent.width - metaText.implicitWidth)
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        Text {
+                            id: metaText
+                            text: "  \u00b7  " + qsTr("last viewed") + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP")
+                            color: root.mutedInk
+                            font.pixelSize: 12
+                        }
                     }
                 }
 

@@ -20,6 +20,7 @@ Item {
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
+    readonly property color channelBlue: themeColors.blue
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
     readonly property color panel: themeColors.lighter_background
@@ -163,7 +164,25 @@ Item {
 
                                     Text { width: parent.width; text: historyDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
 
-                                    Text { width: parent.width; text: historyDelegate.channelTitle + "  \u00b7  " + qsTr("last viewed") + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP"); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                                    Row {
+                                        width: parent.width
+                                        Text {
+                                            text: historyDelegate.channelTitle
+                                            color: root.channelBlue
+                                            font.family: "monospace"
+                                            font.pixelSize: 10
+                                            elide: Text.ElideRight
+                                            width: Math.max(0, parent.width - metaText.implicitWidth)
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        Text {
+                                            id: metaText
+                                            text: "  \u00b7  " + qsTr("last viewed") + " " + Qt.formatDateTime(historyDelegate.watchedAt, "MMM d, yyyy h:mm AP")
+                                            color: root.mutedInk
+                                            font.family: "monospace"
+                                            font.pixelSize: 10
+                                        }
+                                    }
                                 }
 
                                 Text {

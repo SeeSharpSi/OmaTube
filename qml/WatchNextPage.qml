@@ -20,6 +20,7 @@ Item {
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
+    readonly property color channelBlue: themeColors.blue
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
     readonly property color panel: themeColors.lighter_background
@@ -175,7 +176,25 @@ Item {
 
                                             Text { width: parent.width; text: watchNextDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
 
-                                            Text { width: parent.width; text: "#" + (watchNextDelegate.position + 1) + "  \u00b7  " + watchNextDelegate.channelTitle; color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                                            Row {
+                                                width: parent.width
+                                                Text {
+                                                    id: prefixText
+                                                    text: "#" + (watchNextDelegate.position + 1) + "  \u00b7  "
+                                                    color: root.mutedInk
+                                                    font.family: "monospace"
+                                                    font.pixelSize: 10
+                                                }
+                                                Text {
+                                                    text: watchNextDelegate.channelTitle
+                                                    color: root.channelBlue
+                                                    font.family: "monospace"
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    width: Math.max(0, parent.width - prefixText.implicitWidth)
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                            }
                                         }
 
                                         Text {

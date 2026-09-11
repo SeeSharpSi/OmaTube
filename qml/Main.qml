@@ -14,6 +14,7 @@ ApplicationWindow {
 
     readonly property var themeColors: App.themeColors
     readonly property color accent: themeColors.accent
+    readonly property color channelBlue: themeColors.blue
     readonly property color ink: themeColors.foreground
     readonly property color mutedInk: themeColors.dark_foreground
     readonly property color paper: themeColors.background
@@ -625,7 +626,7 @@ ApplicationWindow {
                             Text {
                                 width: parent.width
                                 text: liveDelegate.channelTitle
-                                color: root.ink
+                                color: root.channelBlue
                                 font.pixelSize: 11
                                 elide: Text.ElideRight
                                 horizontalAlignment: Text.AlignHCenter
@@ -943,7 +944,25 @@ ApplicationWindow {
 
                                         Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
 
-                                        Text { width: parent.width; text: feedDelegate.channelTitle + "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt); color: root.mutedInk; font.family: "monospace"; font.pixelSize: 10; elide: Text.ElideRight }
+                                        Row {
+                                            width: parent.width
+                                            Text {
+                                                text: feedDelegate.channelTitle
+                                                color: root.channelBlue
+                                                font.family: "monospace"
+                                                font.pixelSize: 10
+                                                elide: Text.ElideRight
+                                                width: Math.max(0, parent.width - metaText.implicitWidth)
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            Text {
+                                                id: metaText
+                                                text: "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt)
+                                                color: root.mutedInk
+                                                font.family: "monospace"
+                                                font.pixelSize: 10
+                                            }
+                                        }
                                     }
 
                                     Text {

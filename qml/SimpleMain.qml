@@ -599,6 +599,8 @@ ApplicationWindow {
                         font.pixelSize: 21
                         font.weight: Font.Medium
                         wrapMode: Text.Wrap
+                        maximumLineCount: 1
+                        elide: Text.ElideRight
                     }
 
                     Row {
@@ -613,7 +615,7 @@ ApplicationWindow {
                         }
                         Text {
                             id: metaText
-                            text: "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt)
+                            text: "  " + root.relativeTime(feedDelegate.publishedAt)
                             color: root.mutedInk
                             font.pixelSize: 12
                         }

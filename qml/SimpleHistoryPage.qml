@@ -144,6 +144,8 @@ Item {
                         font.pixelSize: 21
                         font.weight: Font.Medium
                         wrapMode: Text.Wrap
+                        maximumLineCount: 1
+                        elide: Text.ElideRight
                     }
 
                     Row {

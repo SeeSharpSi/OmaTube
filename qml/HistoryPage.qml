@@ -162,7 +162,7 @@ Item {
                                     anchors.rightMargin: 10
                                     spacing: 5
 
-                                    Text { width: parent.width; text: historyDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: historyDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 1; elide: Text.ElideRight }
 
                                     Row {
                                         width: parent.width

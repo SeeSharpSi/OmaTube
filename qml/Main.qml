@@ -942,7 +942,7 @@ ApplicationWindow {
                                         anchors.rightMargin: 10
                                         spacing: 5
 
-                                        Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                        Text { width: parent.width; text: feedDelegate.title; color: root.ink; font.family: "monospace"; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap; maximumLineCount: 1; elide: Text.ElideRight }
 
                                         Row {
                                             width: parent.width
@@ -957,7 +957,7 @@ ApplicationWindow {
                                             }
                                             Text {
                                                 id: metaText
-                                                text: "  \u00b7  " + root.relativeTime(feedDelegate.publishedAt)
+                                                text: "  " + root.relativeTime(feedDelegate.publishedAt)
                                                 color: root.mutedInk
                                                 font.family: "monospace"
                                                 font.pixelSize: 10
